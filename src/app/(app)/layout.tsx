@@ -14,6 +14,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       ? [
           { href: "/admin/tattooers", label: "Tätowierer" },
           { href: "/admin/fairness", label: "Fairness" },
+          { href: "/admin/whatsapp", label: "WhatsApp" },
           { href: "/admin/settings", label: "Einstellungen" },
         ]
       : []),

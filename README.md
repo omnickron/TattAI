@@ -4,10 +4,12 @@ Interne Web-App (PWA) für das Tattoo-Studio: Leads aus Meta-Lead-Formularen, Wh
 faire Verteilung von Beratungsterminen auf die Tätowierer, Google-Kalender, Umsatz-Auswertung.
 Spezifikation und verbindliche Entscheidungen: [`CLAUDE.md`](CLAUDE.md).
 
-**Stand: Phase 2 (Termine)**
+**Stand: Phase 3a (WhatsApp-Versand)**
 - Phase 1: Login, Tätowierer-Verwaltung, Lead-Eingang per Meta-Webhook, Leadliste.
 - Phase 2: Verfügbarkeiten, Beratungsdauer/Puffer, Google-Kalender (Free/Busy + Termine schreiben),
   faire Verteilung mit Admin-Einstellung, Buchen/Absagen/Umverteilen, App-Kalender (Tag/Woche).
+- Phase 3a: WhatsApp-Erstansprache zu festen Sendezeiten mit Staffelung, Nachfassen, Erinnerungen,
+  Texte (Templates) in der App pflegen und bei Meta einreichen, Chatverlauf. Offen: Bot-Schnittstelle (3b).
 
 ## Technik
 
@@ -55,6 +57,7 @@ npm run dev:simulate-lead -- 5     # 5 Leads
 | `npm run db:migrate` | Neue Migration erzeugen/anwenden |
 | `npm run db:seed` | Beispieldaten einspielen (mehrfach ausführbar) |
 | `npm run jobs:webhooks` | Fehlgeschlagene Lead-Abrufe erneut versuchen |
+| `npm run worker` | Hintergrund-Dienst (WhatsApp-Versand, Retries) |
 
 ## Meta-Lead-Eingang
 
@@ -96,6 +99,35 @@ private Termine, Einträge werden nur protokolliert). Für den echten Betrieb:
 
 Die App fragt nur diese Berechtigungen an: Free/Busy (keine Termininhalte), Kalenderliste lesen und
 Verwaltung der *von der App angelegten* Kalender („Beratungen“). Einträge sind als privat markiert.
+
+## WhatsApp (automatischer Versand)
+
+Alles wird im Admin unter **WhatsApp** gepflegt:
+
+- **Sendezeiten** je Wochentag (z. B. Mo–Fr 10:00, 13:00, 17:00). Erstansprache und Nachfassen gehen nur ab
+  diesen Uhrzeiten raus; Leads, die später eingehen, warten auf die nächste Sendezeit.
+- **Staffelung gegen Spam-Sperren**: zufälliger Abstand zwischen zwei Nachrichten, Maximum pro Sendezeit und
+  pro Tag, Aufwärmphase für eine neue Nummer (Startwert + Steigerung pro Tag).
+- **Automatische Pause** bei sinkender Qualitätsbewertung, Konto-Problemen oder Spam-/Limit-Fehlern von Meta.
+  Der Grund steht im Admin, fortgesetzt wird erst nach Freigabe. Zusätzlich: „Sofort pausieren“.
+- **Nachfassen**: frei definierbare Schritte (z. B. nach 24 h und 72 h). Eine Antwort des Kunden stoppt sie;
+  ohne Antwort wird der Lead nach der eingestellten Zeit „Keine Antwort“.
+- **Erinnerungen** vor dem Termin (Standard 24 h und 2 h) – pünktlich, auch außerhalb der Sendezeiten.
+- **Texte (Templates)** mit Platzhaltern wie `{{Vorname}}`, `{{Datum}}`, `{{Uhrzeit}}`. Die App reicht sie bei
+  Meta zur Prüfung ein. Änderungen werden als neue Version eingereicht (`name_v2` …); bis zur Genehmigung wird
+  die bisher genehmigte Fassung verschickt.
+- Nur Leads mit Einwilligung und gültiger Nummer werden angeschrieben. „STOP“/„Abmelden“ setzt ein Opt-out.
+
+Der Versand läuft im **Hintergrund-Dienst**: `npm run worker` (in Produktion der Dienst `worker` in
+`deploy/docker-compose.prod.yml`). Er läuft alle 30 Sekunden und wiederholt auch fehlgeschlagene Meta-Lead-Abrufe.
+
+Lokal (`WHATSAPP_MOCK=true`) wird nichts verschickt; Texte gelten sofort als genehmigt. Eine Kundenantwort lässt
+sich simulieren: `npm run dev:simulate-whatsapp -- +4915112345678 "Hallo!"`.
+
+Für den echten Betrieb: WhatsApp-Business-Konto und Nummer in Meta anlegen, System-User-Token mit
+`whatsapp_business_messaging` und `whatsapp_business_management`, Webhook-URL `https://<domain>/api/webhooks/whatsapp`
+(Felder: `messages`, `message_template_status_update`, `phone_number_quality_update`, `account_update`) und die
+Variablen `WHATSAPP_*` aus `.env.example` setzen.
 
 ## Produktion (Vorschlag: Hetzner Cloud)
 

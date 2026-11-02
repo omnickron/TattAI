@@ -359,23 +359,28 @@ enum TemplateStatus {
 // Message template maintained in the app and submitted to Meta for approval.
 // The admin writes named placeholders ({{Vorname}}); Meta gets positional ones ({{1}}).
 model WhatsAppTemplate {
-  id             String           @id @default(cuid())
-  purpose        TemplatePurpose
-  // Meta template name: lowercase letters, digits, underscore
-  name           String
-  language       String           @default("de")
-  category       TemplateCategory @default(UTILITY)
+  id              String           @id @default(cuid())
+  purpose         TemplatePurpose
+  // Base name at Meta (lowercase letters, digits, underscore); versions get "_v2", "_v3", …
+  name            String
+  language        String           @default("de")
+  category        TemplateCategory @default(UTILITY)
   // Current text in the editor (named placeholders)
-  bodyText       String
-  // Text of the version Meta approved last; this one is sent while a change is pending
-  approvedText   String?
-  status         TemplateStatus   @default(DRAFT)
-  metaTemplateId String?
-  rejectedReason String?
-  submittedAt    DateTime?
-  approvedAt     DateTime?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  bodyText        String
+  // Review status of the latest submission
+  status          TemplateStatus   @default(DRAFT)
+  submissionCount Int              @default(0)
+  submittedName   String?
+  submittedText   String?
+  metaTemplateId  String?
+  rejectedReason  String?
+  submittedAt     DateTime?
+  // Version Meta approved last. It keeps being sent while a newer version is under review.
+  approvedName    String?
+  approvedText    String?
+  approvedAt      DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
   followUpSteps    FollowUpStep[]
   reminderRules    ReminderRule[]

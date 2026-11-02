@@ -31,12 +31,12 @@ services:
     depends_on:
       migrate: { condition: service_completed_successfully }
 
-  # Retries failed Meta lead fetches every 5 minutes (until pg-boss jobs arrive in phase 3).
-  jobs:
+  # Background worker: WhatsApp sending (staggered) and retries of failed Meta lead fetches.
+  worker:
     build: { context: .., target: builder }
     restart: unless-stopped
     env_file: ../.env
-    command: sh -c 'while true; do npx tsx scripts/retry-webhooks.ts; sleep 300; done'
+    command: npx tsx scripts/worker.ts
     depends_on:
       migrate: { condition: service_completed_successfully }
 

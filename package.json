@@ -16,7 +16,9 @@
     "db:studio": "prisma studio",
     "postinstall": "prisma generate",
     "jobs:webhooks": "tsx scripts/retry-webhooks.ts",
-    "dev:simulate-lead": "tsx scripts/simulate-lead.ts"
+    "dev:simulate-lead": "tsx scripts/simulate-lead.ts",
+    "worker": "tsx scripts/worker.ts",
+    "dev:simulate-whatsapp": "tsx scripts/simulate-whatsapp.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.1",

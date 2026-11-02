@@ -17,6 +17,7 @@ import {
 } from "@/lib/scheduling/booking";
 import { schedulingDeps } from "@/lib/scheduling/deps";
 import { defaultPhoneCountry } from "@/lib/settings";
+import { cancelQueued } from "@/lib/whatsapp/messaging";
 
 const leadSchema = z.object({
   name: z.string().trim().min(1, "Name fehlt.").max(200),
@@ -35,6 +36,7 @@ export async function updateLead(
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message };
 
   const { name, phone, email, status } = parsed.data;
+  const whatsappOptOut = formData.get("whatsappOptOut") === "on";
   const current = await prisma.lead.findUnique({ where: { id: leadId }, select: { status: true } });
   if (!current) return { ok: false, message: "Lead nicht gefunden." };
 
@@ -47,10 +49,13 @@ export async function updateLead(
       phoneE164: normalized.e164,
       phoneValid: normalized.valid,
       email: email ? email.toLowerCase() : null,
+      whatsappOptOut,
       status: status as (typeof LEAD_STATUS_ORDER)[number],
       ...(current.status !== status ? { statusChangedAt: new Date() } : {}),
     },
   });
+  if (whatsappOptOut)
+    await cancelQueued(prisma, leadId, ["FIRST_CONTACT", "FOLLOW_UP", "REMINDER"]);
   revalidatePath(`/leads/${leadId}`);
   return {
     ok: true,

@@ -50,6 +50,99 @@ const WITH_CONSULTATION = new Set<LeadStatus>([
   "NO_SHOW",
 ]);
 
+// Placeholder WhatsApp texts. In sample mode they count as approved by Meta.
+const TEMPLATES = [
+  {
+    purpose: "FIRST_CONTACT" as const,
+    name: "erstkontakt",
+    bodyText:
+      "Hallo {{Vorname}}, danke für deine Tattoo-Anfrage bei {{Studio}}! [Platzhalter] Erzähl uns gern kurz, was du dir vorstellst – dann finden wir einen Termin für deine Beratung.",
+  },
+  {
+    purpose: "FOLLOW_UP" as const,
+    name: "nachfassen_1",
+    bodyText:
+      "Hallo {{Vorname}}, wir wollten kurz nachfragen: Hast du noch Interesse an einer Tattoo-Beratung? [Platzhalter]",
+  },
+  {
+    purpose: "FOLLOW_UP" as const,
+    name: "nachfassen_2",
+    bodyText:
+      "Hallo {{Vorname}}, das ist unsere letzte Nachricht zu deiner Anfrage. Wenn du später Lust hast, schreib uns einfach hier. [Platzhalter]",
+  },
+  {
+    purpose: "REMINDER" as const,
+    name: "erinnerung",
+    bodyText:
+      "Hallo {{Vorname}}, kleine Erinnerung an deine Tattoo-Beratung am {{Datum}} um {{Uhrzeit}} ({{Ort}}) mit {{Tätowierer}}. Bis bald! [Platzhalter]",
+  },
+];
+
+async function seedMessaging() {
+  const mock = process.env.WHATSAPP_MOCK === "true";
+  const ids: Record<string, string> = {};
+  for (const t of TEMPLATES) {
+    const existing = await prisma.whatsAppTemplate.findUnique({
+      where: { name_language: { name: t.name, language: "de" } },
+    });
+    const template =
+      existing ??
+      (await prisma.whatsAppTemplate.create({
+        data: {
+          ...t,
+          ...(mock
+            ? {
+                status: "APPROVED",
+                submissionCount: 1,
+                submittedName: t.name,
+                submittedText: t.bodyText,
+                approvedName: t.name,
+                approvedText: t.bodyText,
+                approvedAt: new Date(),
+              }
+            : {}),
+        },
+      }));
+    ids[t.name] = template.id;
+  }
+
+  if (!(await prisma.messagingSettings.findUnique({ where: { id: 1 } }))) {
+    await prisma.messagingSettings.create({
+      data: {
+        id: 1,
+        sendingEnabled: false,
+        sendTimes: [
+          ...[1, 2, 3, 4, 5].flatMap((weekday) =>
+            ["10:00", "13:00", "17:00"].map((time) => ({ weekday, time })),
+          ),
+          { weekday: 6, time: "11:00" },
+        ],
+        firstContactTemplateId: ids.erstkontakt,
+      },
+    });
+  }
+  if ((await prisma.followUpStep.count()) === 0) {
+    await prisma.followUpStep.createMany({
+      data: [
+        { position: 1, delayHours: 24, templateId: ids.nachfassen_1 },
+        { position: 2, delayHours: 72, templateId: ids.nachfassen_2 },
+      ],
+    });
+  }
+  if ((await prisma.reminderRule.count()) === 0) {
+    await prisma.reminderRule.createMany({
+      data: [
+        { hoursBefore: 24, templateId: ids.erinnerung },
+        { hoursBefore: 2, templateId: ids.erinnerung },
+      ],
+    });
+  }
+  await prisma.appSettings.updateMany({
+    where: { id: 1, studioName: null },
+    data: { studioName: "[Platzhalter] Studio" },
+  });
+}
+
 async function main() {
   const adminEmail = (process.env.ADMIN_EMAIL || "inhaber@example.com").toLowerCase();
   const admin = await prisma.user.upsert({
@@ -113,6 +206,8 @@ async function main() {
     },
   });
   await prisma.fairnessConfig.upsert({ where: { id: 1 }, update: {}, create: { id: 1 } });
+
+  await seedMessaging();
 
   const fetcher = new MockLeadFetcher(CONSENT_KEY);
   const now = Date.now();

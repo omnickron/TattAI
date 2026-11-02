@@ -37,11 +37,15 @@ export async function updateStudioSettings(
     String(formData.get("studioAddress") ?? "")
       .trim()
       .slice(0, 500) || null;
+  const studioName =
+    String(formData.get("studioName") ?? "")
+      .trim()
+      .slice(0, 100) || null;
   await prisma.appSettings.upsert({
     where: { id: 1 },
-    update: { studioAddress },
-    create: { id: 1, studioAddress },
+    update: { studioAddress, studioName },
+    create: { id: 1, studioAddress, studioName },
   });
   revalidatePath("/admin/settings");
-  return { ok: true, message: "Gespeichert. Gilt für neue Kalendereinträge." };
+  return { ok: true, message: "Gespeichert. Gilt für neue Kalendereinträge und Nachrichten." };
 }

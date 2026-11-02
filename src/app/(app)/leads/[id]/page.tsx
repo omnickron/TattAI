@@ -10,6 +10,7 @@ import { formatDateTime, formatPhone } from "@/lib/format";
 import { LEAD_STATUS_LABELS, LEAD_STATUS_ORDER, PLATFORM_LABELS } from "@/lib/labels";
 import { getLeadForUser } from "@/lib/leads/queries";
 import { addLeadNote, deleteLead, updateLead } from "./actions";
+import { ChatSection } from "./chat";
 import { ConsultationsSection } from "./consultations";
 
 export const metadata: Metadata = { title: "Lead" };
@@ -107,32 +108,13 @@ export default async function LeadPage({ params, searchParams }: PageProps<"/lea
             bookedId={typeof query.booked === "string" ? query.booked : undefined}
           />
 
-          <Card>
-            <CardTitle>Chatverlauf</CardTitle>
-            {lead.messages.length === 0 ? (
-              <p className="text-sm text-ink-soft">
-                Noch keine Nachrichten (WhatsApp folgt in Phase 3).
-              </p>
-            ) : (
-              <ul className="space-y-2 text-sm">
-                {lead.messages.map((m) => (
-                  <li
-                    key={m.id}
-                    className={
-                      m.direction === "INBOUND"
-                        ? "mr-10 rounded-lg bg-muted p-2"
-                        : "ml-10 rounded-lg bg-ink p-2 text-paper"
-                    }
-                  >
-                    {m.body ?? `[${m.templateName ?? "Nachricht"}]`}
-                    <span className="mt-1 block text-[11px] opacity-70">
-                      {formatDateTime(m.sentAt)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
+          <ChatSection
+            messages={lead.messages}
+            planned={lead.outboundMessages}
+            optOut={lead.whatsappOptOut}
+            consent={lead.whatsappConsent}
+            lastInboundAt={lead.lastInboundAt}
+          />
 
           <Card>
             <CardTitle>Notizen</CardTitle>
@@ -202,6 +184,14 @@ export default async function LeadPage({ params, searchParams }: PageProps<"/lea
                 <Field label="E-Mail" htmlFor="email">
                   <Input id="email" name="email" type="email" defaultValue={lead.email ?? ""} />
                 </Field>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    name="whatsappOptOut"
+                    defaultChecked={lead.whatsappOptOut}
+                  />
+                  Keine automatischen WhatsApp-Nachrichten
+                </label>
                 <Field label="Status" htmlFor="status">
                   <Select id="status" name="status" defaultValue={lead.status}>
                     {LEAD_STATUS_ORDER.map((s) => (

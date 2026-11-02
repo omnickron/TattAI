@@ -62,6 +62,7 @@ async function template(
         name,
         bodyText: text,
         approvedText: approved ? text : null,
+        approvedName: approved ? name : null,
         status: approved ? "APPROVED" : "DRAFT",
       },
     })
@@ -211,11 +212,19 @@ describe("first contact", () => {
     });
     expect((await dispatchMessages(deps)).sent).toBe(0);
     await prisma.messagingSettings.update({ where: { id: 1 }, data: { pausedAt: null } });
+    // Never approved → nothing is sent
     await prisma.whatsAppTemplate.update({
       where: { id: templates.first },
-      data: { status: "PENDING" },
+      data: { status: "PENDING", approvedText: null, approvedName: null },
     });
     expect((await dispatchMessages(deps)).sent).toBe(0);
+    // A newer version under review: the approved version keeps being sent
+    await prisma.whatsAppTemplate.update({
+      where: { id: templates.first },
+      data: { approvedText: "Hallo {{Vorname}}, alte Fassung!", approvedName: "erstkontakt" },
+    });
+    expect((await dispatchMessages(deps)).sent).toBe(1);
+    expect(wa.sent[0].name).toBe("erstkontakt");
   });
 
   it("pauses everything on spam-related errors", async () => {
@@ -499,5 +508,51 @@ describe("worker", () => {
     expect(await runMessagingWorker(deps)).toEqual({ skipped: true });
     await prisma.messagingSettings.update({ where: { id: 1 }, data: { workerLeaseUntil: null } });
     expect(await runMessagingWorker(deps)).toMatchObject({ skipped: false });
+  });
+});
+
+describe("template submission", () => {
+  it("submits changes as new versions and keeps the approved one active", async () => {
+    const { submitTemplateForReview } = await import("@/lib/whatsapp/templates");
+    const submitted: string[] = [];
+    const pendingClient = Object.assign(new FakeWhatsApp(), {
+      async submitTemplate(t: { name: string; text: string }) {
+        submitted.push(`${t.name}: ${t.text}`);
+        return { id: `meta-${submitted.length}`, status: "PENDING" as const };
+      },
+    });
+    const id = await template(
+      "FOLLOW_UP",
+      "nachfassen_neu",
+      "Hallo {{Vorname}}, noch Interesse?",
+      false,
+    );
+    await submitTemplateForReview(prisma, pendingClient, id);
+    await prisma.whatsAppTemplate.update({
+      where: { id },
+      data: {
+        status: "APPROVED",
+        approvedName: "nachfassen_neu",
+        approvedText: "Hallo {{Vorname}}, noch Interesse?",
+      },
+    });
+    await prisma.whatsAppTemplate.update({
+      where: { id },
+      data: { bodyText: "Hi {{Vorname}}, magst du noch?" },
+    });
+    const t = await submitTemplateForReview(prisma, pendingClient, id);
+
+    expect(submitted).toEqual([
+      "nachfassen_neu: Hallo {{1}}, noch Interesse?",
+      "nachfassen_neu_v2: Hi {{1}}, magst du noch?",
+    ]);
+    expect(t).toMatchObject({
+      status: "PENDING",
+      approvedName: "nachfassen_neu",
+      submittedName: "nachfassen_neu_v2",
+    });
+    await expect(submitTemplateForReview(prisma, pendingClient, id)).rejects.toThrow(
+      "bereits von Meta geprüft",
+    );
   });
 });

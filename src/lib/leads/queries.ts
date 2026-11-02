@@ -108,6 +108,11 @@ export async function getLeadForUser(user: CurrentUser, id: string) {
         include: { tattooer: { include: { user: { select: { name: true } } } } },
       },
       messages: { orderBy: { sentAt: "asc" }, take: 200 },
+      outboundMessages: {
+        where: { status: { in: ["QUEUED", "FAILED"] } },
+        orderBy: { notBefore: "asc" },
+        include: { template: { select: { name: true } } },
+      },
     },
   });
 }

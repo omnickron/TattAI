@@ -70,6 +70,13 @@ export default async function SettingsPage() {
           <CardTitle>Studio</CardTitle>
           <ActionForm action={updateStudioSettings}>
             <Field
+              label="Name des Studios"
+              htmlFor="studioName"
+              hint="Platzhalter {{Studio}} in WhatsApp-Texten."
+            >
+              <Input id="studioName" name="studioName" defaultValue={settings?.studioName ?? ""} />
+            </Field>
+            <Field
               label="Adresse für Beratungen vor Ort"
               htmlFor="studioAddress"
               hint="Wird als Ort in die Kalendereinträge geschrieben. Telefonberatungen bekommen keinen Ort."

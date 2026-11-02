@@ -299,7 +299,12 @@ export async function dispatchMessages(deps: MessagingDeps): Promise<DispatchRes
         : Promise.resolve(0),
     ]);
     const counters = { sentToday, sentInBatch, nextSendAllowedAt: settings.nextSendAllowedAt };
-    const approved = { status: "APPROVED" as const, approvedText: { not: null } };
+    // The last approved version is sent, even while a newer one is under review.
+    const approved = {
+      approvedText: { not: null },
+      approvedName: { not: null },
+      status: { not: "PAUSED" as const },
+    };
 
     // Reminders first (time-critical), then first contacts / follow-ups in arrival order.
     let next = await prisma.outboundMessage.findFirst({
@@ -351,7 +356,7 @@ export async function dispatchMessages(deps: MessagingDeps): Promise<DispatchRes
     try {
       const { messageId } = await whatsapp.sendTemplate({
         to: lead.phoneE164!,
-        name: next.template.name,
+        name: next.template.approvedName!,
         language: next.template.language,
         parameters,
       });
@@ -371,7 +376,7 @@ export async function dispatchMessages(deps: MessagingDeps): Promise<DispatchRes
             leadId: lead.id,
             direction: "OUTBOUND",
             waMessageId: messageId,
-            templateName: next.template.name,
+            templateName: next.template.approvedName,
             body: renderTemplate(text, values),
             status: "sent",
             outboundId: next.id,

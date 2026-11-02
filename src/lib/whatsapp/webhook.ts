@@ -167,7 +167,8 @@ async function handleTemplateStatus(prisma: PrismaClient, v: NonNullable<WaChang
       where: { id: template.id },
       data: {
         status: "APPROVED",
-        approvedText: template.bodyText,
+        approvedText: template.submittedText ?? template.bodyText,
+        approvedName: template.submittedName ?? template.name,
         approvedAt: new Date(),
         rejectedReason: null,
       },
