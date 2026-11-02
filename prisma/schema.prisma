@@ -146,6 +146,14 @@ model Lead {
   status          LeadStatus @default(NEW)
   statusChangedAt DateTime   @default(now())
 
+  // WhatsApp conversation state
+  firstContactedAt DateTime?
+  lastOutboundAt   DateTime?
+  // Last customer message; free-form messages are allowed for 24 h after it
+  lastInboundAt    DateTime?
+  // Customer asked not to be contacted (e.g. "STOP"); blocks all automatic messages
+  whatsappOptOut   Boolean   @default(false)
+
   // Structured tattoo idea, filled by the chatbot (phase 3)
   tattooSummary Json?
 
@@ -155,9 +163,10 @@ model Lead {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  messages      Message[]
-  consultations Consultation[]
-  notes         LeadNote[]
+  messages         Message[]
+  consultations    Consultation[]
+  notes            LeadNote[]
+  outboundMessages OutboundMessage[]
 
   @@index([status])
   @@index([createdAt])
@@ -194,8 +203,12 @@ model Message {
   waMessageId  String?          @unique
   templateName String?
   body         String?
+  // sent | delivered | read | failed (outbound), received (inbound)
   status       String?
+  errorCode    Int?
   payload      Json?
+  outboundId   String?          @unique
+  outbound     OutboundMessage? @relation(fields: [outboundId], references: [id], onDelete: SetNull)
   sentAt       DateTime         @default(now())
   createdAt    DateTime         @default(now())
 
@@ -238,7 +251,8 @@ model Consultation {
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
 
-  tattooBookings TattooBooking[]
+  tattooBookings   TattooBooking[]
+  outboundMessages OutboundMessage[]
 
   @@index([tattooerId, startsAt])
   @@index([leadId])
@@ -287,6 +301,8 @@ model AppSettings {
   consentCheckboxKey String?
   // Exact wording of the consent text shown in the form; snapshotted per lead.
   consentText        String?
+  // Studio name, available as {{Studio}} in WhatsApp templates
+  studioName         String?
   // Address used as location of on-site consultations in calendar events
   studioAddress      String?
   updatedAt          DateTime @updatedAt
@@ -315,4 +331,149 @@ model WebhookEvent {
 
   @@unique([provider, externalId])
   @@index([status, nextAttemptAt])
+}
+
+// ---------------------------------------------------------------------------
+// WhatsApp sending (phase 3)
+// ---------------------------------------------------------------------------
+
+enum TemplatePurpose {
+  FIRST_CONTACT
+  FOLLOW_UP
+  REMINDER
+}
+
+enum TemplateCategory {
+  UTILITY
+  MARKETING
+}
+
+enum TemplateStatus {
+  DRAFT // not yet submitted to Meta
+  PENDING // submitted, waiting for review
+  APPROVED
+  REJECTED
+  PAUSED // paused/disabled by Meta (quality)
+}
+
+// Message template maintained in the app and submitted to Meta for approval.
+// The admin writes named placeholders ({{Vorname}}); Meta gets positional ones ({{1}}).
+model WhatsAppTemplate {
+  id             String           @id @default(cuid())
+  purpose        TemplatePurpose
+  // Meta template name: lowercase letters, digits, underscore
+  name           String
+  language       String           @default("de")
+  category       TemplateCategory @default(UTILITY)
+  // Current text in the editor (named placeholders)
+  bodyText       String
+  // Text of the version Meta approved last; this one is sent while a change is pending
+  approvedText   String?
+  status         TemplateStatus   @default(DRAFT)
+  metaTemplateId String?
+  rejectedReason String?
+  submittedAt    DateTime?
+  approvedAt     DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  followUpSteps    FollowUpStep[]
+  reminderRules    ReminderRule[]
+  outboundMessages OutboundMessage[]
+
+  @@unique([name, language])
+}
+
+// Singleton (id = 1): sending schedule and anti-spam staggering.
+model MessagingSettings {
+  id                     Int       @id @default(1)
+  // Master switch; nothing is sent while false
+  sendingEnabled         Boolean   @default(false)
+  // Set automatically on quality drops / spam-related errors, or manually
+  pausedAt               DateTime?
+  pausedReason           String?
+  // Fixed send times for first contact and follow-ups: [{ weekday: 1-7, time: "HH:MM" }]
+  sendTimes              Json      @default("[]")
+  // A batch runs from a send time for at most this long
+  batchWindowMinutes     Int       @default(90)
+  maxPerBatch            Int       @default(15)
+  maxPerDay              Int       @default(40)
+  // Random gap between two messages
+  minGapSeconds          Int       @default(60)
+  maxGapSeconds          Int       @default(180)
+  // Warm-up for a new number: start limit, increase per day until maxPerDay
+  warmupStartDate        DateTime? @db.Date
+  warmupStartPerDay      Int       @default(10)
+  warmupIncreasePerDay   Int       @default(5)
+  // Lead becomes "keine Antwort" this long after the last follow-up without reply
+  noResponseAfterHours   Int       @default(48)
+  firstContactTemplateId String?
+  // Runtime state of the dispatcher
+  nextSendAllowedAt      DateTime?
+  // Lease so only one worker process dispatches at a time
+  workerLeaseUntil       DateTime?
+  lastWorkerRunAt        DateTime?
+  updatedAt              DateTime  @updatedAt
+}
+
+model FollowUpStep {
+  id         String           @id @default(cuid())
+  position   Int
+  // Hours after the previous message (first contact or previous follow-up)
+  delayHours Int
+  templateId String
+  template   WhatsAppTemplate @relation(fields: [templateId], references: [id])
+  createdAt  DateTime         @default(now())
+
+  @@unique([position])
+}
+
+model ReminderRule {
+  id          String           @id @default(cuid())
+  hoursBefore Int              @unique
+  templateId  String
+  template    WhatsAppTemplate @relation(fields: [templateId], references: [id])
+  createdAt   DateTime         @default(now())
+}
+
+enum OutboundKind {
+  FIRST_CONTACT
+  FOLLOW_UP
+  REMINDER
+}
+
+enum OutboundStatus {
+  QUEUED
+  SENT
+  FAILED
+  CANCELLED // no longer applicable (customer replied, consultation cancelled, …)
+}
+
+// Queue of automatic template messages. The unique key makes planning idempotent.
+model OutboundMessage {
+  id             String           @id @default(cuid())
+  leadId         String
+  lead           Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  consultationId String?
+  consultation   Consultation?    @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  kind           OutboundKind
+  // Follow-up position or reminder hours; 0 for first contact
+  step           Int              @default(0)
+  // Uniqueness key: lead (first contact/follow-up) or consultation (reminder)
+  dedupeKey      String           @unique
+  templateId     String
+  template       WhatsAppTemplate @relation(fields: [templateId], references: [id])
+  notBefore      DateTime
+  status         OutboundStatus   @default(QUEUED)
+  attempts       Int              @default(0)
+  lastError      String?
+  waMessageId    String?
+  sentAt         DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  message Message?
+
+  @@index([status, notBefore])
+  @@index([leadId])
 }

@@ -1,0 +1,482 @@
+/**
+ * Automatic WhatsApp messages: planning (first contact, follow-ups, reminders)
+ * and dispatching with anti-spam staggering. Called periodically by the worker.
+ */
+import type { MessagingSettings, OutboundKind, PrismaClient } from "@/generated/prisma/client";
+import { DEFAULT_TIME_ZONE, localDateOf, startOfLocalDay } from "../time";
+import { classifyError, WhatsAppApiError, type WhatsAppClient } from "./client";
+import {
+  compileTemplate,
+  renderTemplate,
+  ALLOWED_VARIABLES,
+  type TemplateVariable,
+} from "./template-text";
+import {
+  activeBatch,
+  bulkDecision,
+  parseSendTimes,
+  randomGapMs,
+  reminderDecision,
+  type Decision,
+  type ThrottleConfig,
+} from "./throttle";
+
+export interface MessagingDeps {
+  prisma: PrismaClient;
+  whatsapp: WhatsAppClient;
+  now?: () => Date;
+  random?: () => number;
+  timeZone?: string;
+}
+
+const HOUR = 3600_000;
+const MAX_ATTEMPTS = 5;
+/** Messages sent per worker run at most (the gap usually stops earlier). */
+const MAX_PER_RUN = 10;
+const BULK_KINDS: OutboundKind[] = ["FIRST_CONTACT", "FOLLOW_UP"];
+const OPT_OUT_WORDS = new Set(["stop", "stopp", "abmelden", "keine nachrichten", "unsubscribe"]);
+
+export async function loadMessagingSettings(prisma: PrismaClient): Promise<MessagingSettings> {
+  return prisma.messagingSettings.upsert({ where: { id: 1 }, update: {}, create: { id: 1 } });
+}
+
+export function throttleConfig(s: MessagingSettings, timeZone = DEFAULT_TIME_ZONE): ThrottleConfig {
+  return {
+    sendTimes: parseSendTimes(s.sendTimes),
+    batchWindowMinutes: s.batchWindowMinutes,
+    maxPerBatch: s.maxPerBatch,
+    maxPerDay: s.maxPerDay,
+    minGapSeconds: s.minGapSeconds,
+    maxGapSeconds: s.maxGapSeconds,
+    warmupStartDate: s.warmupStartDate ? s.warmupStartDate.toISOString().slice(0, 10) : null,
+    warmupStartPerDay: s.warmupStartPerDay,
+    warmupIncreasePerDay: s.warmupIncreasePerDay,
+    timeZone,
+  };
+}
+
+/** Stops all automatic sending (manually or after quality/spam signals). */
+export async function pauseSending(prisma: PrismaClient, reason: string, now = new Date()) {
+  await prisma.messagingSettings.upsert({
+    where: { id: 1 },
+    update: { pausedAt: now, pausedReason: reason.slice(0, 500) },
+    create: { id: 1, pausedAt: now, pausedReason: reason.slice(0, 500) },
+  });
+  console.warn(`[whatsapp] sending paused: ${reason}`);
+}
+
+const eligibleLead = {
+  whatsappConsent: true,
+  phoneValid: true,
+  whatsappOptOut: false,
+  phoneE164: { not: null },
+};
+
+// ---------------------------------------------------------------------------
+// Planning
+// ---------------------------------------------------------------------------
+
+export async function planMessages(deps: MessagingDeps) {
+  const { prisma } = deps;
+  const now = (deps.now ?? (() => new Date()))();
+  const settings = await loadMessagingSettings(prisma);
+  let planned = 0;
+  let noResponse = 0;
+
+  // 1. First contact for new leads (released at the next send time by the dispatcher)
+  if (settings.firstContactTemplateId) {
+    const leads = await prisma.lead.findMany({
+      where: {
+        status: "NEW",
+        ...eligibleLead,
+        outboundMessages: { none: { kind: "FIRST_CONTACT" } },
+      },
+      select: { id: true },
+      take: 500,
+    });
+    if (leads.length) {
+      const res = await prisma.outboundMessage.createMany({
+        data: leads.map((l) => ({
+          leadId: l.id,
+          kind: "FIRST_CONTACT" as const,
+          dedupeKey: `first:${l.id}`,
+          templateId: settings.firstContactTemplateId!,
+          notBefore: now,
+        })),
+        skipDuplicates: true,
+      });
+      planned += res.count;
+    }
+  }
+
+  // 2. Follow-ups for contacted leads without reply, then "keine Antwort"
+  const steps = await prisma.followUpStep.findMany({ orderBy: { position: "asc" } });
+  const contacted = await prisma.lead.findMany({
+    where: { status: "CONTACTED", ...eligibleLead },
+    select: {
+      id: true,
+      outboundMessages: {
+        where: { kind: { in: BULK_KINDS } },
+        select: { kind: true, step: true, status: true, sentAt: true },
+      },
+    },
+    take: 1000,
+  });
+  for (const lead of contacted) {
+    const sent = lead.outboundMessages.filter((m) => m.status === "SENT" && m.sentAt);
+    const first = sent.find((m) => m.kind === "FIRST_CONTACT");
+    if (!first?.sentAt) continue;
+    let previous = first.sentAt;
+    let done = true;
+    for (const [index, step] of steps.entries()) {
+      const position = index + 1;
+      const existing = lead.outboundMessages.find(
+        (m) => m.kind === "FOLLOW_UP" && m.step === position,
+      );
+      if (existing?.status === "SENT" && existing.sentAt) {
+        previous = existing.sentAt;
+        continue;
+      }
+      done = false;
+      if (!existing) {
+        const due = new Date(previous.getTime() + step.delayHours * HOUR);
+        if (due <= now) {
+          const res = await prisma.outboundMessage.createMany({
+            data: [
+              {
+                leadId: lead.id,
+                kind: "FOLLOW_UP",
+                step: position,
+                dedupeKey: `follow:${lead.id}:${position}`,
+                templateId: step.templateId,
+                notBefore: due,
+              },
+            ],
+            skipDuplicates: true,
+          });
+          planned += res.count;
+        }
+      }
+      break; // only one step at a time
+    }
+    if (done && previous.getTime() + settings.noResponseAfterHours * HOUR <= now.getTime()) {
+      const res = await prisma.lead.updateMany({
+        where: { id: lead.id, status: "CONTACTED" },
+        data: { status: "NO_RESPONSE", statusChangedAt: now },
+      });
+      noResponse += res.count;
+    }
+  }
+
+  // 3. Reminders before consultations
+  const rules = await prisma.reminderRule.findMany();
+  if (rules.length) {
+    const maxHours = Math.max(...rules.map((r) => r.hoursBefore));
+    const consultations = await prisma.consultation.findMany({
+      where: {
+        status: "SCHEDULED",
+        startsAt: { gt: now, lte: new Date(now.getTime() + maxHours * HOUR) },
+        lead: eligibleLead,
+      },
+      select: { id: true, leadId: true, startsAt: true, createdAt: true },
+    });
+    const data = consultations.flatMap((c) =>
+      rules.flatMap((r) => {
+        const sendAt = new Date(c.startsAt.getTime() - r.hoursBefore * HOUR);
+        // Not yet due, or booked after the reminder time (e.g. booked 1 h before the appointment)
+        if (sendAt > now || c.createdAt > sendAt) return [];
+        return [
+          {
+            leadId: c.leadId,
+            consultationId: c.id,
+            kind: "REMINDER" as const,
+            step: r.hoursBefore,
+            dedupeKey: `reminder:${c.id}:${r.hoursBefore}:${c.startsAt.getTime()}`,
+            templateId: r.templateId,
+            notBefore: sendAt,
+          },
+        ];
+      }),
+    );
+    if (data.length)
+      planned += (await prisma.outboundMessage.createMany({ data, skipDuplicates: true })).count;
+  }
+
+  return { planned, noResponse };
+}
+
+// ---------------------------------------------------------------------------
+// Dispatching
+// ---------------------------------------------------------------------------
+
+const weekdayDate = (tz: string) =>
+  new Intl.DateTimeFormat("de-DE", {
+    timeZone: tz,
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+const timeOnly = (tz: string) =>
+  new Intl.DateTimeFormat("de-DE", { timeZone: tz, hour: "2-digit", minute: "2-digit" });
+
+async function templateValues(
+  deps: MessagingDeps,
+  outbound: { leadId: string; consultationId: string | null },
+): Promise<Partial<Record<TemplateVariable, string>>> {
+  const tz = deps.timeZone ?? DEFAULT_TIME_ZONE;
+  const lead = await deps.prisma.lead.findUniqueOrThrow({ where: { id: outbound.leadId } });
+  const app = await deps.prisma.appSettings.findUnique({ where: { id: 1 } });
+  const values: Partial<Record<TemplateVariable, string>> = {
+    Vorname: lead.name.trim().split(/\s+/)[0] || lead.name,
+    Name: lead.name,
+    Studio: app?.studioName || "unser Studio",
+  };
+  if (outbound.consultationId) {
+    const c = await deps.prisma.consultation.findUniqueOrThrow({
+      where: { id: outbound.consultationId },
+      include: { tattooer: { include: { user: { select: { name: true } } } } },
+    });
+    values.Datum = weekdayDate(tz).format(c.startsAt);
+    values.Uhrzeit = timeOnly(tz).format(c.startsAt);
+    values.Ort = c.mode === "PHONE" ? "telefonisch" : app?.studioAddress || "im Studio";
+    values.Tätowierer = c.tattooer.user.name.split(/\s+/)[0];
+  }
+  return values;
+}
+
+/** Re-checks right before sending whether the message is still wanted. */
+async function stillApplicable(
+  prisma: PrismaClient,
+  o: { kind: OutboundKind; leadId: string; consultationId: string | null; dedupeKey: string },
+  now: Date,
+): Promise<boolean> {
+  const lead = await prisma.lead.findUnique({ where: { id: o.leadId } });
+  if (!lead || !lead.whatsappConsent || !lead.phoneValid || lead.whatsappOptOut || !lead.phoneE164)
+    return false;
+  if (o.kind === "FIRST_CONTACT") return lead.status === "NEW";
+  if (o.kind === "FOLLOW_UP") return lead.status === "CONTACTED";
+  if (!o.consultationId) return false;
+  const c = await prisma.consultation.findUnique({ where: { id: o.consultationId } });
+  return Boolean(
+    c &&
+    c.status === "SCHEDULED" &&
+    c.startsAt > now &&
+    o.dedupeKey.endsWith(`:${c.startsAt.getTime()}`),
+  );
+}
+
+export interface DispatchResult {
+  sent: number;
+  failed: number;
+  cancelled: number;
+  waiting: string | null;
+}
+
+/** Sends due messages while the throttle allows it. */
+export async function dispatchMessages(deps: MessagingDeps): Promise<DispatchResult> {
+  const { prisma, whatsapp } = deps;
+  const clock = deps.now ?? (() => new Date());
+  const tz = deps.timeZone ?? DEFAULT_TIME_ZONE;
+  const result: DispatchResult = { sent: 0, failed: 0, cancelled: 0, waiting: null };
+
+  for (let i = 0; i < MAX_PER_RUN; i++) {
+    const now = clock();
+    const settings = await loadMessagingSettings(prisma);
+    if (!settings.sendingEnabled) return { ...result, waiting: "Versand ist ausgeschaltet" };
+    if (settings.pausedAt)
+      return { ...result, waiting: `Pausiert: ${settings.pausedReason ?? ""}` };
+
+    const cfg = throttleConfig(settings, tz);
+    const batch = activeBatch(now, cfg);
+    const [sentToday, sentInBatch] = await Promise.all([
+      prisma.outboundMessage.count({
+        where: { status: "SENT", sentAt: { gte: startOfLocalDay(localDateOf(now, tz), tz) } },
+      }),
+      batch
+        ? prisma.outboundMessage.count({
+            where: { status: "SENT", kind: { in: BULK_KINDS }, sentAt: { gte: batch.start } },
+          })
+        : Promise.resolve(0),
+    ]);
+    const counters = { sentToday, sentInBatch, nextSendAllowedAt: settings.nextSendAllowedAt };
+    const approved = { status: "APPROVED" as const, approvedText: { not: null } };
+
+    // Reminders first (time-critical), then first contacts / follow-ups in arrival order.
+    let next = await prisma.outboundMessage.findFirst({
+      where: { status: "QUEUED", kind: "REMINDER", notBefore: { lte: now }, template: approved },
+      orderBy: { notBefore: "asc" },
+      include: { template: true },
+    });
+    let decision: Decision = reminderDecision(now, counters);
+    if (!next) {
+      next = await prisma.outboundMessage.findFirst({
+        where: {
+          status: "QUEUED",
+          kind: { in: BULK_KINDS },
+          notBefore: { lte: now },
+          template: approved,
+        },
+        orderBy: [{ kind: "asc" }, { notBefore: "asc" }],
+        include: { template: true },
+      });
+      decision = bulkDecision(now, cfg, counters);
+    }
+    if (!next) return result;
+    if (!decision.send) return { ...result, waiting: decision.reason };
+
+    if (!(await stillApplicable(prisma, next, now))) {
+      await prisma.outboundMessage.update({
+        where: { id: next.id },
+        data: { status: "CANCELLED" },
+      });
+      result.cancelled++;
+      continue;
+    }
+
+    const lead = await prisma.lead.findUniqueOrThrow({ where: { id: next.leadId } });
+    const text = next.template.approvedText!;
+    const compiled = compileTemplate(text, ALLOWED_VARIABLES[next.template.purpose]);
+    if (!compiled.ok) {
+      await pauseSending(
+        prisma,
+        `Template „${next.template.name}“ ist fehlerhaft: ${compiled.error}`,
+        now,
+      );
+      return { ...result, waiting: "Template fehlerhaft" };
+    }
+    const values = await templateValues(deps, next);
+    const parameters = compiled.value.variables.map((v) => values[v] ?? "");
+    const gapUntil = new Date(now.getTime() + randomGapMs(cfg, deps.random));
+
+    try {
+      const { messageId } = await whatsapp.sendTemplate({
+        to: lead.phoneE164!,
+        name: next.template.name,
+        language: next.template.language,
+        parameters,
+      });
+      await prisma.$transaction([
+        prisma.outboundMessage.update({
+          where: { id: next.id },
+          data: {
+            status: "SENT",
+            sentAt: now,
+            waMessageId: messageId,
+            attempts: { increment: 1 },
+            lastError: null,
+          },
+        }),
+        prisma.message.create({
+          data: {
+            leadId: lead.id,
+            direction: "OUTBOUND",
+            waMessageId: messageId,
+            templateName: next.template.name,
+            body: renderTemplate(text, values),
+            status: "sent",
+            outboundId: next.id,
+            sentAt: now,
+          },
+        }),
+        prisma.lead.update({
+          where: { id: lead.id },
+          data: {
+            lastOutboundAt: now,
+            ...(next.kind === "FIRST_CONTACT"
+              ? { firstContactedAt: now, status: "CONTACTED", statusChangedAt: now }
+              : {}),
+          },
+        }),
+        prisma.messagingSettings.update({
+          where: { id: 1 },
+          data: { nextSendAllowedAt: gapUntil },
+        }),
+      ]);
+      result.sent++;
+    } catch (err) {
+      const code = err instanceof WhatsAppApiError ? err.code : null;
+      const handling = classifyError(code, err instanceof WhatsAppApiError ? err.httpStatus : null);
+      const message = (err instanceof Error ? err.message : String(err)).slice(0, 1000);
+      const attempts = next.attempts + 1;
+      console.error(`[whatsapp] sending ${next.id} failed (${handling}, code ${code}): ${message}`);
+
+      if (handling === "PAUSE") {
+        await prisma.outboundMessage.update({
+          where: { id: next.id },
+          data: { attempts, lastError: message },
+        });
+        await pauseSending(prisma, `WhatsApp-Fehler ${code ?? ""}: ${message}`, now);
+        return { ...result, waiting: "Automatisch pausiert" };
+      }
+      const giveUp = handling === "PERMANENT" || attempts >= MAX_ATTEMPTS;
+      await prisma.$transaction([
+        prisma.outboundMessage.update({
+          where: { id: next.id },
+          data: {
+            attempts,
+            lastError: message,
+            status: giveUp ? "FAILED" : "QUEUED",
+            notBefore: giveUp
+              ? next.notBefore
+              : new Date(now.getTime() + 5 * 60_000 * 2 ** (attempts - 1)),
+          },
+        }),
+        prisma.messagingSettings.update({
+          where: { id: 1 },
+          data: { nextSendAllowedAt: gapUntil },
+        }),
+      ]);
+      if (giveUp) result.failed++;
+    }
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Worker run (lease-protected)
+// ---------------------------------------------------------------------------
+
+/** One worker run: plan, then dispatch. Skips if another process holds the lease. */
+export async function runMessagingWorker(deps: MessagingDeps) {
+  const now = (deps.now ?? (() => new Date()))();
+  await loadMessagingSettings(deps.prisma);
+  const lease = await deps.prisma.messagingSettings.updateMany({
+    where: { id: 1, OR: [{ workerLeaseUntil: null }, { workerLeaseUntil: { lt: now } }] },
+    data: { workerLeaseUntil: new Date(now.getTime() + 5 * 60_000) },
+  });
+  if (lease.count === 0) return { skipped: true as const };
+  try {
+    const planning = await planMessages(deps);
+    const dispatch = await dispatchMessages(deps);
+    return { skipped: false as const, ...planning, ...dispatch };
+  } finally {
+    await deps.prisma.messagingSettings.update({
+      where: { id: 1 },
+      data: { workerLeaseUntil: null, lastWorkerRunAt: (deps.now ?? (() => new Date()))() },
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Inbound
+// ---------------------------------------------------------------------------
+
+export function isOptOut(text: string | null | undefined): boolean {
+  return Boolean(
+    text &&
+    OPT_OUT_WORDS.has(
+      text
+        .trim()
+        .toLowerCase()
+        .replace(/[.!]+$/, ""),
+    ),
+  );
+}
+
+/** Cancels queued automatic messages of a lead (after a reply or opt-out). */
+export async function cancelQueued(prisma: PrismaClient, leadId: string, kinds: OutboundKind[]) {
+  return prisma.outboundMessage.updateMany({
+    where: { leadId, status: "QUEUED", kind: { in: kinds } },
+    data: { status: "CANCELLED" },
+  });
+}
