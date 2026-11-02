@@ -1,0 +1,305 @@
+// Data model for the TattAI lead & consultation app.
+// All timestamps are stored in UTC; the UI renders them in Europe/Berlin.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Users & tattooers
+// ---------------------------------------------------------------------------
+
+enum Role {
+  ADMIN
+  TATTOOER
+}
+
+model User {
+  id          String    @id @default(cuid())
+  email       String    @unique
+  name        String
+  role        Role
+  active      Boolean   @default(true)
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  tattooerProfile TattooerProfile?
+  leadNotes       LeadNote[]
+}
+
+model TattooerProfile {
+  id                  String @id @default(cuid())
+  userId              String @unique
+  user                User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  consultationMinutes Int    @default(30)
+  bufferMinutes       Int    @default(0)
+
+  // Google Calendar connection (phase 2). Refresh token is stored encrypted.
+  googleAccountEmail     String?
+  googleRefreshTokenEnc  String?
+  consultationCalendarId String?
+  googleConnectedAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  availabilityRules      AvailabilityRule[]
+  availabilityExceptions AvailabilityException[]
+  consultations          Consultation[]
+  fairnessShare          FairnessShare?
+}
+
+// Recurring weekly availability, in local time (Europe/Berlin).
+model AvailabilityRule {
+  id          String          @id @default(cuid())
+  tattooerId  String
+  tattooer    TattooerProfile @relation(fields: [tattooerId], references: [id], onDelete: Cascade)
+  // ISO weekday: 1 = Monday ... 7 = Sunday
+  weekday     Int
+  // Minutes since local midnight
+  startMinute Int
+  endMinute   Int
+  validFrom   DateTime?
+  validUntil  DateTime?
+  createdAt   DateTime        @default(now())
+
+  @@index([tattooerId])
+}
+
+enum AvailabilityExceptionKind {
+  UNAVAILABLE
+  AVAILABLE
+}
+
+model AvailabilityException {
+  id         String                    @id @default(cuid())
+  tattooerId String
+  tattooer   TattooerProfile           @relation(fields: [tattooerId], references: [id], onDelete: Cascade)
+  kind       AvailabilityExceptionKind @default(UNAVAILABLE)
+  startsAt   DateTime
+  endsAt     DateTime
+  note       String?
+  createdAt  DateTime                  @default(now())
+
+  @@index([tattooerId, startsAt])
+}
+
+// ---------------------------------------------------------------------------
+// Leads
+// ---------------------------------------------------------------------------
+
+enum LeadSource {
+  META_LEAD_AD
+  MANUAL
+}
+
+enum LeadStatus {
+  NEW // neu
+  CONTACTED // kontaktiert
+  IN_CHAT // im_chat
+  CONSULTATION_BOOKED // termin_gebucht
+  CONSULTATION_DONE // beratung_erfolgt
+  TATTOO_BOOKED // tattoo_gebucht
+  NO_TATTOO // kein_tattoo
+  NO_SHOW // no_show
+  CANCELLED // abgesagt
+  NO_RESPONSE // keine_antwort
+  INVALID // ungueltig
+}
+
+model Lead {
+  id     String     @id @default(cuid())
+  source LeadSource
+
+  // Meta Lead Ads metadata
+  metaLeadId       String?   @unique
+  metaPageId       String?
+  metaFormId       String?
+  metaCampaignId   String?
+  metaCampaignName String?
+  metaAdsetId      String?
+  metaAdsetName    String?
+  metaAdId         String?
+  metaAdName       String?
+  metaPlatform     String?
+  metaCreatedAt    DateTime?
+
+  // Contact data
+  name       String
+  phoneRaw   String?
+  phoneE164  String?
+  phoneValid Boolean @default(false)
+  email      String?
+
+  // WhatsApp consent (snapshot of the wording at the time of the lead)
+  whatsappConsent     Boolean   @default(false)
+  whatsappConsentAt   DateTime?
+  whatsappConsentText String?
+
+  status          LeadStatus @default(NEW)
+  statusChangedAt DateTime   @default(now())
+
+  // Structured tattoo idea, filled by the chatbot (phase 3)
+  tattooSummary Json?
+
+  // Original lead payload from Meta, for traceability
+  rawPayload Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages      Message[]
+  consultations Consultation[]
+  notes         LeadNote[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([metaCampaignId])
+  @@index([phoneE164])
+}
+
+model LeadNote {
+  id        String   @id @default(cuid())
+  leadId    String
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  authorId  String?
+  author    User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([leadId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// WhatsApp messages (phase 3)
+// ---------------------------------------------------------------------------
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+model Message {
+  id           String           @id @default(cuid())
+  leadId       String
+  lead         Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  direction    MessageDirection
+  waMessageId  String?          @unique
+  templateName String?
+  body         String?
+  status       String?
+  payload      Json?
+  sentAt       DateTime         @default(now())
+  createdAt    DateTime         @default(now())
+
+  @@index([leadId, sentAt])
+}
+
+// ---------------------------------------------------------------------------
+// Consultations & revenue (phases 2 and 4)
+// ---------------------------------------------------------------------------
+
+enum ConsultationStatus {
+  SCHEDULED
+  HELD
+  NO_SHOW
+  CANCELLED
+}
+
+model Consultation {
+  id              String             @id @default(cuid())
+  leadId          String
+  lead            Lead               @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  tattooerId      String
+  tattooer        TattooerProfile    @relation(fields: [tattooerId], references: [id])
+  startsAt        DateTime
+  endsAt          DateTime
+  status          ConsultationStatus @default(SCHEDULED)
+  calendarEventId String?
+  outcomeNote     String?
+  tattooBooked    Boolean?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  tattooBookings TattooBooking[]
+
+  @@index([tattooerId, startsAt])
+  @@index([leadId])
+}
+
+model TattooBooking {
+  id             String       @id @default(cuid())
+  consultationId String
+  consultation   Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  date           DateTime
+  amountCents    Int
+  currency       String       @default("EUR")
+  note           String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([date])
+}
+
+// ---------------------------------------------------------------------------
+// Fairness (phase 2)
+// ---------------------------------------------------------------------------
+
+model FairnessConfig {
+  id         Int      @id @default(1)
+  windowDays Int      @default(28)
+  updatedAt  DateTime @updatedAt
+}
+
+model FairnessShare {
+  tattooerId String          @id
+  tattooer   TattooerProfile @relation(fields: [tattooerId], references: [id], onDelete: Cascade)
+  // Raw weight; shares are normalised to 100 % across active tattooers on read.
+  weight     Float           @default(1)
+  updatedAt  DateTime        @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Settings & infrastructure
+// ---------------------------------------------------------------------------
+
+// Singleton row (id = 1) with settings the admin can change in the UI.
+model AppSettings {
+  id                 Int      @id @default(1)
+  // Key of the consent checkbox in the Meta instant form (custom disclaimer).
+  consentCheckboxKey String?
+  // Exact wording of the consent text shown in the form; snapshotted per lead.
+  consentText        String?
+  updatedAt          DateTime @updatedAt
+}
+
+enum WebhookEventStatus {
+  PENDING
+  PROCESSED
+  FAILED
+  DEAD
+}
+
+// Every incoming webhook unit of work, deduplicated by (provider, externalId).
+model WebhookEvent {
+  id            String             @id @default(cuid())
+  provider      String
+  externalId    String
+  payload       Json
+  status        WebhookEventStatus @default(PENDING)
+  attempts      Int                @default(0)
+  lastError     String?
+  nextAttemptAt DateTime?
+  processedAt   DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@unique([provider, externalId])
+  @@index([status, nextAttemptAt])
+}
