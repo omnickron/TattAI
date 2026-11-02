@@ -4,7 +4,10 @@ Interne Web-App (PWA) für das Tattoo-Studio: Leads aus Meta-Lead-Formularen, Wh
 faire Verteilung von Beratungsterminen auf die Tätowierer, Google-Kalender, Umsatz-Auswertung.
 Spezifikation und verbindliche Entscheidungen: [`CLAUDE.md`](CLAUDE.md).
 
-**Stand: Phase 1 (Fundament)** – Login, Tätowierer-Verwaltung, Lead-Eingang per Meta-Webhook, Leadliste.
+**Stand: Phase 2 (Termine)**
+- Phase 1: Login, Tätowierer-Verwaltung, Lead-Eingang per Meta-Webhook, Leadliste.
+- Phase 2: Verfügbarkeiten, Beratungsdauer/Puffer, Google-Kalender (Free/Busy + Termine schreiben),
+  faire Verteilung mit Admin-Einstellung, Buchen/Absagen/Umverteilen, App-Kalender (Tag/Woche).
 
 ## Technik
 
@@ -64,6 +67,35 @@ npm run dev:simulate-lead -- 5     # 5 Leads
 - Telefonnummern werden ins E.164-Format gebracht. Ungültige Nummern bekommen den Status „Ungültig“.
 - Die WhatsApp-Einwilligung wird über den Schlüssel des Häkchens im Formular erkannt. Schlüssel und
   Wortlaut stellt der Admin unter **Einstellungen** ein; der Wortlaut wird pro Lead mit Zeitstempel gespeichert.
+
+## Termine und faire Verteilung
+
+- **Verfügbarkeit** (jede Person mit Tätowierer-Profil, auch der Inhaber): wöchentliche Zeitfenster,
+  Ausnahmen (Abwesenheit oder zusätzliche Zeiten), Beratungsdauer (Standard 30 Min.) und Puffer.
+- **Freie Zeiten** = Zeitfenster − Abwesenheiten − belegte Zeiten aus *allen* Google-Kalendern der Person
+  − bereits gebuchte Beratungen (mit Puffer). Raster 15 Minuten, frühestens 2 Stunden im Voraus
+  (`src/lib/scheduling/booking.ts`, `SCHEDULING_DEFAULTS`). Ohne verbundenen Kalender gibt es keine Termine.
+- **Faire Verteilung** (`src/lib/scheduling/fairness.ts`): Unter allen, die zum Zeitpunkt frei sind, gewinnt der
+  größte Rückstand = Soll-Anteil × (Termine im Zeitraum + 1) − eigene Termine. Gleichstand: ältester letzter
+  Termin, dann Zufall. Anteile und Zeitraum (Standard 28 Tage) stellt der Admin unter **Fairness** ein.
+- **Buchung**: Transaktion mit Sperre, zusätzlich verhindert eine Datenbank-Regel überlappende Termine pro
+  Person. Erst wird der Termin gespeichert, dann der Google-Eintrag im Kalender „Beratungen“ angelegt;
+  schlägt das fehl, wird die Buchung zurückgenommen.
+- **Beratungsform**: „Vor Ort“ (Standard, Studioadresse als Ort) oder „Telefon“, wenn jemand nicht anreisen kann.
+- Bis der Chatbot (Phase 3) bucht, kann der Admin auf der Lead-Seite Termine buchen.
+
+### Google-Kalender
+
+Lokal läuft der Kalender im Beispiel-Modus (`GOOGLE_CALENDAR_MOCK=true`: simulierte Mittagspausen und
+private Termine, Einträge werden nur protokolliert). Für den echten Betrieb:
+
+1. Im Google-Cloud-Projekt (Zustimmungsbildschirm „Intern“) die **Google Calendar API** aktivieren.
+2. Beim OAuth-Client die Redirect-URI `https://<domain>/api/google/callback` ergänzen.
+3. `GOOGLE_CALENDAR_MOCK=false` und `TOKEN_ENCRYPTION_KEY` setzen (`openssl rand -base64 32`).
+   Refresh-Tokens werden damit verschlüsselt gespeichert (AES-256-GCM).
+
+Die App fragt nur diese Berechtigungen an: Free/Busy (keine Termininhalte), Kalenderliste lesen und
+Verwaltung der *von der App angelegten* Kalender („Beratungen“). Einträge sind als privat markiert.
 
 ## Produktion (Vorschlag: Hetzner Cloud)
 

@@ -27,3 +27,21 @@ export async function updateConsentSettings(
   revalidatePath("/admin/settings");
   return { ok: true, message: "Gespeichert. Gilt für alle ab jetzt eingehenden Leads." };
 }
+
+export async function updateStudioSettings(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireAdmin();
+  const studioAddress =
+    String(formData.get("studioAddress") ?? "")
+      .trim()
+      .slice(0, 500) || null;
+  await prisma.appSettings.upsert({
+    where: { id: 1 },
+    update: { studioAddress },
+    create: { id: 1, studioAddress },
+  });
+  revalidatePath("/admin/settings");
+  return { ok: true, message: "Gespeichert. Gilt für neue Kalendereinträge." };
+}

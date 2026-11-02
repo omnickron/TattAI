@@ -8,6 +8,14 @@ import { leadScope, requireAdmin, requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { LEAD_STATUS_ORDER } from "@/lib/labels";
 import { normalizePhone } from "@/lib/phone";
+import {
+  BookingError,
+  bookConsultation,
+  cancelConsultation,
+  reassignConsultation,
+  updateConsultationMode,
+} from "@/lib/scheduling/booking";
+import { schedulingDeps } from "@/lib/scheduling/deps";
 import { defaultPhoneCountry } from "@/lib/settings";
 
 const leadSchema = z.object({
@@ -81,4 +89,111 @@ export async function deleteLead(leadId: string): Promise<ActionState> {
   await prisma.lead.delete({ where: { id: leadId } }).catch(() => null);
   revalidatePath("/leads");
   redirect("/leads");
+}
+
+// ---------------------------------------------------------------------------
+// Consultations
+// ---------------------------------------------------------------------------
+
+function bookingMessage(err: unknown): ActionState {
+  if (err instanceof BookingError) return { ok: false, message: err.message };
+  console.error("[booking]", err);
+  return { ok: false, message: "Unerwarteter Fehler beim Buchen." };
+}
+
+const bookSchema = z.object({
+  slot: z.string().min(1, "Bitte einen Termin auswählen."),
+  mode: z.enum(["ON_SITE", "PHONE"]),
+  tattooerId: z.string().optional().default(""),
+});
+
+export async function bookConsultationAction(
+  leadId: string,
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const user = await requireAdmin();
+  const parsed = bookSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message };
+  const startsAt = new Date(parsed.data.slot);
+  if (Number.isNaN(startsAt.getTime())) return { ok: false, message: "Ungültiger Termin." };
+
+  let booked: Awaited<ReturnType<typeof bookConsultation>>;
+  try {
+    booked = await bookConsultation(schedulingDeps(), {
+      leadId,
+      startsAt,
+      mode: parsed.data.mode,
+      tattooerId: parsed.data.tattooerId || undefined,
+      createdById: user.id,
+    });
+  } catch (err) {
+    return bookingMessage(err);
+  }
+  // The booking form disappears after booking, so the confirmation is shown via the URL.
+  revalidatePath(`/leads/${leadId}`);
+  redirect(`/leads/${leadId}?booked=${booked.id}`);
+}
+
+/** Admin or the assigned tattooer may manage a consultation. */
+async function requireConsultationAccess(consultationId: string) {
+  const user = await requireUser();
+  const c = await prisma.consultation.findUnique({ where: { id: consultationId } });
+  if (!c) return null;
+  if (user.role !== "ADMIN" && c.tattooerId !== user.tattooerProfile?.id) return null;
+  return { user, consultation: c };
+}
+
+export async function cancelConsultationAction(consultationId: string): Promise<ActionState> {
+  const access = await requireConsultationAccess(consultationId);
+  if (!access) return { ok: false, message: "Kein Zugriff auf diesen Termin." };
+  try {
+    const { calendarEventRemoved } = await cancelConsultation(schedulingDeps(), consultationId);
+    revalidatePath(`/leads/${access.consultation.leadId}`);
+    return {
+      ok: true,
+      message: calendarEventRemoved
+        ? "Termin abgesagt."
+        : "Termin abgesagt. Der Kalendereintrag konnte nicht gelöscht werden – bitte manuell entfernen.",
+    };
+  } catch (err) {
+    return bookingMessage(err);
+  }
+}
+
+export async function reassignConsultationAction(
+  consultationId: string,
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireAdmin();
+  const tattooerId = String(formData.get("tattooerId") ?? "");
+  if (!tattooerId) return { ok: false, message: "Bitte eine Person auswählen." };
+  try {
+    const c = await reassignConsultation(schedulingDeps(), consultationId, tattooerId);
+    revalidatePath(`/leads/${c.leadId}`);
+    return { ok: true, message: "Termin umverteilt." };
+  } catch (err) {
+    return bookingMessage(err);
+  }
+}
+
+export async function changeConsultationModeAction(
+  consultationId: string,
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const access = await requireConsultationAccess(consultationId);
+  if (!access) return { ok: false, message: "Kein Zugriff auf diesen Termin." };
+  const mode = formData.get("mode");
+  if (mode !== "ON_SITE" && mode !== "PHONE")
+    return { ok: false, message: "Ungültige Beratungsform." };
+  const { calendarUpdated } = await updateConsultationMode(schedulingDeps(), consultationId, mode);
+  revalidatePath(`/leads/${access.consultation.leadId}`);
+  return {
+    ok: true,
+    message: calendarUpdated
+      ? "Beratungsform geändert."
+      : "Geändert, aber der Kalendereintrag konnte nicht aktualisiert werden.",
+  };
 }

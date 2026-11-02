@@ -10,6 +10,7 @@ import { formatDateTime, formatPhone } from "@/lib/format";
 import { LEAD_STATUS_LABELS, LEAD_STATUS_ORDER, PLATFORM_LABELS } from "@/lib/labels";
 import { getLeadForUser } from "@/lib/leads/queries";
 import { addLeadNote, deleteLead, updateLead } from "./actions";
+import { ConsultationsSection } from "./consultations";
 
 export const metadata: Metadata = { title: "Lead" };
 
@@ -22,9 +23,10 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-export default async function LeadPage({ params }: PageProps<"/leads/[id]">) {
+export default async function LeadPage({ params, searchParams }: PageProps<"/leads/[id]">) {
   const user = await requireUser();
   const { id } = await params;
+  const query = await searchParams;
   const lead = await getLeadForUser(user, id);
   if (!lead) notFound();
   const isAdmin = user.role === "ADMIN";
@@ -97,21 +99,13 @@ export default async function LeadPage({ params }: PageProps<"/leads/[id]">) {
             </p>
           </Card>
 
-          <Card>
-            <CardTitle>Beratungstermine</CardTitle>
-            {lead.consultations.length === 0 ? (
-              <p className="text-sm text-ink-soft">Noch kein Termin.</p>
-            ) : (
-              <ul className="divide-y divide-line text-sm">
-                {lead.consultations.map((c) => (
-                  <li key={c.id} className="flex flex-wrap justify-between gap-2 py-2">
-                    <span>{formatDateTime(c.startsAt)}</span>
-                    <span className="text-ink-soft">{c.tattooer.user.name}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
+          <ConsultationsSection
+            user={user}
+            leadId={lead.id}
+            consultations={lead.consultations}
+            bookDate={typeof query.bookDate === "string" ? query.bookDate : undefined}
+            bookedId={typeof query.booked === "string" ? query.booked : undefined}
+          />
 
           <Card>
             <CardTitle>Chatverlauf</CardTitle>

@@ -8,9 +8,12 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const isAdmin = user.role === "ADMIN";
   const items = [
     { href: "/leads", label: "Leads" },
+    { href: "/calendar", label: "Kalender" },
+    ...(user.tattooerProfile ? [{ href: "/availability", label: "Verfügbarkeit" }] : []),
     ...(isAdmin
       ? [
           { href: "/admin/tattooers", label: "Tätowierer" },
+          { href: "/admin/fairness", label: "Fairness" },
           { href: "/admin/settings", label: "Einstellungen" },
         ]
       : []),

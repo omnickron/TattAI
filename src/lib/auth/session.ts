@@ -49,3 +49,12 @@ export function leadScope(user: CurrentUser): Prisma.LeadWhereInput {
   if (!tattooerId) return { id: "__none__" };
   return { consultations: { some: { tattooerId } } };
 }
+
+/** The signed-in user's tattooer profile id (admin included, as the owner also tattoos). */
+export async function requireTattooer(): Promise<
+  CurrentUser & { tattooerProfile: { id: string } }
+> {
+  const user = await requireUser();
+  if (!user.tattooerProfile) redirect("/leads");
+  return user as CurrentUser & { tattooerProfile: { id: string } };
+}

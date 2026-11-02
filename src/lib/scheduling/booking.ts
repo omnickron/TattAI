@@ -472,6 +472,9 @@ export async function reassignConsultation(
   if (!c) throw new BookingError("NOT_FOUND", "Termin nicht gefunden.");
   if (c.status !== "SCHEDULED")
     throw new BookingError("INVALID_STATE", "Nur geplante Termine können umverteilt werden.");
+  if (c.startsAt <= now) {
+    throw new BookingError("INVALID_STATE", "Vergangene Termine können nicht umverteilt werden.");
+  }
   if (c.tattooerId === newTattooerId) return c;
 
   const [target] = await loadBookableTattooers(prisma, [newTattooerId]);

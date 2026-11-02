@@ -13,7 +13,7 @@ import {
 import { requireAdmin } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { formatDateTime } from "@/lib/format";
-import { updateConsentSettings } from "./actions";
+import { updateConsentSettings, updateStudioSettings } from "./actions";
 
 export const metadata: Metadata = { title: "Einstellungen" };
 
@@ -60,6 +60,25 @@ export default async function SettingsPage() {
                 defaultValue={settings?.consentText ?? ""}
                 placeholder="Ich bin damit einverstanden, dass mich … per WhatsApp kontaktiert …"
                 rows={5}
+              />
+            </Field>
+            <Button type="submit">Speichern</Button>
+          </ActionForm>
+        </Card>
+
+        <Card>
+          <CardTitle>Studio</CardTitle>
+          <ActionForm action={updateStudioSettings}>
+            <Field
+              label="Adresse für Beratungen vor Ort"
+              htmlFor="studioAddress"
+              hint="Wird als Ort in die Kalendereinträge geschrieben. Telefonberatungen bekommen keinen Ort."
+            >
+              <Input
+                id="studioAddress"
+                name="studioAddress"
+                defaultValue={settings?.studioAddress ?? ""}
+                placeholder="Straße Nr., PLZ Ort"
               />
             </Field>
             <Button type="submit">Speichern</Button>

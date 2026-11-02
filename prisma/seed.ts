@@ -52,10 +52,16 @@ const WITH_CONSULTATION = new Set<LeadStatus>([
 
 async function main() {
   const adminEmail = (process.env.ADMIN_EMAIL || "inhaber@example.com").toLowerCase();
-  await prisma.user.upsert({
+  const admin = await prisma.user.upsert({
     where: { email: adminEmail },
     update: {},
     create: { email: adminEmail, name: process.env.ADMIN_NAME || "Studio-Inhaber", role: "ADMIN" },
+  });
+  // The studio owner also tattoos.
+  const adminProfile = await prisma.tattooerProfile.upsert({
+    where: { userId: admin.id },
+    update: {},
+    create: { userId: admin.id, fairnessShare: { create: { weight: 1 } } },
   });
 
   const profiles: string[] = [];
@@ -74,10 +80,37 @@ async function main() {
     profiles.push(user.tattooerProfile!.id);
   }
 
+  // Sample availability (local time) and – in mock mode – a "connected" calendar.
+  const SAMPLE_RULES = [
+    [1, 2, 3, 4, 5].map((weekday) => ({ weekday, startMinute: 10 * 60, endMinute: 18 * 60 })),
+    [2, 3, 4].map((weekday) => ({ weekday, startMinute: 12 * 60, endMinute: 20 * 60 })),
+    [5, 6].map((weekday) => ({ weekday, startMinute: 11 * 60, endMinute: 16 * 60 })),
+    [1, 3].map((weekday) => ({ weekday, startMinute: 9 * 60, endMinute: 12 * 60 })),
+  ];
+  const calendarMock = process.env.GOOGLE_CALENDAR_MOCK === "true";
+  for (const [i, id] of [...profiles, adminProfile.id].entries()) {
+    if ((await prisma.availabilityRule.count({ where: { tattooerId: id } })) === 0) {
+      await prisma.availabilityRule.createMany({
+        data: SAMPLE_RULES[i % SAMPLE_RULES.length].map((r) => ({ ...r, tattooerId: id })),
+      });
+    }
+    if (calendarMock) {
+      await prisma.tattooerProfile.updateMany({
+        where: { id, googleConnectedAt: null },
+        data: { googleConnectedAt: new Date(), consultationCalendarId: `mock-beratungen-${id}` },
+      });
+    }
+  }
+
   await prisma.appSettings.upsert({
     where: { id: 1 },
     update: {},
-    create: { id: 1, consentCheckboxKey: CONSENT_KEY, consentText: CONSENT_TEXT },
+    create: {
+      id: 1,
+      consentCheckboxKey: CONSENT_KEY,
+      consentText: CONSENT_TEXT,
+      studioAddress: "[Platzhalter] Studioadresse",
+    },
   });
   await prisma.fairnessConfig.upsert({ where: { id: 1 }, update: {}, create: { id: 1 } });
 

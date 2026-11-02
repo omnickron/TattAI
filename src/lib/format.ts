@@ -19,3 +19,23 @@ export function formatDate(date: Date | null | undefined): string {
 export function formatPhone(e164: string | null, raw: string | null): string {
   return e164 ?? raw ?? "–";
 }
+
+function isLocalMidnight(d: Date): boolean {
+  const hhmm = new Intl.DateTimeFormat("en-GB", {
+    timeZone: APP_TIMEZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(d);
+  return hhmm === "00:00";
+}
+
+/** Formats a range; whole local days are shown as dates only ("22.12.2026 – 31.12.2026, ganztägig"). */
+export function formatRange(start: Date, end: Date): string {
+  if (isLocalMidnight(start) && isLocalMidnight(end)) {
+    const from = formatDate(start);
+    const to = formatDate(new Date(end.getTime() - 60_000));
+    return `${from === to ? from : `${from} – ${to}`}, ganztägig`;
+  }
+  return `${formatDateTime(start)} – ${formatDateTime(end)}`;
+}

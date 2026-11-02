@@ -18,7 +18,13 @@ async function ensureBootstrapAdmin(email: string) {
   await prisma.user.upsert({
     where: { email },
     update: {},
-    create: { email, name: process.env.ADMIN_NAME || "Admin", role: "ADMIN" },
+    // The studio owner also tattoos, so the admin gets a tattooer profile too.
+    create: {
+      email,
+      name: process.env.ADMIN_NAME || "Admin",
+      role: "ADMIN",
+      tattooerProfile: { create: { fairnessShare: { create: { weight: 1 } } } },
+    },
   });
 }
 

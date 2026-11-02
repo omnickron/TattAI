@@ -1,5 +1,7 @@
 /** Google OAuth for the calendar connection (separate from the login). */
 
+export const STATE_COOKIE = "gcal_oauth_state";
+
 export const CALENDAR_SCOPES = [
   "openid",
   "email",
