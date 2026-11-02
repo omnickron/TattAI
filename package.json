@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "test": "npm run test:db:prepare && vitest run",
     "test:watch": "vitest",
     "test:db:prepare": "tsx scripts/prepare-test-db.ts",

@@ -70,7 +70,10 @@ export async function recordLeadgenEvents(
 }
 
 /** Fetches lead details and creates the lead. Safe to call repeatedly. */
-export async function processWebhookEvent(deps: IngestDeps, eventId: string): Promise<ProcessResult> {
+export async function processWebhookEvent(
+  deps: IngestDeps,
+  eventId: string,
+): Promise<ProcessResult> {
   const { prisma, fetcher, defaultCountry } = deps;
   const now = deps.now ?? (() => new Date());
 

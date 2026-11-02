@@ -7,7 +7,9 @@ export function createLeadFetcher(): MetaLeadFetcher {
   const accessToken = process.env.META_PAGE_ACCESS_TOKEN;
   const appSecret = process.env.META_APP_SECRET;
   if (!accessToken || !appSecret) {
-    throw new Error("META_PAGE_ACCESS_TOKEN and META_APP_SECRET must be set (or META_GRAPH_MOCK=true)");
+    throw new Error(
+      "META_PAGE_ACCESS_TOKEN and META_APP_SECRET must be set (or META_GRAPH_MOCK=true)",
+    );
   }
   return new GraphApiLeadFetcher({
     accessToken,

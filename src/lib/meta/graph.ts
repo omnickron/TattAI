@@ -35,7 +35,9 @@ export class GraphApiLeadFetcher implements MetaLeadFetcher {
   async fetchLead(leadgenId: string): Promise<MetaLeadData> {
     const { accessToken, appSecret, apiVersion } = this.opts;
     const proof = createHmac("sha256", appSecret).update(accessToken).digest("hex");
-    const url = new URL(`https://graph.facebook.com/${apiVersion}/${encodeURIComponent(leadgenId)}`);
+    const url = new URL(
+      `https://graph.facebook.com/${apiVersion}/${encodeURIComponent(leadgenId)}`,
+    );
     url.searchParams.set("fields", LEAD_FIELDS);
     url.searchParams.set("access_token", accessToken);
     url.searchParams.set("appsecret_proof", proof);
@@ -49,13 +51,37 @@ export class GraphApiLeadFetcher implements MetaLeadFetcher {
   }
 }
 
-const SAMPLE_FIRST = ["Lena", "Jonas", "Mia", "Felix", "Sophie", "Leon", "Emma", "Paul", "Hannah", "Noah"];
-const SAMPLE_LAST = ["Müller", "Schmidt", "Schneider", "Fischer", "Weber", "Meyer", "Wagner", "Becker"];
+const SAMPLE_FIRST = [
+  "Lena",
+  "Jonas",
+  "Mia",
+  "Felix",
+  "Sophie",
+  "Leon",
+  "Emma",
+  "Paul",
+  "Hannah",
+  "Noah",
+];
+const SAMPLE_LAST = [
+  "Müller",
+  "Schmidt",
+  "Schneider",
+  "Fischer",
+  "Weber",
+  "Meyer",
+  "Wagner",
+  "Becker",
+];
 const SAMPLE_CAMPAIGNS = [
   { id: "120200000000000001", name: "Herbst Fineline" },
   { id: "120200000000000002", name: "Cover-up Aktion" },
   { id: "120200000000000003", name: "Allgemein Studio" },
 ];
+
+function toAscii(value: string): string {
+  return value.replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss");
+}
 
 function hash(input: string): number {
   let h = 2166136261;
@@ -94,7 +120,7 @@ export class MockLeadFetcher implements MetaLeadFetcher {
         { name: "full_name", values: [`${first} ${last}`] },
         { name: "phone_number", values: [phone] },
         ...(withEmail
-          ? [{ name: "email", values: [`${first}.${last}@example.com`.toLowerCase()] }]
+          ? [{ name: "email", values: [toAscii(`${first}.${last}@example.com`.toLowerCase())] }]
           : []),
       ],
       custom_disclaimer_responses: [{ checkbox_key: this.consentCheckboxKey, is_checked: "1" }],

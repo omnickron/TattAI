@@ -28,7 +28,10 @@ function payload(...leadgenIds: string[]): MetaWebhookPayload {
   };
 }
 
-function deps(fetcher: MetaLeadFetcher = new MockLeadFetcher(), now = () => new Date()): IngestDeps {
+function deps(
+  fetcher: MetaLeadFetcher = new MockLeadFetcher(),
+  now = () => new Date(),
+): IngestDeps {
   return { prisma, fetcher, defaultCountry: "DE", now };
 }
 
@@ -108,7 +111,12 @@ describe("Meta leadgen ingestion", () => {
     };
     await ingest(payload("lead-x"), deps(fetcher));
     const lead = await prisma.lead.findUniqueOrThrow({ where: { metaLeadId: "lead-x" } });
-    expect(lead).toMatchObject({ status: "INVALID", phoneValid: false, phoneE164: null, phoneRaw: "12345" });
+    expect(lead).toMatchObject({
+      status: "INVALID",
+      phoneValid: false,
+      phoneE164: null,
+      phoneRaw: "12345",
+    });
     expect(lead.whatsappConsent).toBe(false);
   });
 
@@ -156,7 +164,8 @@ describe("Meta leadgen ingestion", () => {
       },
     };
     const { newEventIds } = await recordLeadgenEvents(prisma, payload("lead-1"));
-    for (let i = 0; i < MAX_ATTEMPTS + 2; i++) await processWebhookEvent(deps(broken), newEventIds[0]);
+    for (let i = 0; i < MAX_ATTEMPTS + 2; i++)
+      await processWebhookEvent(deps(broken), newEventIds[0]);
     const event = await prisma.webhookEvent.findFirstOrThrow();
     expect(event.status).toBe("DEAD");
     expect(event.attempts).toBe(MAX_ATTEMPTS);

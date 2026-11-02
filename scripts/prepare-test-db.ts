@@ -7,4 +7,7 @@ if (!url) {
   console.error("TEST_DATABASE_URL is not set");
   process.exit(1);
 }
-execSync("npx prisma migrate deploy", { stdio: "inherit", env: { ...process.env, DATABASE_URL: url } });
+execSync("npx prisma migrate deploy", {
+  stdio: "inherit",
+  env: { ...process.env, DATABASE_URL: url },
+});

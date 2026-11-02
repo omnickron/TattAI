@@ -1,8 +1,7 @@
 import { parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js/max";
 
 export type NormalizedPhone =
-  | { valid: true; e164: string; raw: string }
-  | { valid: false; e164: null; raw: string };
+  { valid: true; e164: string; raw: string } | { valid: false; e164: null; raw: string };
 
 /**
  * Normalises a phone number to E.164. Numbers without a country code are

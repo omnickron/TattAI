@@ -1,0 +1,162 @@
+// Sample data for development: admin, tattooers, settings and ~40 leads.
+// Safe to run repeatedly (upserts by e-mail / Meta lead id).
+import "dotenv/config";
+import type { LeadStatus } from "../src/generated/prisma/client";
+import { MockLeadFetcher } from "../src/lib/meta/graph";
+import { mapMetaLead } from "../src/lib/meta/map-lead";
+import { createPrismaClient } from "../src/lib/prisma-client";
+
+const prisma = createPrismaClient();
+
+const CONSENT_KEY = "whatsapp_consent";
+const CONSENT_TEXT =
+  "[Platzhalter] Ich bin einverstanden, dass mich das Studio per WhatsApp zu meiner Tattoo-Anfrage kontaktiert. Die Einwilligung kann ich jederzeit widerrufen.";
+
+const TATTOOERS = [
+  { name: "Alex Berger", email: "alex@example.com", weight: 2 },
+  { name: "Kim Novak", email: "kim@example.com", weight: 2 },
+  { name: "Sam Richter", email: "sam@example.com", weight: 1 },
+];
+
+const STATUSES: LeadStatus[] = [
+  "NEW",
+  "NEW",
+  "NEW",
+  "NEW",
+  "NEW",
+  "NEW",
+  "CONTACTED",
+  "CONTACTED",
+  "CONTACTED",
+  "IN_CHAT",
+  "IN_CHAT",
+  "CONSULTATION_BOOKED",
+  "CONSULTATION_BOOKED",
+  "CONSULTATION_BOOKED",
+  "CONSULTATION_DONE",
+  "TATTOO_BOOKED",
+  "TATTOO_BOOKED",
+  "NO_TATTOO",
+  "NO_SHOW",
+  "CANCELLED",
+  "NO_RESPONSE",
+];
+
+const WITH_CONSULTATION = new Set<LeadStatus>([
+  "CONSULTATION_BOOKED",
+  "CONSULTATION_DONE",
+  "TATTOO_BOOKED",
+  "NO_TATTOO",
+  "NO_SHOW",
+]);
+
+async function main() {
+  const adminEmail = (process.env.ADMIN_EMAIL || "inhaber@example.com").toLowerCase();
+  await prisma.user.upsert({
+    where: { email: adminEmail },
+    update: {},
+    create: { email: adminEmail, name: process.env.ADMIN_NAME || "Studio-Inhaber", role: "ADMIN" },
+  });
+
+  const profiles: string[] = [];
+  for (const t of TATTOOERS) {
+    const user = await prisma.user.upsert({
+      where: { email: t.email },
+      update: {},
+      create: {
+        email: t.email,
+        name: t.name,
+        role: "TATTOOER",
+        tattooerProfile: { create: { fairnessShare: { create: { weight: t.weight } } } },
+      },
+      include: { tattooerProfile: true },
+    });
+    profiles.push(user.tattooerProfile!.id);
+  }
+
+  await prisma.appSettings.upsert({
+    where: { id: 1 },
+    update: {},
+    create: { id: 1, consentCheckboxKey: CONSENT_KEY, consentText: CONSENT_TEXT },
+  });
+  await prisma.fairnessConfig.upsert({ where: { id: 1 }, update: {}, create: { id: 1 } });
+
+  const fetcher = new MockLeadFetcher(CONSENT_KEY);
+  const now = Date.now();
+  let created = 0;
+
+  for (let i = 0; i < 40; i++) {
+    const metaLeadId = `seed-${String(i).padStart(3, "0")}`;
+    if (await prisma.lead.findUnique({ where: { metaLeadId } })) continue;
+
+    const createdAt = new Date(now - (i * 13 + (i % 5) * 3) * 60 * 60 * 1000);
+    const data = await fetcher.fetchLead(metaLeadId);
+    data.created_time = createdAt.toISOString();
+    if (i % 9 === 4) data.custom_disclaimer_responses = [];
+
+    const mapped = mapMetaLead(data, { checkboxKey: CONSENT_KEY, text: CONSENT_TEXT }, "DE");
+    const status: LeadStatus = mapped.phoneValid ? STATUSES[i % STATUSES.length] : "INVALID";
+
+    const lead = await prisma.lead.create({
+      data: {
+        source: "META_LEAD_AD",
+        metaLeadId,
+        metaFormId: data.form_id,
+        metaCampaignId: data.campaign_id,
+        metaCampaignName: data.campaign_name,
+        metaAdsetId: data.adset_id,
+        metaAdsetName: data.adset_name,
+        metaAdId: data.ad_id,
+        metaAdName: data.ad_name,
+        metaPlatform: data.platform,
+        ...mapped,
+        status,
+        statusChangedAt: createdAt,
+        rawPayload: JSON.parse(JSON.stringify(data)),
+        createdAt,
+      },
+    });
+
+    if (WITH_CONSULTATION.has(status)) {
+      const day = new Date(createdAt);
+      day.setUTCDate(day.getUTCDate() + (status === "CONSULTATION_BOOKED" ? 7 : 2));
+      day.setUTCHours(9 + (i % 7), i % 2 ? 30 : 0, 0, 0);
+      const consultation = await prisma.consultation.create({
+        data: {
+          leadId: lead.id,
+          tattooerId: profiles[i % profiles.length],
+          startsAt: day,
+          endsAt: new Date(day.getTime() + 30 * 60 * 1000),
+          status:
+            status === "CONSULTATION_BOOKED"
+              ? "SCHEDULED"
+              : status === "NO_SHOW"
+                ? "NO_SHOW"
+                : "HELD",
+          tattooBooked: status === "TATTOO_BOOKED" ? true : status === "NO_TATTOO" ? false : null,
+        },
+      });
+      if (status === "TATTOO_BOOKED") {
+        await prisma.tattooBooking.create({
+          data: {
+            consultationId: consultation.id,
+            date: new Date(day.getTime() + 21 * 24 * 60 * 60 * 1000),
+            amountCents: 25000 + (i % 4) * 15000,
+          },
+        });
+      }
+    }
+    created++;
+  }
+
+  console.log(
+    `Seed done: admin ${adminEmail}, ${TATTOOERS.length} tattooers, ${created} new leads.`,
+  );
+}
+
+main()
+  .catch((err) => {
+    console.error(err);
+    process.exit(1);
+  })
+  .finally(() => prisma.$disconnect());
