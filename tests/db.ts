@@ -9,7 +9,8 @@ export function createTestPrisma() {
 
 export async function resetDatabase(prisma: ReturnType<typeof createTestPrisma>) {
   await prisma.$executeRawUnsafe(`
-    TRUNCATE "WebhookEvent", "LeadNote", "Message", "TattooBooking", "Consultation",
-             "Lead", "AppSettings" RESTART IDENTITY CASCADE
+    TRUNCATE "WebhookEvent", "LeadNote", "Message", "TattooBooking", "Consultation", "Lead",
+             "AppSettings", "FairnessShare", "FairnessConfig", "AvailabilityRule",
+             "AvailabilityException", "TattooerProfile", "User" RESTART IDENTITY CASCADE
   `);
 }

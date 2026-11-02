@@ -65,8 +65,9 @@ model AvailabilityRule {
   // Minutes since local midnight
   startMinute Int
   endMinute   Int
-  validFrom   DateTime?
-  validUntil  DateTime?
+  // Optional validity, inclusive local dates
+  validFrom   DateTime?       @db.Date
+  validUntil  DateTime?       @db.Date
   createdAt   DateTime        @default(now())
 
   @@index([tattooerId])
@@ -205,6 +206,11 @@ model Message {
 // Consultations & revenue (phases 2 and 4)
 // ---------------------------------------------------------------------------
 
+enum ConsultationMode {
+  ON_SITE // vor Ort (Standard)
+  PHONE // per Telefon, wenn der Kunde nicht anreisen kann
+}
+
 enum ConsultationStatus {
   SCHEDULED
   HELD
@@ -221,7 +227,12 @@ model Consultation {
   startsAt        DateTime
   endsAt          DateTime
   status          ConsultationStatus @default(SCHEDULED)
+  mode            ConsultationMode   @default(ON_SITE)
   calendarEventId String?
+  // Calendar id the event was written to (the tattooer's "Beratungen" calendar)
+  calendarId      String?
+  cancelledAt     DateTime?
+  createdById     String?
   outcomeNote     String?
   tattooBooked    Boolean?
   createdAt       DateTime           @default(now())
@@ -276,6 +287,8 @@ model AppSettings {
   consentCheckboxKey String?
   // Exact wording of the consent text shown in the form; snapshotted per lead.
   consentText        String?
+  // Address used as location of on-site consultations in calendar events
+  studioAddress      String?
   updatedAt          DateTime @updatedAt
 }
 
