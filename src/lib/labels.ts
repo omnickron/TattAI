@@ -18,7 +18,7 @@ export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
   NEW: "Neu",
   CONTACTED: "Kontaktiert",
   IN_CHAT: "Im Chat",
-  CONSULTATION_BOOKED: "Termin gebucht",
+  CONSULTATION_BOOKED: "Beratung gebucht",
   CONSULTATION_DONE: "Beratung erfolgt",
   TATTOO_BOOKED: "Tattoo gebucht",
   NO_TATTOO: "Kein Tattoo",

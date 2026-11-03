@@ -108,7 +108,7 @@ Freie Antwort an den Kunden – nur innerhalb von 24 Stunden nach seiner letzten
 ### `POST /leads/{id}/consultations`
 
 Bucht einen Beratungstermin. TattAI wählt fair unter allen, die zu dieser Zeit frei sind, legt den
-Kalendereintrag an und setzt den Lead auf „Termin gebucht“.
+Kalendereintrag an und setzt den Lead auf „Beratung gebucht“.
 
 ```json
 { "startsAt": "2026-11-09T09:00:00.000Z", "mode": "ON_SITE" }

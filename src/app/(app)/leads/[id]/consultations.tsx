@@ -76,7 +76,7 @@ export async function ConsultationsSection({
       )}
       {bookedId && consultations.some((c) => c.id === bookedId) && (
         <p role="status" className="mb-2 text-sm text-emerald-700 dark:text-emerald-400">
-          Termin gebucht bei {consultations.find((c) => c.id === bookedId)!.tattooer.user.name}.
+          Beratung gebucht bei {consultations.find((c) => c.id === bookedId)!.tattooer.user.name}.
         </p>
       )}
       {consultations.length === 0 ? (
