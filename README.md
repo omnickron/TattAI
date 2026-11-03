@@ -154,7 +154,9 @@ schickt ihm Kundennachrichten als signierte Ereignisse. Details: [`docs/bot-api.
   der Admin) ein, wie sie lief: *stattgefunden*, *No-Show* oder *abgesagt*. Bei *stattgefunden*: Tattoo-Termin
   vereinbart? *ja*, *nein* oder *noch offen*. Bei *ja*: *ein Termin* oder *mehrere Termine* – und bei mehreren,
   ob *nur der erste* oder *auch weitere* schon vergeben sind. Je Termin Datum, optional Uhrzeit (von–bis)
-  und Betrag (später nachtragbar). Tattoo-Termine erscheinen im Kalender; mit Uhrzeit blockieren sie Beratungen. Weitere Termine lassen sich jederzeit ergänzen, einzelne absagen; der Lead-Status
+  und Betrag (später nachtragbar). Tattoo-Termine erscheinen im App-Kalender und im Google-Kalender
+  der Person (derselbe Kalender wie die Beratungen; ohne Uhrzeit als ganztägiger Eintrag); mit Uhrzeit blockieren
+  sie Beratungen. Änderungen und Absagen werden übertragen, Fehler wiederholt der Hintergrund-Dienst. Weitere Termine lassen sich jederzeit ergänzen, einzelne absagen; der Lead-Status
   folgt automatisch.
 - **Auswertung** (Admin): Leads, gebuchte und stattgefundene Beratungen, No-Shows, Abschlüsse, Tattoo-Termine,
   Umsatz (davon bereits gestochen), Umsatz pro Lead und pro Abschluss – filterbar nach Zeitraum, Kampagne und

@@ -111,8 +111,12 @@ export class GoogleCalendarClient implements CalendarClient {
       summary: event.summary,
       description: event.description,
       location: event.location ?? undefined,
-      start: { dateTime: event.start.toISOString(), timeZone: event.timeZone },
-      end: { dateTime: event.end.toISOString(), timeZone: event.timeZone },
+      ...(event.allDay
+        ? { start: { date: event.allDay.startDate }, end: { date: event.allDay.endDate } }
+        : {
+            start: { dateTime: event.start.toISOString(), timeZone: event.timeZone },
+            end: { dateTime: event.end.toISOString(), timeZone: event.timeZone },
+          }),
       visibility: "private",
       reminders: { useDefault: true },
     });

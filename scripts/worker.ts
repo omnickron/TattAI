@@ -4,7 +4,9 @@
 import "dotenv/config";
 import { processDueWebhookEvents } from "../src/lib/leads/meta-ingest";
 import { createLeadFetcher } from "../src/lib/meta/fetcher";
+import { createCalendarClient } from "../src/lib/google/client";
 import { createPrismaClient } from "../src/lib/prisma-client";
+import { syncPendingSessions } from "../src/lib/scheduling/session-calendar";
 import { defaultPhoneCountry } from "../src/lib/settings";
 import { createWhatsAppClient } from "../src/lib/whatsapp/client";
 import { runMessagingWorker } from "../src/lib/whatsapp/messaging";
@@ -14,6 +16,12 @@ import { createMediaDownloader, downloadPendingAttachments } from "../src/lib/wh
 const INTERVAL_MS = 30_000;
 const prisma = createPrismaClient();
 const whatsapp = createWhatsAppClient();
+const calendarDeps = {
+  prisma,
+  calendar: createCalendarClient(),
+  timeZone: process.env.APP_TIMEZONE || "Europe/Berlin",
+  appUrl: process.env.APP_URL,
+};
 let stopping = false;
 let lastLeadRetry = 0;
 
@@ -35,6 +43,12 @@ async function tick() {
     if (bot.delivered || bot.failed) console.info("[worker] bot events:", bot);
   } catch (err) {
     console.error("[worker] bot delivery failed:", err);
+  }
+  try {
+    const cal = await syncPendingSessions(calendarDeps);
+    if (cal.synced || cal.deleted) console.info("[worker] calendar:", cal);
+  } catch (err) {
+    console.error("[worker] calendar sync failed:", err);
   }
   try {
     const media = await downloadPendingAttachments(prisma, createMediaDownloader());

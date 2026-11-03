@@ -10,6 +10,7 @@ import {
   parseTimeOfDay,
   zonedTimeToUtc,
 } from "../time";
+import { queueSessionEventDeletions } from "../scheduling/session-calendar";
 import { parseEuroToCents } from "./money";
 
 export type OutcomeKind = "HELD" | "NO_SHOW" | "CANCELLED";
@@ -222,8 +223,10 @@ export async function recordOutcome(
     );
   }
 
-  await prisma.$transaction([
-    prisma.consultation.update({
+  await prisma.$transaction(async (tx) => {
+    // Existing sessions are replaced: their calendar events must go.
+    await queueSessionEventDeletions(tx, { consultationId: c.id });
+    await tx.consultation.update({
       where: { id: c.id },
       data: {
         status: v.outcome,
@@ -235,18 +238,19 @@ export async function recordOutcome(
         outcomeRecordedAt: now,
         outcomeRecordedById: input.userId,
       },
-    }),
-    prisma.tattooBooking.deleteMany({ where: { consultationId: c.id } }),
-    prisma.tattooBooking.createMany({
+    });
+    await tx.tattooBooking.deleteMany({ where: { consultationId: c.id } });
+    await tx.tattooBooking.createMany({
       data: v.sessions.map((s, i) => ({
         consultationId: c.id,
         sessionNumber: i + 1,
         date: sessionDate(s.date, input.timeZone),
         ...sessionSlot(s.date, s.start, s.end, input.timeZone),
         amountCents: s.amountCents,
+        calendarSyncPending: true,
       })),
-    }),
-  ]);
+    });
+  });
   await syncLeadStatusFromConsultations(prisma, c.leadId, now);
   return prisma.consultation.findUniqueOrThrow({
     where: { id: c.id },
@@ -286,6 +290,7 @@ export async function addSession(
         date: sessionDate(input.date, input.timeZone),
         ...sessionSlot(input.date, time.start, time.end, input.timeZone),
         amountCents: cents,
+        calendarSyncPending: true,
       },
     }),
     prisma.consultation.update({
@@ -319,6 +324,7 @@ export async function updateSession(
       date: sessionDate(input.date, input.timeZone),
       ...sessionSlot(input.date, time.start, time.end, input.timeZone),
       amountCents: cents,
+      calendarSyncPending: true,
     },
   });
 }
@@ -328,5 +334,8 @@ export async function setSessionCancelled(
   sessionId: string,
   cancelled: boolean,
 ) {
-  await prisma.tattooBooking.update({ where: { id: sessionId }, data: { cancelled } });
+  await prisma.tattooBooking.update({
+    where: { id: sessionId },
+    data: { cancelled, calendarSyncPending: true },
+  });
 }

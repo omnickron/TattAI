@@ -6,6 +6,8 @@ import type { ActionState } from "@/lib/action-state";
 import { requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { APP_TIMEZONE } from "@/lib/format";
+import { schedulingDeps } from "@/lib/scheduling/deps";
+import { syncConsultationSessions } from "@/lib/scheduling/session-calendar";
 import {
   addSession,
   OutcomeError,
@@ -76,6 +78,8 @@ export async function recordOutcomeAction(
   } catch (err) {
     return fail(err);
   }
+  // Calendar sync is best effort; failures stay pending and are retried by the worker.
+  await syncConsultationSessions(schedulingDeps(), access.consultation.id);
   revalidate(access.consultation.leadId);
   // The form disappears after saving (entry leaves the "open" list), so confirm via the URL.
   const returnTo = String(formData.get("returnTo") ?? "");
@@ -106,6 +110,8 @@ export async function addSessionAction(
   } catch (err) {
     return fail(err);
   }
+  // Calendar sync is best effort; failures stay pending and are retried by the worker.
+  await syncConsultationSessions(schedulingDeps(), access.consultation.id);
   revalidate(access.consultation.leadId);
   return { ok: true, message: "Termin hinzugefügt." };
 }
@@ -137,6 +143,8 @@ export async function updateSessionAction(
   } catch (err) {
     return fail(err);
   }
+  // Calendar sync is best effort; failures stay pending and are retried by the worker.
+  await syncConsultationSessions(schedulingDeps(), access.consultation.id);
   revalidate(access.consultation.leadId);
   return { ok: true, message: "Gespeichert." };
 }
@@ -148,6 +156,8 @@ export async function setSessionCancelledAction(
   const access = await sessionAccess(sessionId);
   if (!access) return { ok: false, message: "Kein Zugriff." };
   await setSessionCancelled(prisma, sessionId, cancelled);
+  // Calendar sync is best effort; failures stay pending and are retried by the worker.
+  await syncConsultationSessions(schedulingDeps(), access.consultation.id);
   revalidate(access.consultation.leadId);
   return { ok: true, message: cancelled ? "Termin abgesagt." : "Termin wiederhergestellt." };
 }

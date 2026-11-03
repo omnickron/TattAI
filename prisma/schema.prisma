@@ -289,26 +289,33 @@ model Consultation {
 }
 
 model TattooBooking {
-  id             String       @id @default(cuid())
-  consultationId String
-  consultation   Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  id                  String       @id @default(cuid())
+  consultationId      String
+  consultation        Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
   // 1, 2, 3 … within the tattoo
-  sessionNumber  Int          @default(1)
+  sessionNumber       Int          @default(1)
   // Local day of the session (stored as local midnight)
-  date           DateTime
+  date                DateTime
   // Optional time slot; shown in the calendar and blocks consultation slots
-  startsAt       DateTime?
-  endsAt         DateTime?
+  startsAt            DateTime?
+  endsAt              DateTime?
+  // Google Calendar sync (same app calendar as the consultations)
+  calendarId          String?
+  calendarEventId     String?
+  calendarSyncPending Boolean      @default(false)
+  calendarSyncError   String?
+  calendarSyncedAt    DateTime?
   // Entered manually; may be added later
-  amountCents    Int?
-  currency       String       @default("EUR")
-  cancelled      Boolean      @default(false)
-  note           String?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  amountCents         Int?
+  currency            String       @default("EUR")
+  cancelled           Boolean      @default(false)
+  note                String?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
 
   @@index([date])
   @@index([startsAt])
+  @@index([calendarSyncPending])
 }
 
 // ---------------------------------------------------------------------------
@@ -573,4 +580,18 @@ model BotDelivery {
   createdAt     DateTime           @default(now())
 
   @@index([status, nextAttemptAt])
+}
+
+// Calendar events that still have to be removed in Google (e.g. after a session
+// was replaced or a lead was deleted). No relation on purpose: the source row is gone.
+model CalendarEventDeletion {
+  id         String   @id @default(cuid())
+  tattooerId String
+  calendarId String
+  eventId    String
+  attempts   Int      @default(0)
+  lastError  String?
+  createdAt  DateTime @default(now())
+
+  @@unique([calendarId, eventId])
 }

@@ -28,6 +28,9 @@ export type OutcomeConsultation = {
     cancelled: boolean;
     startsAt: Date | null;
     endsAt: Date | null;
+    calendarEventId: string | null;
+    calendarSyncPending: boolean;
+    calendarSyncError: string | null;
   }>;
 };
 
@@ -136,7 +139,19 @@ export function OutcomePanel({
                     key={s.id}
                     className="grid gap-2 px-3 py-2 sm:grid-cols-[5rem_1fr_auto] sm:items-center"
                   >
-                    <span className="font-medium">Termin {s.sessionNumber}</span>
+                    <span className="flex flex-col">
+                      <span className="font-medium">Termin {s.sessionNumber}</span>
+                      {!s.cancelled && (s.calendarSyncPending || s.calendarSyncError) ? (
+                        <span
+                          className="text-[11px] text-amber-700 dark:text-amber-400"
+                          title={s.calendarSyncError ?? undefined}
+                        >
+                          Kalender ausstehend
+                        </span>
+                      ) : !s.cancelled && s.calendarEventId ? (
+                        <span className="text-[11px] text-ink-soft">im Kalender</span>
+                      ) : null}
+                    </span>
                     {s.cancelled ? (
                       <>
                         <span className="flex flex-wrap items-center gap-2">

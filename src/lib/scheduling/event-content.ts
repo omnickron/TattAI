@@ -87,3 +87,46 @@ export function buildConsultationEvent(input: EventContentInput): CalendarEventI
     timeZone: input.timeZone,
   };
 }
+
+export interface TattooEventInput {
+  lead: {
+    id: string;
+    name: string;
+    phoneE164: string | null;
+    email: string | null;
+    tattooSummary: unknown;
+  };
+  sessionNumber: number;
+  multipleSessions: boolean;
+  /** Timed session, or null for an all-day entry on `localDate` */
+  slot: { start: Date; end: Date } | null;
+  localDate: string;
+  nextLocalDate: string;
+  studioAddress: string | null;
+  note: string | null;
+  appUrl: string;
+  timeZone: string;
+}
+
+/** Calendar event for a tattoo session (same calendar as the consultations). */
+export function buildTattooEvent(input: TattooEventInput): CalendarEventInput {
+  const { lead } = input;
+  const lines = [
+    `Telefon: ${lead.phoneE164 ?? "–"}`,
+    ...(lead.email ? [`E-Mail: ${lead.email}`] : []),
+  ];
+  const summary = summaryLines(lead.tattooSummary).filter((l) => !l.startsWith("Referenzbilder"));
+  if (summary.length) lines.push("", "Tattoo-Idee:", ...summary);
+  if (input.note) lines.push("", `Notiz: ${input.note}`);
+  if (!input.slot) lines.push("", "(Uhrzeit noch nicht eingetragen)");
+  lines.push("", `In der App: ${input.appUrl.replace(/\/$/, "")}/leads/${lead.id}`);
+  return {
+    summary: `Tattoo: ${lead.name}${input.multipleSessions ? ` – Termin ${input.sessionNumber}` : ""}`,
+    description: lines.join("\n"),
+    location: input.studioAddress,
+    start: input.slot?.start ?? new Date(`${input.localDate}T00:00:00Z`),
+    end: input.slot?.end ?? new Date(`${input.nextLocalDate}T00:00:00Z`),
+    timeZone: input.timeZone,
+    ...(input.slot ? {} : { allDay: { startDate: input.localDate, endDate: input.nextLocalDate } }),
+  };
+}

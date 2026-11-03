@@ -110,7 +110,8 @@ export default async function AvailabilityPage({ searchParams }: PageProps<"/ava
                   </>
                 )}{" "}
                 seit {formatDateTime(profile.googleConnectedAt)}. Belegte Zeiten aus allen deinen
-                Kalendern werden berücksichtigt, Beratungen landen im Kalender „Beratungen“.
+                Kalendern werden berücksichtigt. Beratungen und Tattoo-Termine landen im Kalender
+                „Beratungen“.
               </p>
               <ActionForm
                 action={disconnectGoogleCalendar}

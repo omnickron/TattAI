@@ -16,6 +16,10 @@ import {
   updateConsultationMode,
 } from "@/lib/scheduling/booking";
 import { schedulingDeps } from "@/lib/scheduling/deps";
+import {
+  processCalendarDeletions,
+  queueLeadEventDeletions,
+} from "@/lib/scheduling/session-calendar";
 import { defaultPhoneCountry } from "@/lib/settings";
 import { setBotEnabled } from "@/lib/bot/state";
 import { createWhatsAppClient } from "@/lib/whatsapp/client";
@@ -95,8 +99,13 @@ export async function addLeadNote(
 /** Permanently deletes a lead incl. notes, messages and consultations (GDPR). */
 export async function deleteLead(leadId: string): Promise<ActionState> {
   await requireAdmin();
+  // Calendar entries contain customer data: queue their removal before the lead is gone.
+  await queueLeadEventDeletions(prisma, leadId);
   await prisma.lead.delete({ where: { id: leadId } }).catch(() => null);
   await deleteLeadFiles(leadId);
+  await processCalendarDeletions(schedulingDeps()).catch((err) =>
+    console.error("[calendar] deletions:", err),
+  );
   revalidatePath("/leads");
   redirect("/leads");
 }

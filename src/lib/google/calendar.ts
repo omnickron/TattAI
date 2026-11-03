@@ -5,7 +5,7 @@ export interface CalendarConnection {
   tattooerId: string;
   /** Encrypted refresh token (null in mock mode). */
   refreshTokenEnc: string | null;
-  /** The tattooer's own "Beratungen" calendar. */
+  /** The tattooer's app calendar ("Beratungen"): consultations and tattoo sessions. */
   calendarId: string | null;
 }
 
@@ -16,6 +16,8 @@ export interface CalendarEventInput {
   start: Date;
   end: Date;
   timeZone: string;
+  /** All-day event: local dates ("YYYY-MM-DD"), end exclusive. start/end are then ignored. */
+  allDay?: { startDate: string; endDate: string };
 }
 
 export interface CalendarClient {
