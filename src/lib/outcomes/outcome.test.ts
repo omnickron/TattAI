@@ -100,8 +100,8 @@ describe("validateOutcome", () => {
       sessions: [s("2026-12-01", "600"), s("2027-01-12"), s("", "")],
     });
     expect(many.sessions).toEqual([
-      { date: "2026-12-01", amountCents: 60000 },
-      { date: "2027-01-12", amountCents: null },
+      { date: "2026-12-01", amountCents: 60000, start: null, end: null },
+      { date: "2027-01-12", amountCents: null, start: null, end: null },
     ]);
   });
 
@@ -122,5 +122,27 @@ describe("validateOutcome", () => {
         sessions: [s("2026-12-01", "viel")],
       }),
     ).toThrow("Betrag");
+  });
+});
+
+describe("session times", () => {
+  const base = { outcome: "HELD" as const, tattoo: "YES" as const, sessionPlan: "SINGLE" as const };
+
+  it("accepts an optional time slot", () => {
+    const v = validateOutcome({
+      ...base,
+      sessions: [{ date: "2026-12-01", start: "11:00", end: "15:30" }],
+    });
+    expect(v.sessions[0]).toMatchObject({ start: "11:00", end: "15:30" });
+  });
+
+  it.each([
+    [{ start: "11:00" }, "Beginn und Ende"],
+    [{ start: "15:00", end: "11:00" }, "nach dem Beginn"],
+    [{ start: "25:00", end: "26:00" }, "ungültig"],
+  ])("rejects %j", (time, message) => {
+    expect(() => validateOutcome({ ...base, sessions: [{ date: "2026-12-01", ...time }] })).toThrow(
+      message,
+    );
   });
 });

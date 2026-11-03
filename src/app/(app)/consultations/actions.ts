@@ -53,6 +53,8 @@ export async function recordOutcomeAction(
     sessions.push({
       date: String(date),
       amount: String(formData.get(`session_amount_${i}`) ?? ""),
+      start: String(formData.get(`session_start_${i}`) ?? ""),
+      end: String(formData.get(`session_end_${i}`) ?? ""),
     });
   }
   const further = formData.get("furtherScheduled");
@@ -97,6 +99,8 @@ export async function addSessionAction(
       consultationId,
       date: String(formData.get("date") ?? ""),
       amount: String(formData.get("amount") ?? ""),
+      start: String(formData.get("start") ?? ""),
+      end: String(formData.get("end") ?? ""),
       timeZone: APP_TIMEZONE,
     });
   } catch (err) {
@@ -126,6 +130,8 @@ export async function updateSessionAction(
       sessionId,
       date: String(formData.get("date") ?? ""),
       amount: String(formData.get("amount") ?? ""),
+      start: String(formData.get("start") ?? ""),
+      end: String(formData.get("end") ?? ""),
       timeZone: APP_TIMEZONE,
     });
   } catch (err) {

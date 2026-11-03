@@ -3,7 +3,7 @@
  * tattoo booked (yes / no / still open), one or several sessions with date and amount.
  */
 import type { LeadStatus, PrismaClient } from "@/generated/prisma/client";
-import { DEFAULT_TIME_ZONE, isLocalDate, zonedTimeToUtc } from "../time";
+import { DEFAULT_TIME_ZONE, isLocalDate, parseTimeOfDay, zonedTimeToUtc } from "../time";
 import { parseEuroToCents } from "./money";
 
 export type OutcomeKind = "HELD" | "NO_SHOW" | "CANCELLED";
@@ -16,7 +16,8 @@ export interface OutcomeInput {
   sessionPlan?: SessionPlanValue;
   /** Only for MULTIPLE: are further sessions (beyond the first) already scheduled? */
   furtherScheduled?: boolean;
-  sessions?: Array<{ date: string; amount?: string }>;
+  /** start/end: optional local times "HH:MM" */
+  sessions?: Array<{ date: string; amount?: string; start?: string; end?: string }>;
   note?: string;
 }
 
@@ -25,7 +26,12 @@ export interface ValidOutcome {
   tattoo: TattooDecision | null;
   sessionPlan: SessionPlanValue | null;
   furtherScheduled: boolean | null;
-  sessions: Array<{ date: string; amountCents: number | null }>;
+  sessions: Array<{
+    date: string;
+    amountCents: number | null;
+    start: string | null;
+    end: string | null;
+  }>;
   note: string | null;
 }
 
@@ -69,14 +75,15 @@ export function validateOutcome(input: OutcomeInput): ValidOutcome {
   }
 
   const sessions = (input.sessions ?? [])
-    .filter((s) => s.date?.trim() || s.amount?.trim())
+    .filter((s) => s.date?.trim() || s.amount?.trim() || s.start?.trim() || s.end?.trim())
     .map((s, i) => {
       if (!isLocalDate(s.date?.trim()))
         throw new OutcomeError(`Termin ${i + 1}: bitte ein gültiges Datum angeben.`);
       const cents = parseEuroToCents(s.amount);
       if (cents === "invalid")
         throw new OutcomeError(`Termin ${i + 1}: Betrag ist ungültig (z. B. 450 oder 1.250,50).`);
-      return { date: s.date.trim(), amountCents: cents };
+      const time = parseTimes(s.start, s.end, `Termin ${i + 1}: `);
+      return { date: s.date.trim(), amountCents: cents, ...time };
     });
 
   const further = input.sessionPlan === "MULTIPLE" ? Boolean(input.furtherScheduled) : null;
@@ -100,6 +107,38 @@ export function validateOutcome(input: OutcomeInput): ValidOutcome {
     furtherScheduled: further,
     sessions,
     note,
+  };
+}
+
+/** Optional session time: both or none, end after start. Throws OutcomeError. */
+export function parseTimes(
+  start?: string,
+  end?: string,
+  prefix = "",
+): { start: string | null; end: string | null } {
+  const s = start?.trim() || "";
+  const e = end?.trim() || "";
+  if (!s && !e) return { start: null, end: null };
+  if (!s || !e)
+    throw new OutcomeError(`${prefix}Bitte Beginn und Ende angeben (oder beides leer lassen).`);
+  const sm = parseTimeOfDay(s);
+  const em = parseTimeOfDay(e);
+  if (sm === null || em === null) throw new OutcomeError(`${prefix}Uhrzeit ist ungültig.`);
+  if (em <= sm) throw new OutcomeError(`${prefix}Das Ende muss nach dem Beginn liegen.`);
+  return { start: s, end: e };
+}
+
+/** startsAt/endsAt of a session (null when no time was given). */
+export function sessionSlot(
+  localDate: string,
+  start: string | null | undefined,
+  end: string | null | undefined,
+  timeZone = DEFAULT_TIME_ZONE,
+) {
+  if (!start || !end) return { startsAt: null, endsAt: null };
+  return {
+    startsAt: zonedTimeToUtc(localDate, parseTimeOfDay(start)!, timeZone),
+    endsAt: zonedTimeToUtc(localDate, parseTimeOfDay(end)!, timeZone),
   };
 }
 
@@ -192,6 +231,7 @@ export async function recordOutcome(
         consultationId: c.id,
         sessionNumber: i + 1,
         date: sessionDate(s.date, input.timeZone),
+        ...sessionSlot(s.date, s.start, s.end, input.timeZone),
         amountCents: s.amountCents,
       })),
     }),
@@ -206,7 +246,14 @@ export async function recordOutcome(
 /** Adds a further session later. A single-session tattoo becomes a multi-session one. */
 export async function addSession(
   prisma: PrismaClient,
-  input: { consultationId: string; date: string; amount?: string; timeZone?: string },
+  input: {
+    consultationId: string;
+    date: string;
+    amount?: string;
+    start?: string;
+    end?: string;
+    timeZone?: string;
+  },
 ) {
   const c = await prisma.consultation.findUnique({
     where: { id: input.consultationId },
@@ -218,6 +265,7 @@ export async function addSession(
   if (!isLocalDate(input.date)) throw new OutcomeError("Bitte ein gültiges Datum angeben.");
   const cents = parseEuroToCents(input.amount);
   if (cents === "invalid") throw new OutcomeError("Betrag ist ungültig (z. B. 450 oder 1.250,50).");
+  const time = parseTimes(input.start, input.end);
   const next = Math.max(0, ...c.tattooBookings.map((b) => b.sessionNumber)) + 1;
   await prisma.$transaction([
     prisma.tattooBooking.create({
@@ -225,6 +273,7 @@ export async function addSession(
         consultationId: c.id,
         sessionNumber: next,
         date: sessionDate(input.date, input.timeZone),
+        ...sessionSlot(input.date, time.start, time.end, input.timeZone),
         amountCents: cents,
       },
     }),
@@ -240,14 +289,26 @@ export async function addSession(
 
 export async function updateSession(
   prisma: PrismaClient,
-  input: { sessionId: string; date: string; amount?: string; timeZone?: string },
+  input: {
+    sessionId: string;
+    date: string;
+    amount?: string;
+    start?: string;
+    end?: string;
+    timeZone?: string;
+  },
 ) {
+  const time = parseTimes(input.start, input.end);
   if (!isLocalDate(input.date)) throw new OutcomeError("Bitte ein gültiges Datum angeben.");
   const cents = parseEuroToCents(input.amount);
   if (cents === "invalid") throw new OutcomeError("Betrag ist ungültig (z. B. 450 oder 1.250,50).");
   await prisma.tattooBooking.update({
     where: { id: input.sessionId },
-    data: { date: sessionDate(input.date, input.timeZone), amountCents: cents },
+    data: {
+      date: sessionDate(input.date, input.timeZone),
+      ...sessionSlot(input.date, time.start, time.end, input.timeZone),
+      amountCents: cents,
+    },
   });
 }
 

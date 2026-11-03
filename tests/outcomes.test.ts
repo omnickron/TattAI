@@ -1,5 +1,10 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { addSession, recordOutcome, setSessionCancelled } from "@/lib/outcomes/outcome";
+import {
+  addSession,
+  recordOutcome,
+  setSessionCancelled,
+  updateSession,
+} from "@/lib/outcomes/outcome";
 import { createTestPrisma, resetDatabase } from "./db";
 
 const prisma = createTestPrisma();
@@ -156,5 +161,35 @@ describe("recordOutcome", () => {
     });
     await setSessionCancelled(prisma, res.tattooBookings[0].id, true);
     expect((await prisma.tattooBooking.findFirstOrThrow()).cancelled).toBe(true);
+  });
+});
+
+describe("session times", () => {
+  it("stores start and end in local time (incl. DST)", async () => {
+    const c = await consultation();
+    const res = await recordOutcome(prisma, {
+      consultationId: c.id,
+      userId,
+      now: NOW,
+      outcome: {
+        outcome: "HELD",
+        tattoo: "YES",
+        sessionPlan: "MULTIPLE",
+        furtherScheduled: true,
+        sessions: [
+          { date: "2026-12-01", start: "11:00", end: "15:00", amount: "500" },
+          { date: "2027-04-06", start: "10:00", end: "12:00" },
+        ],
+      },
+    });
+    const [winter, summer] = res.tattooBookings.sort((a, b) => a.sessionNumber - b.sessionNumber);
+    expect(winter.startsAt?.toISOString()).toBe("2026-12-01T10:00:00.000Z");
+    expect(winter.endsAt?.toISOString()).toBe("2026-12-01T14:00:00.000Z");
+    expect(summer.startsAt?.toISOString()).toBe("2027-04-06T08:00:00.000Z");
+
+    // Updating without time removes the slot again
+    await updateSession(prisma, { sessionId: winter.id, date: "2026-12-02", amount: "500" });
+    const updated = await prisma.tattooBooking.findUniqueOrThrow({ where: { id: winter.id } });
+    expect(updated.startsAt).toBeNull();
   });
 });

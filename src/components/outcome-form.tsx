@@ -13,7 +13,7 @@ export interface OutcomeDefaults {
   tattoo?: Tattoo | null;
   sessionPlan?: Plan | null;
   furtherScheduled?: boolean | null;
-  sessions?: Array<{ date: string; amount: string }>;
+  sessions?: Array<{ date: string; amount: string; start?: string; end?: string }>;
   note?: string | null;
 }
 
@@ -80,7 +80,7 @@ export function OutcomeForm({
     defaults.furtherScheduled === true ? "yes" : defaults.furtherScheduled === false ? "no" : null,
   );
   const [sessions, setSessions] = useState(
-    defaults.sessions?.length ? defaults.sessions : [{ date: "", amount: "" }],
+    defaults.sessions?.length ? defaults.sessions : [{ date: "", amount: "", start: "", end: "" }],
   );
 
   const showSessions =
@@ -90,11 +90,11 @@ export function OutcomeForm({
   const multipleRows = plan === "MULTIPLE" && further === "yes";
   const rows = multipleRows
     ? sessions.length < 2
-      ? [...sessions, { date: "", amount: "" }]
+      ? [...sessions, { date: "", amount: "", start: "", end: "" }]
       : sessions
     : sessions.slice(0, 1);
 
-  const update = (i: number, key: "date" | "amount", value: string) =>
+  const update = (i: number, key: "date" | "amount" | "start" | "end", value: string) =>
     setSessions(rows.map((r, j) => (j === i ? { ...r, [key]: value } : r)));
 
   return (
@@ -157,25 +157,60 @@ export function OutcomeForm({
                 ? "Erster Termin"
                 : "Tattoo-Termin"}
           </p>
+          <div
+            className="hidden grid-cols-[1.5rem_1fr_auto] gap-2 text-xs text-ink-soft sm:grid"
+            aria-hidden
+          >
+            <span />
+            <div className="grid grid-cols-[1fr_8.5rem_8.5rem_1fr] gap-2">
+              <span>Datum</span>
+              <span>von (optional)</span>
+              <span>bis (optional)</span>
+              <span>Betrag</span>
+            </div>
+            <span className="w-9" />
+          </div>
           {rows.map((row, i) => (
-            <div key={i} className="grid grid-cols-[auto_1fr_1fr_auto] items-center gap-2">
-              <span className="w-6 text-sm text-ink-soft">{i + 1}.</span>
-              <Input
-                type="date"
-                name={`session_date_${i}`}
-                value={row.date}
-                onChange={(e) => update(i, "date", e.target.value)}
-                aria-label={`Datum Termin ${i + 1}`}
-                required
-              />
-              <Input
-                name={`session_amount_${i}`}
-                value={row.amount}
-                onChange={(e) => update(i, "amount", e.target.value)}
-                placeholder="Betrag in € (optional)"
-                inputMode="decimal"
-                aria-label={`Betrag Termin ${i + 1}`}
-              />
+            <div key={i} className="grid grid-cols-[1.5rem_1fr_auto] items-start gap-2">
+              <span className="pt-2 text-sm text-ink-soft">{i + 1}.</span>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-[1fr_8.5rem_8.5rem_1fr]">
+                <Input
+                  type="date"
+                  name={`session_date_${i}`}
+                  value={row.date}
+                  onChange={(e) => update(i, "date", e.target.value)}
+                  aria-label={`Datum Termin ${i + 1}`}
+                  required
+                  className="col-span-2 sm:col-span-1"
+                />
+                <Input
+                  type="time"
+                  step={900}
+                  name={`session_start_${i}`}
+                  value={row.start ?? ""}
+                  onChange={(e) => update(i, "start", e.target.value)}
+                  aria-label={`Beginn Termin ${i + 1}`}
+                  title="Beginn (optional)"
+                />
+                <Input
+                  type="time"
+                  step={900}
+                  name={`session_end_${i}`}
+                  value={row.end ?? ""}
+                  onChange={(e) => update(i, "end", e.target.value)}
+                  aria-label={`Ende Termin ${i + 1}`}
+                  title="Ende (optional)"
+                />
+                <Input
+                  name={`session_amount_${i}`}
+                  value={row.amount}
+                  onChange={(e) => update(i, "amount", e.target.value)}
+                  placeholder="Betrag in € (optional)"
+                  inputMode="decimal"
+                  aria-label={`Betrag Termin ${i + 1}`}
+                  className="col-span-2 sm:col-span-1"
+                />
+              </div>
               {multipleRows && rows.length > 2 ? (
                 <Button
                   type="button"
@@ -195,13 +230,14 @@ export function OutcomeForm({
             <Button
               type="button"
               variant="secondary"
-              onClick={() => setSessions([...rows, { date: "", amount: "" }])}
+              onClick={() => setSessions([...rows, { date: "", amount: "", start: "", end: "" }])}
             >
               + Weiterer Termin
             </Button>
           )}
           <p className="text-xs text-ink-soft">
-            Betrag kann auch später nachgetragen werden.
+            Uhrzeit (von–bis) und Betrag sind optional und können später ergänzt werden. Mit Uhrzeit
+            erscheint der Termin im Kalender und blockiert Beratungen.
             {plan === "MULTIPLE" &&
               further === "no" &&
               " Weitere Termine lassen sich später ergänzen."}

@@ -294,7 +294,11 @@ model TattooBooking {
   consultation   Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
   // 1, 2, 3 … within the tattoo
   sessionNumber  Int          @default(1)
+  // Local day of the session (stored as local midnight)
   date           DateTime
+  // Optional time slot; shown in the calendar and blocks consultation slots
+  startsAt       DateTime?
+  endsAt         DateTime?
   // Entered manually; may be added later
   amountCents    Int?
   currency       String       @default("EUR")
@@ -304,6 +308,7 @@ model TattooBooking {
   updatedAt      DateTime     @updatedAt
 
   @@index([date])
+  @@index([startsAt])
 }
 
 // ---------------------------------------------------------------------------

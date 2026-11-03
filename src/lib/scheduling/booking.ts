@@ -123,6 +123,16 @@ async function buildSlotInputs(
     },
     select: { tattooerId: true, startsAt: true, endsAt: true },
   });
+  // Tattoo sessions with a time slot: nobody consults while tattooing.
+  const tattooSessions = await deps.prisma.tattooBooking.findMany({
+    where: {
+      cancelled: false,
+      consultation: { tattooerId: { in: ids }, status: "HELD" },
+      startsAt: { not: null, lt: new Date(to.getTime() + margin) },
+      endsAt: { gt: new Date(from.getTime() - margin) },
+    },
+    select: { startsAt: true, endsAt: true, consultation: { select: { tattooerId: true } } },
+  });
 
   const google = await Promise.all(
     tattooers.map(async (t) => {
@@ -143,9 +153,14 @@ async function buildSlotInputs(
   for (const t of tattooers) {
     const gBusy = googleBusy.get(t.id);
     if (!gBusy) continue;
-    const dbBusy: Interval[] = booked
-      .filter((c) => c.tattooerId === t.id)
-      .map((c) => ({ start: c.startsAt, end: c.endsAt }));
+    const dbBusy: Interval[] = [
+      ...booked
+        .filter((c) => c.tattooerId === t.id)
+        .map((c) => ({ start: c.startsAt, end: c.endsAt })),
+      ...tattooSessions
+        .filter((x) => x.consultation.tattooerId === t.id)
+        .map((x) => ({ start: x.startsAt!, end: x.endsAt! })),
+    ];
     inputs.set(t.id, {
       rules: t.availabilityRules.map((r) => ({
         weekday: r.weekday,

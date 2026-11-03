@@ -245,6 +245,45 @@ describe("bookConsultation", () => {
   });
 });
 
+describe("tattoo sessions", () => {
+  it("block consultation slots while tattooing (only with a time slot)", async () => {
+    await prisma.tattooerProfile.update({
+      where: { id: ids.b },
+      data: { googleConnectedAt: null },
+    });
+    const leadId = await lead();
+    const held = await prisma.consultation.create({
+      data: {
+        leadId,
+        tattooerId: ids.a,
+        startsAt: at("10:00", "2026-11-02"),
+        endsAt: at("10:30", "2026-11-02"),
+        status: "HELD",
+        tattooBooked: true,
+      },
+    });
+    await prisma.tattooBooking.createMany({
+      data: [
+        // Monday 10:00–11:00 tattooing → blocks
+        {
+          consultationId: held.id,
+          sessionNumber: 1,
+          date: at("00:00"),
+          startsAt: at("10:00"),
+          endsAt: at("11:00"),
+        },
+        // without time → does not block
+        { consultationId: held.id, sessionNumber: 2, date: at("00:00") },
+      ],
+    });
+    const slots = await getAvailableSlots(deps, { from: at("00:00"), to: at("23:59") });
+    const starts = slots.map((s) => s.start.getTime());
+    expect(starts).not.toContain(at("10:00").getTime());
+    expect(starts).not.toContain(at("10:30").getTime());
+    expect(starts).toContain(at("11:00").getTime());
+  });
+});
+
 describe("cancel and reassign", () => {
   it("cancels, deletes the event and frees the slot", async () => {
     const leadId = await lead();

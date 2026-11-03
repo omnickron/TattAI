@@ -153,8 +153,8 @@ schickt ihm Kundennachrichten als signierte Ereignisse. Details: [`docs/bot-api.
 - **Beratungen** (Navigation, Zahl = fehlende Ergebnisse): Nach Beginn einer Beratung trägt der Tätowierer (oder
   der Admin) ein, wie sie lief: *stattgefunden*, *No-Show* oder *abgesagt*. Bei *stattgefunden*: Tattoo-Termin
   vereinbart? *ja*, *nein* oder *noch offen*. Bei *ja*: *ein Termin* oder *mehrere Termine* – und bei mehreren,
-  ob *nur der erste* oder *auch weitere* schon vergeben sind. Je Termin Datum und Betrag (Betrag optional,
-  später nachtragbar). Weitere Termine lassen sich jederzeit ergänzen, einzelne absagen; der Lead-Status
+  ob *nur der erste* oder *auch weitere* schon vergeben sind. Je Termin Datum, optional Uhrzeit (von–bis)
+  und Betrag (später nachtragbar). Tattoo-Termine erscheinen im Kalender; mit Uhrzeit blockieren sie Beratungen. Weitere Termine lassen sich jederzeit ergänzen, einzelne absagen; der Lead-Status
   folgt automatisch.
 - **Auswertung** (Admin): Leads, gebuchte und stattgefundene Beratungen, No-Shows, Abschlüsse, Tattoo-Termine,
   Umsatz (davon bereits gestochen), Umsatz pro Lead und pro Abschluss – filterbar nach Zeitraum, Kampagne und

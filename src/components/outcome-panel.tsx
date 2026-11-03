@@ -9,7 +9,7 @@ import {
 } from "@/app/(app)/consultations/actions";
 import { APP_TIMEZONE, formatDate } from "@/lib/format";
 import { centsToInput, formatEuro } from "@/lib/outcomes/money";
-import { localDateOf } from "@/lib/time";
+import { formatTimeOfDay, localDateOf, localMinuteOf } from "@/lib/time";
 
 export type OutcomeConsultation = {
   id: string;
@@ -26,10 +26,38 @@ export type OutcomeConsultation = {
     date: Date;
     amountCents: number | null;
     cancelled: boolean;
+    startsAt: Date | null;
+    endsAt: Date | null;
   }>;
 };
 
 const localDate = (d: Date) => localDateOf(d, APP_TIMEZONE);
+const localTime = (d: Date | null) => (d ? formatTimeOfDay(localMinuteOf(d, APP_TIMEZONE)) : "");
+
+function TimeInputs({ start, end }: { start?: Date | null; end?: Date | null }) {
+  return (
+    <>
+      <Input
+        type="time"
+        step={900}
+        name="start"
+        defaultValue={localTime(start ?? null)}
+        className="w-32"
+        aria-label="Beginn"
+        title="Beginn (optional)"
+      />
+      <Input
+        type="time"
+        step={900}
+        name="end"
+        defaultValue={localTime(end ?? null)}
+        className="w-32"
+        aria-label="Ende"
+        title="Ende (optional)"
+      />
+    </>
+  );
+}
 
 export function outcomeSummary(c: OutcomeConsultation): string {
   if (c.status === "NO_SHOW") return "No-Show";
@@ -79,7 +107,12 @@ export function OutcomePanel({
     furtherScheduled: c.furtherSessionsScheduled,
     sessions: sessions
       .filter((s) => !s.cancelled)
-      .map((s) => ({ date: localDate(s.date), amount: centsToInput(s.amountCents) })),
+      .map((s) => ({
+        date: localDate(s.date),
+        amount: centsToInput(s.amountCents),
+        start: localTime(s.startsAt),
+        end: localTime(s.endsAt),
+      })),
     note: c.outcomeNote,
   } as const;
 
@@ -110,7 +143,9 @@ export function OutcomePanel({
                     {s.cancelled ? (
                       <>
                         <span className="text-ink-soft line-through">
-                          {formatDate(s.date)} · {formatEuro(s.amountCents)}
+                          {formatDate(s.date)}
+                          {s.startsAt && ` ${localTime(s.startsAt)}–${localTime(s.endsAt)}`} ·{" "}
+                          {formatEuro(s.amountCents)}
                         </span>
                         <Badge>abgesagt</Badge>
                         <ActionForm
@@ -136,6 +171,7 @@ export function OutcomePanel({
                             required
                             aria-label="Datum"
                           />
+                          <TimeInputs start={s.startsAt} end={s.endsAt} />
                           <Input
                             name="amount"
                             defaultValue={centsToInput(s.amountCents)}
@@ -179,6 +215,7 @@ export function OutcomePanel({
                   className="mt-2 flex flex-wrap items-center gap-2 space-y-0"
                 >
                   <Input type="date" name="date" className="w-40" required aria-label="Datum" />
+                  <TimeInputs />
                   <Input
                     name="amount"
                     placeholder="Betrag € (optional)"
