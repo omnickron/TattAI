@@ -1,6 +1,7 @@
 import { decryptSecret } from "../crypto";
 import type { Interval } from "../scheduling/slots";
 import {
+  APP_CALENDAR_NAME,
   CalendarError,
   type CalendarClient,
   type CalendarConnection,
@@ -99,7 +100,7 @@ export class GoogleCalendarClient implements CalendarClient {
     const created = await this.request<{ id: string }>(conn, "/calendars", {
       method: "POST",
       body: JSON.stringify({
-        summary: "Beratungen",
+        summary: APP_CALENDAR_NAME,
         timeZone: process.env.APP_TIMEZONE || "Europe/Berlin",
       }),
     });
@@ -159,6 +160,20 @@ export class GoogleCalendarClient implements CalendarClient {
     } catch (err) {
       // Already deleted in Google: fine.
       if (err instanceof CalendarError && (err.status === 404 || err.status === 410)) return;
+      throw err;
+    }
+  }
+
+  async renameCalendar(conn: CalendarConnection, calendarId: string, name: string) {
+    try {
+      await this.request(conn, `/calendars/${encodeURIComponent(calendarId)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ summary: name }),
+      });
+      return "ok" as const;
+    } catch (err) {
+      if (err instanceof CalendarError && (err.status === 404 || err.status === 410))
+        return "missing" as const;
       throw err;
     }
   }

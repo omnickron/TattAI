@@ -1,12 +1,21 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import type { CalendarClient, CalendarConnection, CalendarEventInput } from "@/lib/google/calendar";
+import {
+  CalendarError,
+  type CalendarClient,
+  type CalendarConnection,
+  type CalendarEventInput,
+} from "@/lib/google/calendar";
 import {
   addSession,
   recordOutcome,
   setSessionCancelled,
   updateSession,
 } from "@/lib/outcomes/outcome";
-import type { SchedulingDeps } from "@/lib/scheduling/booking";
+import {
+  createInAppCalendar,
+  ensureCalendarNames,
+  type SchedulingDeps,
+} from "@/lib/scheduling/booking";
 import {
   processCalendarDeletions,
   queueLeadEventDeletions,
@@ -202,5 +211,61 @@ describe("tattoo sessions in Google Calendar", () => {
     expect(calendar.deleted.sort()).toEqual(
       ["consultation-evt", ...sessions.map((s) => s.calendarEventId!)].sort(),
     );
+  });
+});
+
+describe("app calendar name and recovery", () => {
+  it("renames existing calendars once to 'Studio-Termine'", async () => {
+    const renamed: string[] = [];
+    const cal = Object.assign(new FakeCalendar(), {
+      async renameCalendar(_c: CalendarConnection, id: string, name: string) {
+        renamed.push(`${id}:${name}`);
+        return "ok" as const;
+      },
+    });
+    const d = { ...deps, calendar: cal };
+    expect(await ensureCalendarNames(d)).toEqual({ renamed: 1 });
+    expect(await ensureCalendarNames(d)).toEqual({ renamed: 0 });
+    expect(renamed).toEqual(["cal-alex:Studio-Termine"]);
+  });
+
+  it("recreates the calendar if it was deleted in Google", async () => {
+    const cal = Object.assign(new FakeCalendar(), {
+      async ensureConsultationCalendar(conn: CalendarConnection) {
+        return conn.calendarId ?? "cal-new";
+      },
+      async createEvent(_c: CalendarConnection, calendarId: string, e: CalendarEventInput) {
+        if (calendarId === "cal-alex") throw new CalendarError("Not Found", 404);
+        return `evt-in-${calendarId}-${e.summary.length}`;
+      },
+    });
+    const profile = await prisma.tattooerProfile.findUniqueOrThrow({ where: { id: tattooerId } });
+    const res = await createInAppCalendar({ ...deps, calendar: cal }, profile, {
+      summary: "x",
+      description: "",
+      start: new Date(),
+      end: new Date(),
+      timeZone: "Europe/Berlin",
+    });
+    expect(res.calendarId).toBe("cal-new");
+    expect(
+      await prisma.tattooerProfile.findUniqueOrThrow({ where: { id: tattooerId } }),
+    ).toMatchObject({
+      consultationCalendarId: "cal-new",
+      consultationCalendarName: "Studio-Termine",
+    });
+  });
+
+  it("forgets a calendar that no longer exists when renaming", async () => {
+    const cal = Object.assign(new FakeCalendar(), {
+      async renameCalendar() {
+        return "missing" as const;
+      },
+    });
+    await ensureCalendarNames({ ...deps, calendar: cal });
+    expect(
+      (await prisma.tattooerProfile.findUniqueOrThrow({ where: { id: tattooerId } }))
+        .consultationCalendarId,
+    ).toBeNull();
   });
 });

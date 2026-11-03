@@ -65,7 +65,7 @@ Die Zusammenfassung erscheint am Lead in der App UND im Beschreibungsfeld des Ka
 
 ### 4. Verfügbarkeit und Buchung
 - Verfügbare Zeiten aus den Verfügbarkeitsregeln des Tätowierers MINUS belegte Zeiten im Google Kalender (Free/Busy über alle Kalender der Person).
-- Beratungstermine werden in einen eigenen Kalender "Beratungen" des Tätowierers geschrieben.
+- Beratungstermine und Tattoo-Termine werden in einen eigenen Kalender "Studio-Termine" des Tätowierers geschrieben (wird beim Verbinden automatisch angelegt).
 - Buchung transaktional und gegen Doppelbuchung gesichert (Lock oder Transaktion), erst DB, dann Kalender-Event, bei Fehler sauber zurückrollen.
 
 ### 5. Faire Verteilung mit einstellbaren Anteilen

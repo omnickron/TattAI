@@ -111,7 +111,7 @@ export default async function AvailabilityPage({ searchParams }: PageProps<"/ava
                 )}{" "}
                 seit {formatDateTime(profile.googleConnectedAt)}. Belegte Zeiten aus allen deinen
                 Kalendern werden berücksichtigt. Beratungen und Tattoo-Termine landen im Kalender
-                „Beratungen“.
+                „Studio-Termine“, den die App beim Verbinden anlegt.
               </p>
               <ActionForm
                 action={disconnectGoogleCalendar}

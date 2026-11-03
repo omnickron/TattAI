@@ -5,7 +5,7 @@ export const STATE_COOKIE = "gcal_oauth_state";
 export const CALENDAR_SCOPES = [
   "openid",
   "email",
-  // Create and manage only calendars created by this app ("Beratungen")
+  // Create and manage only calendars created by this app ("Studio-Termine")
   "https://www.googleapis.com/auth/calendar.app.created",
   // Free/busy of all calendars, without access to event details
   "https://www.googleapis.com/auth/calendar.freebusy",

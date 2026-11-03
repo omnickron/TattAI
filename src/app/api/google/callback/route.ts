@@ -4,6 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { encryptSecret } from "@/lib/crypto";
 import { prisma } from "@/lib/db";
+import { APP_CALENDAR_NAME } from "@/lib/google/calendar";
 import { createCalendarClient } from "@/lib/google/client";
 import { CALENDAR_SCOPES, exchangeCalendarCode, STATE_COOKIE } from "@/lib/google/oauth";
 
@@ -55,6 +56,10 @@ export async function GET(request: NextRequest) {
         googleAccountEmail: email ?? user.email,
         googleConnectedAt: new Date(),
         consultationCalendarId: calendarId,
+        consultationCalendarName:
+          profile.consultationCalendarId === calendarId
+            ? profile.consultationCalendarName
+            : APP_CALENDAR_NAME,
       },
     });
     return back(request, "connected");

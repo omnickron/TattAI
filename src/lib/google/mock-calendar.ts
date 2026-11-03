@@ -55,6 +55,11 @@ export class MockCalendarClient implements CalendarClient {
   async deleteEvent(_conn: CalendarConnection, calendarId: string, eventId: string) {
     console.info(`[mock-calendar] delete ${eventId} in ${calendarId}`);
   }
+
+  async renameCalendar(_conn: CalendarConnection, calendarId: string, name: string) {
+    console.info(`[mock-calendar] rename ${calendarId} → ${name}`);
+    return "ok" as const;
+  }
 }
 
 export function isCalendarMock(): boolean {

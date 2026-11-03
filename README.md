@@ -96,7 +96,7 @@ npm run dev          # erzeugt den Datenbank-Client vor dem Start ebenfalls auto
   größte Rückstand = Soll-Anteil × (Termine im Zeitraum + 1) − eigene Termine. Gleichstand: ältester letzter
   Termin, dann Zufall. Anteile und Zeitraum (Standard 28 Tage) stellt der Admin unter **Fairness** ein.
 - **Buchung**: Transaktion mit Sperre, zusätzlich verhindert eine Datenbank-Regel überlappende Termine pro
-  Person. Erst wird der Termin gespeichert, dann der Google-Eintrag im Kalender „Beratungen“ angelegt;
+  Person. Erst wird der Termin gespeichert, dann der Google-Eintrag im Kalender „Studio-Termine“ angelegt;
   schlägt das fehl, wird die Buchung zurückgenommen.
 - **Beratungsform**: „Vor Ort“ (Standard, Studioadresse als Ort) oder „Telefon“, wenn jemand nicht anreisen kann.
 - Bis der Chatbot (Phase 3) bucht, kann der Admin auf der Lead-Seite Termine buchen.
@@ -112,7 +112,7 @@ private Termine, Einträge werden nur protokolliert). Für den echten Betrieb:
    Refresh-Tokens werden damit verschlüsselt gespeichert (AES-256-GCM).
 
 Die App fragt nur diese Berechtigungen an: Free/Busy (keine Termininhalte), Kalenderliste lesen und
-Verwaltung der *von der App angelegten* Kalender („Beratungen“). Einträge sind als privat markiert.
+Verwaltung der *von der App angelegten* Kalender („Studio-Termine“, wird beim Verbinden automatisch angelegt). Einträge sind als privat markiert.
 
 ## WhatsApp (automatischer Versand)
 

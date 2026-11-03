@@ -6,6 +6,7 @@ import { processDueWebhookEvents } from "../src/lib/leads/meta-ingest";
 import { createLeadFetcher } from "../src/lib/meta/fetcher";
 import { createCalendarClient } from "../src/lib/google/client";
 import { createPrismaClient } from "../src/lib/prisma-client";
+import { ensureCalendarNames } from "../src/lib/scheduling/booking";
 import { syncPendingSessions } from "../src/lib/scheduling/session-calendar";
 import { defaultPhoneCountry } from "../src/lib/settings";
 import { createWhatsAppClient } from "../src/lib/whatsapp/client";
@@ -45,6 +46,7 @@ async function tick() {
     console.error("[worker] bot delivery failed:", err);
   }
   try {
+    await ensureCalendarNames(calendarDeps);
     const cal = await syncPendingSessions(calendarDeps);
     if (cal.synced || cal.deleted) console.info("[worker] calendar:", cal);
   } catch (err) {

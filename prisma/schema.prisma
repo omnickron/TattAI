@@ -43,10 +43,12 @@ model TattooerProfile {
   bufferMinutes       Int    @default(0)
 
   // Google Calendar connection (phase 2). Refresh token is stored encrypted.
-  googleAccountEmail     String?
-  googleRefreshTokenEnc  String?
-  consultationCalendarId String?
-  googleConnectedAt      DateTime?
+  googleAccountEmail       String?
+  googleRefreshTokenEnc    String?
+  consultationCalendarId   String?
+  // Name last applied to that calendar (renamed automatically when it changes)
+  consultationCalendarName String?
+  googleConnectedAt        DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

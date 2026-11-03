@@ -6,7 +6,7 @@
  */
 import type { PrismaClient } from "@/generated/prisma/client";
 import { addDays, DEFAULT_TIME_ZONE, localDateOf } from "../time";
-import { connectionOf, type SchedulingDeps } from "./booking";
+import { connectionOf, createInAppCalendar, type SchedulingDeps } from "./booking";
 import { buildTattooEvent } from "./event-content";
 
 type Tx = Pick<PrismaClient, "calendarEventDeletion" | "tattooBooking" | "consultation">;
@@ -130,14 +130,7 @@ export async function syncSessionEvent(deps: SchedulingDeps, sessionId: string):
     if (eventId && calendarId) {
       await calendar.updateEvent(conn, calendarId, eventId, event);
     } else {
-      calendarId = await calendar.ensureConsultationCalendar(conn);
-      if (calendarId !== profile.consultationCalendarId) {
-        await prisma.tattooerProfile.update({
-          where: { id: profile.id },
-          data: { consultationCalendarId: calendarId },
-        });
-      }
-      eventId = await calendar.createEvent(conn, calendarId, event);
+      ({ calendarId, eventId } = await createInAppCalendar(deps, profile, event));
     }
     await prisma.tattooBooking.update({
       where: { id: s.id },

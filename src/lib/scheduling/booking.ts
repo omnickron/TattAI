@@ -3,7 +3,13 @@
  * double-booking-safe booking (DB first, then calendar, rollback on failure).
  */
 import type { ConsultationMode, PrismaClient } from "@/generated/prisma/client";
-import type { CalendarClient, CalendarConnection } from "../google/calendar";
+import {
+  APP_CALENDAR_NAME,
+  CalendarError,
+  type CalendarClient,
+  type CalendarConnection,
+  type CalendarEventInput,
+} from "../google/calendar";
 import { DEFAULT_TIME_ZONE } from "../time";
 import { buildConsultationEvent } from "./event-content";
 import { chooseTattooer, type FairnessMember } from "./fairness";
@@ -263,24 +269,94 @@ async function eventFor(deps: SchedulingDeps, consultationId: string) {
 }
 
 /** Writes the calendar event for a consultation; returns calendar and event id. */
+type CalendarProfile = {
+  id: string;
+  googleRefreshTokenEnc: string | null;
+  consultationCalendarId: string | null;
+};
+
+/**
+ * Creates an event in the tattooer's app calendar ("Studio-Termine"), creating
+ * the calendar if needed. If the calendar was deleted in Google, it is recreated once.
+ */
+export async function createInAppCalendar(
+  deps: SchedulingDeps,
+  profile: CalendarProfile,
+  event: CalendarEventInput,
+): Promise<{ calendarId: string; eventId: string }> {
+  let current = profile.consultationCalendarId;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const conn = connectionOf({ ...profile, consultationCalendarId: current });
+    const calendarId = await deps.calendar.ensureConsultationCalendar(conn);
+    if (calendarId !== current) {
+      await deps.prisma.tattooerProfile.update({
+        where: { id: profile.id },
+        data: { consultationCalendarId: calendarId, consultationCalendarName: APP_CALENDAR_NAME },
+      });
+    }
+    try {
+      return { calendarId, eventId: await deps.calendar.createEvent(conn, calendarId, event) };
+    } catch (err) {
+      const gone = err instanceof CalendarError && (err.status === 404 || err.status === 410);
+      if (!gone || attempt > 0) throw err;
+      console.warn(
+        `[calendar] app calendar of ${profile.id} no longer exists – creating a new one`,
+      );
+      current = null;
+    }
+  }
+  throw new Error("unreachable");
+}
+
+/** Writes the calendar event for a consultation; returns calendar and event id. */
 async function writeEvent(deps: SchedulingDeps, consultationId: string, tattooerId: string) {
   const profile = await deps.prisma.tattooerProfile.findUniqueOrThrow({
     where: { id: tattooerId },
   });
-  const conn = connectionOf(profile);
-  const calendarId = await deps.calendar.ensureConsultationCalendar(conn);
-  if (calendarId !== profile.consultationCalendarId) {
-    await deps.prisma.tattooerProfile.update({
-      where: { id: tattooerId },
-      data: { consultationCalendarId: calendarId },
-    });
+  return createInAppCalendar(deps, profile, await eventFor(deps, consultationId));
+}
+
+/**
+ * Keeps the app calendar name in line with APP_CALENDAR_NAME (renames existing
+ * calendars once, e.g. "Beratungen" → "Studio-Termine"). Called by the worker.
+ */
+export async function ensureCalendarNames(deps: SchedulingDeps) {
+  if (!deps.calendar.renameCalendar) return { renamed: 0 };
+  const profiles = await deps.prisma.tattooerProfile.findMany({
+    where: {
+      googleConnectedAt: { not: null },
+      consultationCalendarId: { not: null },
+      OR: [
+        { consultationCalendarName: null },
+        { consultationCalendarName: { not: APP_CALENDAR_NAME } },
+      ],
+    },
+  });
+  let renamed = 0;
+  for (const p of profiles) {
+    try {
+      const res = await deps.calendar.renameCalendar(
+        connectionOf(p),
+        p.consultationCalendarId!,
+        APP_CALENDAR_NAME,
+      );
+      await deps.prisma.tattooerProfile.update({
+        where: { id: p.id },
+        // A calendar deleted in Google is recreated with the new name on the next write.
+        data:
+          res === "missing"
+            ? { consultationCalendarId: null, consultationCalendarName: null }
+            : { consultationCalendarName: APP_CALENDAR_NAME },
+      });
+      if (res === "ok") renamed++;
+    } catch (err) {
+      console.error(
+        `[calendar] renaming calendar of ${p.id} failed:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
   }
-  const eventId = await deps.calendar.createEvent(
-    conn,
-    calendarId,
-    await eventFor(deps, consultationId),
-  );
-  return { calendarId, eventId };
+  return { renamed };
 }
 
 /** Best-effort removal of a calendar event (logged on failure). */
