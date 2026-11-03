@@ -1,17 +1,28 @@
 import type { ReactNode } from "react";
 import { NavLinks } from "@/components/nav-links";
 import { requireUser } from "@/lib/auth/session";
+import { prisma } from "@/lib/db";
 import { signOutAction } from "./actions";
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const user = await requireUser();
   const isAdmin = user.role === "ADMIN";
+  // Past consultations still waiting for their outcome
+  const openOutcomes = await prisma.consultation.count({
+    where: {
+      status: "SCHEDULED",
+      startsAt: { lte: new Date() },
+      ...(isAdmin ? {} : { tattooerId: user.tattooerProfile?.id ?? "__none__" }),
+    },
+  });
   const items = [
     { href: "/leads", label: "Leads" },
     { href: "/calendar", label: "Kalender" },
+    { href: "/consultations", label: "Beratungen", badge: openOutcomes },
     ...(user.tattooerProfile ? [{ href: "/availability", label: "Verfügbarkeit" }] : []),
     ...(isAdmin
       ? [
+          { href: "/admin/dashboard", label: "Auswertung" },
           { href: "/admin/tattooers", label: "Tätowierer" },
           { href: "/admin/fairness", label: "Fairness" },
           { href: "/admin/whatsapp", label: "WhatsApp" },

@@ -4,7 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "./ui";
 
-export function NavLinks({ items }: { items: Array<{ href: string; label: string }> }) {
+export function NavLinks({
+  items,
+}: {
+  items: Array<{ href: string; label: string; badge?: number }>;
+}) {
   const pathname = usePathname();
   return (
     <nav className="-mx-1 flex gap-1 overflow-x-auto">
@@ -21,6 +25,11 @@ export function NavLinks({ items }: { items: Array<{ href: string; label: string
             )}
           >
             {item.label}
+            {item.badge ? (
+              <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 text-xs font-semibold text-white">
+                {item.badge}
+              </span>
+            ) : null}
           </Link>
         );
       })}

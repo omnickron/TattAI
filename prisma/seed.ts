@@ -262,16 +262,26 @@ async function main() {
                 ? "NO_SHOW"
                 : "HELD",
           tattooBooked: status === "TATTOO_BOOKED" ? true : status === "NO_TATTOO" ? false : null,
+          // Every second tattoo needs several sessions (sometimes only the first is scheduled yet)
+          sessionPlan: status === "TATTOO_BOOKED" ? (i % 2 ? "MULTIPLE" : "SINGLE") : null,
+          furtherSessionsScheduled: status === "TATTOO_BOOKED" && i % 2 ? i % 4 === 1 : null,
+          outcomeRecordedAt:
+            status === "CONSULTATION_BOOKED" ? null : new Date(day.getTime() + 3600_000),
         },
       });
       if (status === "TATTOO_BOOKED") {
-        await prisma.tattooBooking.create({
-          data: {
-            consultationId: consultation.id,
-            date: new Date(day.getTime() + 21 * 24 * 60 * 60 * 1000),
-            amountCents: 25000 + (i % 4) * 15000,
-          },
-        });
+        const sessions = i % 2 ? (i % 4 === 1 ? 3 : 1) : 1;
+        for (let n = 0; n < sessions; n++) {
+          await prisma.tattooBooking.create({
+            data: {
+              consultationId: consultation.id,
+              sessionNumber: n + 1,
+              date: new Date(day.getTime() + (21 + n * 28) * 24 * 60 * 60 * 1000),
+              // Amount of later sessions not entered yet in some cases
+              amountCents: n === 2 ? null : 25000 + (i % 4) * 15000,
+            },
+          });
+        }
       }
     }
     created++;

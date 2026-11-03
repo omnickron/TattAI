@@ -4,7 +4,7 @@ Interne Web-App (PWA) für das Tattoo-Studio: Leads aus Meta-Lead-Formularen, Wh
 faire Verteilung von Beratungsterminen auf die Tätowierer, Google-Kalender, Umsatz-Auswertung.
 Spezifikation und verbindliche Entscheidungen: [`CLAUDE.md`](CLAUDE.md).
 
-**Stand: Phase 3 (WhatsApp und Bot-Schnittstelle)**
+**Stand: Phase 4 (Auswertung) – alle vier Phasen umgesetzt**
 - Phase 1: Login, Tätowierer-Verwaltung, Lead-Eingang per Meta-Webhook, Leadliste.
 - Phase 2: Verfügbarkeiten, Beratungsdauer/Puffer, Google-Kalender (Free/Busy + Termine schreiben),
   faire Verteilung mit Admin-Einstellung, Buchen/Absagen/Umverteilen, App-Kalender (Tag/Woche).
@@ -12,6 +12,7 @@ Spezifikation und verbindliche Entscheidungen: [`CLAUDE.md`](CLAUDE.md).
   Texte (Templates) in der App pflegen und bei Meta einreichen, Chatverlauf, Antworten aus der App.
 - Phase 3b: Bot-Schnittstelle (siehe [`docs/bot-api.md`](docs/bot-api.md)), Bot-Schalter pro Chat und global,
   automatische Übernahme durch Menschen, Referenzbilder im privaten Speicher.
+- Phase 4: Beratungsergebnis und Tattoo-Termine (ein oder mehrere) mit Betrag, Auswertung für den Admin.
 
 ## Technik
 
@@ -146,6 +147,21 @@ schickt ihm Kundennachrichten als signierte Ereignisse. Details: [`docs/bot-api.
 - **Referenzbilder** der Kunden lädt der Hintergrund-Dienst in `MEDIA_STORAGE_DIR` (privat, nicht öffentlich
   erreichbar); angezeigt werden sie nur Admin und zuständigem Tätowierer. Beim Löschen eines Leads werden sie
   mitgelöscht. In Produktion liegt der Ordner im Volume `media-data`, das in Backups aufgenommen werden sollte.
+
+## Ergebnisse und Auswertung
+
+- **Beratungen** (Navigation, Zahl = fehlende Ergebnisse): Nach Beginn einer Beratung trägt der Tätowierer (oder
+  der Admin) ein, wie sie lief: *stattgefunden*, *No-Show* oder *abgesagt*. Bei *stattgefunden*: Tattoo-Termin
+  vereinbart? *ja*, *nein* oder *noch offen*. Bei *ja*: *ein Termin* oder *mehrere Termine* – und bei mehreren,
+  ob *nur der erste* oder *auch weitere* schon vergeben sind. Je Termin Datum und Betrag (Betrag optional,
+  später nachtragbar). Weitere Termine lassen sich jederzeit ergänzen, einzelne absagen; der Lead-Status
+  folgt automatisch.
+- **Auswertung** (Admin): Leads, gebuchte und stattgefundene Beratungen, No-Shows, Abschlüsse, Tattoo-Termine,
+  Umsatz (davon bereits gestochen), Umsatz pro Lead und pro Abschluss – filterbar nach Zeitraum, Kampagne und
+  Tätowierer, aufgeteilt nach Kampagne, Tätowierer und Woche/Monat.
+- **Zuordnung**: Alles zählt zum Zeitraum, in dem der *Lead* eingegangen ist (auch wenn Beratung oder Tattoo
+  später stattfinden). Ein Lead zählt für den Tätowierer, bei dem die Beratung stattfand (sonst der letzten
+  Beratung) – Umbuchungen zählen nicht doppelt.
 
 ## Produktion (Vorschlag: Hetzner Cloud)
 

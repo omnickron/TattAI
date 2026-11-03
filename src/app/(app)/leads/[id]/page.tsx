@@ -110,6 +110,7 @@ export default async function LeadPage({ params, searchParams }: PageProps<"/lea
             consultations={lead.consultations}
             bookDate={typeof query.bookDate === "string" ? query.bookDate : undefined}
             bookedId={typeof query.booked === "string" ? query.booked : undefined}
+            savedId={typeof query.saved === "string" ? query.saved : undefined}
           />
 
           <ChatSection

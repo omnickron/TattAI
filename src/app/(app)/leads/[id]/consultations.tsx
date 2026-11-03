@@ -1,4 +1,5 @@
 import { ActionForm } from "@/components/action-form";
+import { OutcomePanel, type OutcomeConsultation } from "@/components/outcome-panel";
 import { Badge, Button, Card, CardTitle, Input, Select } from "@/components/ui";
 import type { CurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
@@ -28,7 +29,7 @@ const STATUS_LABELS = {
   CANCELLED: { label: "abgesagt", tone: "gray" },
 } as const;
 
-type Consultation = {
+type Consultation = OutcomeConsultation & {
   id: string;
   startsAt: Date;
   endsAt: Date;
@@ -45,12 +46,14 @@ export async function ConsultationsSection({
   consultations,
   bookDate,
   bookedId,
+  savedId,
 }: {
   user: CurrentUser;
   leadId: string;
   consultations: Consultation[];
   bookDate: string | undefined;
   bookedId?: string;
+  savedId?: string;
 }) {
   const isAdmin = user.role === "ADMIN";
   const now = new Date();
@@ -66,6 +69,11 @@ export async function ConsultationsSection({
   return (
     <Card>
       <CardTitle>Beratungstermine</CardTitle>
+      {savedId && consultations.some((c) => c.id === savedId) && (
+        <p role="status" className="mb-2 text-sm text-emerald-700 dark:text-emerald-400">
+          Ergebnis gespeichert.
+        </p>
+      )}
       {bookedId && consultations.some((c) => c.id === bookedId) && (
         <p role="status" className="mb-2 text-sm text-emerald-700 dark:text-emerald-400">
           Termin gebucht bei {consultations.find((c) => c.id === bookedId)!.tattooer.user.name}.
@@ -94,7 +102,8 @@ export async function ConsultationsSection({
                     Kein Kalendereintrag vorhanden.
                   </p>
                 )}
-                {canManage && (
+                <OutcomePanel c={c} now={now} returnTo={`/leads/${leadId}`} />
+                {canManage && c.startsAt > now && (
                   <details>
                     <summary className="cursor-pointer text-xs font-medium text-ink-soft hover:text-ink">
                       Termin verwalten

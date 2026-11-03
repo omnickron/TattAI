@@ -106,7 +106,10 @@ export async function getLeadForUser(user: CurrentUser, id: string) {
       notes: { orderBy: { createdAt: "desc" }, include: { author: { select: { name: true } } } },
       consultations: {
         orderBy: { startsAt: "desc" },
-        include: { tattooer: { include: { user: { select: { name: true } } } } },
+        include: {
+          tattooer: { include: { user: { select: { name: true } } } },
+          tattooBookings: { orderBy: { sessionNumber: "asc" } },
+        },
       },
       // Latest 200 messages (re-sorted ascending on the page)
       messages: {

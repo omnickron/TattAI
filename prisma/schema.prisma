@@ -242,6 +242,11 @@ enum ConsultationMode {
   PHONE // per Telefon, wenn der Kunde nicht anreisen kann
 }
 
+enum SessionPlan {
+  SINGLE // ein Termin
+  MULTIPLE // mehrere Termine
+}
+
 enum ConsultationStatus {
   SCHEDULED
   HELD
@@ -250,24 +255,31 @@ enum ConsultationStatus {
 }
 
 model Consultation {
-  id              String             @id @default(cuid())
-  leadId          String
-  lead            Lead               @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  tattooerId      String
-  tattooer        TattooerProfile    @relation(fields: [tattooerId], references: [id])
-  startsAt        DateTime
-  endsAt          DateTime
-  status          ConsultationStatus @default(SCHEDULED)
-  mode            ConsultationMode   @default(ON_SITE)
-  calendarEventId String?
+  id                       String             @id @default(cuid())
+  leadId                   String
+  lead                     Lead               @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  tattooerId               String
+  tattooer                 TattooerProfile    @relation(fields: [tattooerId], references: [id])
+  startsAt                 DateTime
+  endsAt                   DateTime
+  status                   ConsultationStatus @default(SCHEDULED)
+  mode                     ConsultationMode   @default(ON_SITE)
+  calendarEventId          String?
   // Calendar id the event was written to (the tattooer's "Beratungen" calendar)
-  calendarId      String?
-  cancelledAt     DateTime?
-  createdById     String?
-  outcomeNote     String?
-  tattooBooked    Boolean?
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
+  calendarId               String?
+  cancelledAt              DateTime?
+  createdById              String?
+  // Outcome entered after the consultation (status HELD / NO_SHOW / CANCELLED)
+  outcomeNote              String?
+  tattooBooked             Boolean?
+  // Tattoo needs one or several sessions
+  sessionPlan              SessionPlan?
+  // For MULTIPLE: false = only the first session is scheduled so far, true = further ones too
+  furtherSessionsScheduled Boolean?
+  outcomeRecordedAt        DateTime?
+  outcomeRecordedById      String?
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
 
   tattooBookings   TattooBooking[]
   outboundMessages OutboundMessage[]
@@ -280,9 +292,13 @@ model TattooBooking {
   id             String       @id @default(cuid())
   consultationId String
   consultation   Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  // 1, 2, 3 … within the tattoo
+  sessionNumber  Int          @default(1)
   date           DateTime
-  amountCents    Int
+  // Entered manually; may be added later
+  amountCents    Int?
   currency       String       @default("EUR")
+  cancelled      Boolean      @default(false)
   note           String?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
