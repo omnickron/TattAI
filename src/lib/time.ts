@@ -163,3 +163,8 @@ export function parseLocalDateTime(value: string, timeZone = DEFAULT_TIME_ZONE):
   const minutes = parseTimeOfDay(m[2]);
   return minutes === null ? null : zonedTimeToUtc(m[1], minutes, timeZone);
 }
+
+/** Times are only allowed in a 15-minute grid (:00, :15, :30, :45). */
+export function isQuarterHour(minutes: number): boolean {
+  return minutes % 15 === 0;
+}

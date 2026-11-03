@@ -144,3 +144,35 @@ export function EmptyState({ children }: { children: ReactNode }) {
     </div>
   );
 }
+
+const QUARTER_HOURS = Array.from({ length: 96 }, (_, i) => {
+  const h = String(Math.floor(i / 4)).padStart(2, "0");
+  const m = String((i % 4) * 15).padStart(2, "0");
+  return `${h}:${m}`;
+});
+
+/**
+ * Time picker with quarter hours only (:00, :15, :30, :45).
+ * `endOfDay` adds 24:00 (for "until midnight"); `emptyLabel` adds an empty choice.
+ * A stored value outside the grid is kept as an extra option so nothing is lost silently.
+ */
+export function TimeSelect({
+  endOfDay = false,
+  emptyLabel,
+  className,
+  ...props
+}: ComponentProps<"select"> & { endOfDay?: boolean; emptyLabel?: string }) {
+  const options = endOfDay ? [...QUARTER_HOURS, "24:00"] : QUARTER_HOURS;
+  const current = String(props.value ?? props.defaultValue ?? "");
+  const extra = current && !options.includes(current) ? [current] : [];
+  return (
+    <select className={cn(fieldBase, "pr-8 tabular-nums", className)} {...props}>
+      {emptyLabel !== undefined && <option value="">{emptyLabel}</option>}
+      {[...extra, ...options].map((t) => (
+        <option key={t} value={t}>
+          {t}
+        </option>
+      ))}
+    </select>
+  );
+}

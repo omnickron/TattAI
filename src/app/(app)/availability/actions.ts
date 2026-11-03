@@ -8,7 +8,7 @@ import { decryptSecret } from "@/lib/crypto";
 import { prisma } from "@/lib/db";
 import { APP_TIMEZONE } from "@/lib/format";
 import { revokeToken } from "@/lib/google/oauth";
-import { addDays, isLocalDate, parseTimeOfDay, zonedTimeToUtc } from "@/lib/time";
+import { addDays, isLocalDate, isQuarterHour, parseTimeOfDay, zonedTimeToUtc } from "@/lib/time";
 
 const done = (message: string): ActionState => {
   revalidatePath("/availability");
@@ -51,6 +51,9 @@ export async function addAvailabilityRule(
   const endMinute = parseTimeOfDay(parsed.data.to);
   if (startMinute === null || endMinute === null)
     return { ok: false, message: "Uhrzeit ist ungültig." };
+  if (!isQuarterHour(startMinute) || !isQuarterHour(endMinute)) {
+    return { ok: false, message: "Bitte Uhrzeiten im Viertelstunden-Raster wählen." };
+  }
   if (endMinute <= startMinute)
     return { ok: false, message: "Das Ende muss nach dem Beginn liegen." };
   const data = {
@@ -101,6 +104,9 @@ export async function addAvailabilityException(
     const fromMin = parseTimeOfDay(fromTime || "00:00");
     const toMin = parseTimeOfDay(parsed.data.toTime || "24:00");
     if (fromMin === null || toMin === null) return { ok: false, message: "Uhrzeit ist ungültig." };
+    if (!isQuarterHour(fromMin) || !isQuarterHour(toMin)) {
+      return { ok: false, message: "Bitte Uhrzeiten im Viertelstunden-Raster wählen." };
+    }
     startsAt = zonedTimeToUtc(fromDate, fromMin, APP_TIMEZONE);
     endsAt =
       toMin >= 1440

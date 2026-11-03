@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 import type { ActionState } from "@/lib/action-state";
-import { Button, Input, Textarea, cn } from "./ui";
+import { Button, Input, Textarea, TimeSelect, cn } from "./ui";
 
 type Outcome = "HELD" | "NO_SHOW" | "CANCELLED";
 type Tattoo = "YES" | "NO" | "OPEN";
@@ -183,23 +183,19 @@ export function OutcomeForm({
                   required
                   className="col-span-2 sm:col-span-1"
                 />
-                <Input
-                  type="time"
-                  step={900}
+                <TimeSelect
                   name={`session_start_${i}`}
                   value={row.start ?? ""}
                   onChange={(e) => update(i, "start", e.target.value)}
                   aria-label={`Beginn Termin ${i + 1}`}
-                  title="Beginn (optional)"
+                  emptyLabel="von –"
                 />
-                <Input
-                  type="time"
-                  step={900}
+                <TimeSelect
                   name={`session_end_${i}`}
                   value={row.end ?? ""}
                   onChange={(e) => update(i, "end", e.target.value)}
                   aria-label={`Ende Termin ${i + 1}`}
-                  title="Ende (optional)"
+                  emptyLabel="bis –"
                 />
                 <Input
                   name={`session_amount_${i}`}

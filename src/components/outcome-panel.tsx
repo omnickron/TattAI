@@ -1,6 +1,6 @@
 import { ActionForm } from "@/components/action-form";
 import { OutcomeForm } from "@/components/outcome-form";
-import { Badge, Button, Input } from "@/components/ui";
+import { Badge, Button, Input, TimeSelect } from "@/components/ui";
 import {
   addSessionAction,
   recordOutcomeAction,
@@ -37,23 +37,17 @@ const localTime = (d: Date | null) => (d ? formatTimeOfDay(localMinuteOf(d, APP_
 function TimeInputs({ start, end }: { start?: Date | null; end?: Date | null }) {
   return (
     <>
-      <Input
-        type="time"
-        step={900}
+      <TimeSelect
         name="start"
         defaultValue={localTime(start ?? null)}
-        className="w-32"
         aria-label="Beginn"
-        title="Beginn (optional)"
+        emptyLabel="von –"
       />
-      <Input
-        type="time"
-        step={900}
+      <TimeSelect
         name="end"
         defaultValue={localTime(end ?? null)}
-        className="w-32"
         aria-label="Ende"
-        title="Ende (optional)"
+        emptyLabel="bis –"
       />
     </>
   );
@@ -138,16 +132,22 @@ export function OutcomePanel({
             <div className="space-y-2">
               <ul className="divide-y divide-line rounded-lg border border-line bg-surface text-sm">
                 {sessions.map((s) => (
-                  <li key={s.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
-                    <span className="w-20 font-medium">Termin {s.sessionNumber}</span>
+                  <li
+                    key={s.id}
+                    className="grid gap-2 px-3 py-2 sm:grid-cols-[5rem_1fr_auto] sm:items-center"
+                  >
+                    <span className="font-medium">Termin {s.sessionNumber}</span>
                     {s.cancelled ? (
                       <>
-                        <span className="text-ink-soft line-through">
-                          {formatDate(s.date)}
-                          {s.startsAt && ` ${localTime(s.startsAt)}–${localTime(s.endsAt)}`} ·{" "}
-                          {formatEuro(s.amountCents)}
+                        <span className="flex flex-wrap items-center gap-2">
+                          <span className="text-ink-soft line-through">
+                            {formatDate(s.date)}
+                            {s.startsAt &&
+                              ` ${localTime(s.startsAt)}–${localTime(s.endsAt)}`} ·{" "}
+                            {formatEuro(s.amountCents)}
+                          </span>
+                          <Badge>abgesagt</Badge>
                         </span>
-                        <Badge>abgesagt</Badge>
                         <ActionForm
                           action={setSessionCancelledAction.bind(null, s.id, false)}
                           className="ml-auto"
@@ -161,13 +161,13 @@ export function OutcomePanel({
                       <>
                         <ActionForm
                           action={updateSessionAction.bind(null, s.id)}
-                          className="flex flex-1 flex-wrap items-center gap-2 space-y-0"
+                          className="grid flex-1 grid-cols-2 items-center gap-2 space-y-0 sm:grid-cols-[10.5rem_7.5rem_7.5rem_8rem_auto]"
                         >
                           <Input
                             type="date"
                             name="date"
                             defaultValue={localDate(s.date)}
-                            className="w-40"
+                            className="col-span-2 sm:col-span-1"
                             required
                             aria-label="Datum"
                           />
@@ -177,10 +177,13 @@ export function OutcomePanel({
                             defaultValue={centsToInput(s.amountCents)}
                             placeholder="Betrag €"
                             inputMode="decimal"
-                            className="w-32"
                             aria-label="Betrag"
                           />
-                          <Button type="submit" variant="secondary" className="px-2 py-1 text-xs">
+                          <Button
+                            type="submit"
+                            variant="secondary"
+                            className="col-span-2 justify-self-start px-3 py-1.5 text-xs sm:col-span-1"
+                          >
                             Speichern
                           </Button>
                         </ActionForm>
@@ -212,18 +215,27 @@ export function OutcomePanel({
                 </summary>
                 <ActionForm
                   action={addSessionAction.bind(null, c.id)}
-                  className="mt-2 flex flex-wrap items-center gap-2 space-y-0"
+                  className="mt-2 grid flex-1 grid-cols-2 items-center gap-2 space-y-0 sm:grid-cols-[10.5rem_7.5rem_7.5rem_8rem_auto]"
                 >
-                  <Input type="date" name="date" className="w-40" required aria-label="Datum" />
+                  <Input
+                    type="date"
+                    name="date"
+                    required
+                    aria-label="Datum"
+                    className="col-span-2 sm:col-span-1"
+                  />
                   <TimeInputs />
                   <Input
                     name="amount"
                     placeholder="Betrag € (optional)"
                     inputMode="decimal"
-                    className="w-40"
                     aria-label="Betrag"
                   />
-                  <Button type="submit" variant="secondary">
+                  <Button
+                    type="submit"
+                    variant="secondary"
+                    className="col-span-2 justify-self-start sm:col-span-1"
+                  >
                     Hinzufügen
                   </Button>
                 </ActionForm>

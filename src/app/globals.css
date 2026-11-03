@@ -34,7 +34,8 @@
   --color-ink-soft: var(--ink-soft);
   --color-accent: var(--accent);
   --color-chart-1: var(--chart-1);
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
 html {

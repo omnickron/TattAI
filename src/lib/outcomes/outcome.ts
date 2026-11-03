@@ -3,7 +3,13 @@
  * tattoo booked (yes / no / still open), one or several sessions with date and amount.
  */
 import type { LeadStatus, PrismaClient } from "@/generated/prisma/client";
-import { DEFAULT_TIME_ZONE, isLocalDate, parseTimeOfDay, zonedTimeToUtc } from "../time";
+import {
+  DEFAULT_TIME_ZONE,
+  isLocalDate,
+  isQuarterHour,
+  parseTimeOfDay,
+  zonedTimeToUtc,
+} from "../time";
 import { parseEuroToCents } from "./money";
 
 export type OutcomeKind = "HELD" | "NO_SHOW" | "CANCELLED";
@@ -124,6 +130,11 @@ export function parseTimes(
   const sm = parseTimeOfDay(s);
   const em = parseTimeOfDay(e);
   if (sm === null || em === null) throw new OutcomeError(`${prefix}Uhrzeit ist ungültig.`);
+  if (!isQuarterHour(sm) || !isQuarterHour(em)) {
+    throw new OutcomeError(
+      `${prefix}Bitte Uhrzeiten im Viertelstunden-Raster wählen (:00, :15, :30, :45).`,
+    );
+  }
   if (em <= sm) throw new OutcomeError(`${prefix}Das Ende muss nach dem Beginn liegen.`);
   return { start: s, end: e };
 }

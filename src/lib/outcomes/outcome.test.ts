@@ -140,6 +140,7 @@ describe("session times", () => {
     [{ start: "11:00" }, "Beginn und Ende"],
     [{ start: "15:00", end: "11:00" }, "nach dem Beginn"],
     [{ start: "25:00", end: "26:00" }, "ungültig"],
+    [{ start: "11:10", end: "15:00" }, "Viertelstunden"],
   ])("rejects %j", (time, message) => {
     expect(() => validateOutcome({ ...base, sessions: [{ date: "2026-12-01", ...time }] })).toThrow(
       message,

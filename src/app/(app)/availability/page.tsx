@@ -10,6 +10,7 @@ import {
   Input,
   PageHeader,
   Select,
+  TimeSelect,
 } from "@/components/ui";
 import { requireTattooer } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
@@ -214,10 +215,10 @@ export default async function AvailabilityPage({ searchParams }: PageProps<"/ava
               </Field>
             </div>
             <Field label="Von" htmlFor="from">
-              <Input id="from" name="from" type="time" defaultValue="10:00" step={900} required />
+              <TimeSelect id="from" name="from" defaultValue="10:00" required />
             </Field>
             <Field label="Bis" htmlFor="to">
-              <Input id="to" name="to" type="time" defaultValue="18:00" step={900} required />
+              <TimeSelect id="to" name="to" defaultValue="18:00" endOfDay required />
             </Field>
             <div className="col-span-2 sm:col-span-3">
               <Button type="submit" variant="secondary">
@@ -272,10 +273,10 @@ export default async function AvailabilityPage({ searchParams }: PageProps<"/ava
               <Input id="toDate" name="toDate" type="date" />
             </Field>
             <Field label="Ab Uhrzeit" htmlFor="fromTime" hint="leer = ganztägig">
-              <Input id="fromTime" name="fromTime" type="time" step={900} />
+              <TimeSelect id="fromTime" name="fromTime" defaultValue="" emptyLabel="–" />
             </Field>
             <Field label="Bis Uhrzeit" htmlFor="toTime">
-              <Input id="toTime" name="toTime" type="time" step={900} />
+              <TimeSelect id="toTime" name="toTime" defaultValue="" endOfDay emptyLabel="–" />
             </Field>
             <div className="col-span-2">
               <Field label="Notiz (optional)" htmlFor="note">
