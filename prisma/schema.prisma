@@ -29,9 +29,10 @@ model User {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  tattooerProfile TattooerProfile?
-  leadNotes       LeadNote[]
-  sentMessages    Message[]
+  tattooerProfile  TattooerProfile?
+  leadNotes        LeadNote[]
+  sentMessages     Message[]
+  botDisabledLeads Lead[]           @relation("BotDisabledBy")
 }
 
 model TattooerProfile {
@@ -155,6 +156,14 @@ model Lead {
   // Customer asked not to be contacted (e.g. "STOP"); blocks all automatic messages
   whatsappOptOut   Boolean   @default(false)
 
+  // Chatbot in this chat. Switched off when a person replies (takeover) or manually.
+  botEnabled        Boolean   @default(true)
+  botDisabledAt     DateTime?
+  // HUMAN_TAKEOVER | MANUAL
+  botDisabledReason String?
+  botDisabledById   String?
+  botDisabledBy     User?     @relation("BotDisabledBy", fields: [botDisabledById], references: [id], onDelete: SetNull)
+
   // Structured tattoo idea, filled by the chatbot (phase 3)
   tattooSummary Json?
 
@@ -168,6 +177,8 @@ model Lead {
   consultations    Consultation[]
   notes            LeadNote[]
   outboundMessages OutboundMessage[]
+  attachments      LeadAttachment[]
+  botDeliveries    BotDelivery[]
 
   @@index([status])
   @@index([createdAt])
@@ -213,6 +224,9 @@ model Message {
   // Set for manual replies written in the app (null = automatic or inbound)
   sentById     String?
   sentBy       User?            @relation(fields: [sentById], references: [id], onDelete: SetNull)
+  // Written by the chatbot via the bot API
+  sentByBot    Boolean          @default(false)
+  attachments  LeadAttachment[]
   sentAt       DateTime         @default(now())
   createdAt    DateTime         @default(now())
 
@@ -422,6 +436,8 @@ model MessagingSettings {
   // Lease so only one worker process dispatches at a time
   workerLeaseUntil       DateTime?
   lastWorkerRunAt        DateTime?
+  // Master switch for the chatbot in all chats
+  botGloballyEnabled     Boolean   @default(true)
   updatedAt              DateTime  @updatedAt
 }
 
@@ -485,4 +501,55 @@ model OutboundMessage {
 
   @@index([status, notBefore])
   @@index([leadId])
+}
+
+// ---------------------------------------------------------------------------
+// Chatbot interface (phase 3b)
+// ---------------------------------------------------------------------------
+
+enum AttachmentStatus {
+  PENDING // waiting for download from WhatsApp
+  STORED
+  FAILED
+}
+
+// Files customers send (reference images). Stored privately on disk, never public.
+model LeadAttachment {
+  id          String           @id @default(cuid())
+  leadId      String
+  lead        Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  messageId   String?
+  message     Message?         @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  waMediaId   String?          @unique
+  mimeType    String?
+  fileName    String?
+  sizeBytes   Int?
+  caption     String?
+  status      AttachmentStatus @default(PENDING)
+  attempts    Int              @default(0)
+  lastError   String?
+  // Path relative to MEDIA_STORAGE_DIR
+  storagePath String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([leadId])
+  @@index([status])
+}
+
+// Outgoing events to the chatbot (signed webhook), delivered with retries by the worker.
+model BotDelivery {
+  id            String             @id @default(cuid())
+  leadId        String?
+  lead          Lead?              @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  event         String
+  payload       Json
+  status        WebhookEventStatus @default(PENDING)
+  attempts      Int                @default(0)
+  nextAttemptAt DateTime           @default(now())
+  lastError     String?
+  deliveredAt   DateTime?
+  createdAt     DateTime           @default(now())
+
+  @@index([status, nextAttemptAt])
 }

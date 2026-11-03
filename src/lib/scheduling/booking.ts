@@ -583,3 +583,107 @@ export async function refreshConsultationEvent(
     return false;
   }
 }
+
+/**
+ * Moves a consultation to another start time (used by the chatbot).
+ * Keeps the same tattooer if they are free; otherwise the consultation is
+ * re-booked fairly with someone who is free (old one cancelled).
+ */
+export async function rescheduleConsultation(
+  deps: SchedulingDeps,
+  consultationId: string,
+  newStart: Date,
+) {
+  const { prisma } = deps;
+  const now = nowOf(deps);
+  const c = await prisma.consultation.findUnique({ where: { id: consultationId } });
+  if (!c) throw new BookingError("NOT_FOUND", "Termin nicht gefunden.");
+  if (c.status !== "SCHEDULED" || c.startsAt <= now) {
+    throw new BookingError(
+      "INVALID_STATE",
+      "Nur künftige, geplante Termine können umgebucht werden.",
+    );
+  }
+  if (c.startsAt.getTime() === newStart.getTime()) return c;
+
+  // 1. Same tattooer, if free at the new time
+  const [same] = await loadBookableTattooers(prisma, [c.tattooerId]);
+  if (same) {
+    const inputs = await buildSlotInputs(
+      deps,
+      [same],
+      new Date(newStart.getTime() - DAY),
+      new Date(newStart.getTime() + DAY),
+      { excludeConsultationId: c.id },
+    );
+    const input = inputs.get(same.id);
+    if (
+      input &&
+      isSlotFree(input, newStart, { now, minNoticeMinutes: SCHEDULING_DEFAULTS.minNoticeMinutes })
+    ) {
+      const newEnd = new Date(newStart.getTime() + same.consultationMinutes * MIN);
+      try {
+        await prisma.$transaction(async (tx) => {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(${BOOKING_LOCK_KEY})`;
+          const buffer = same.bufferMinutes * MIN;
+          const clash = await tx.consultation.count({
+            where: {
+              id: { not: c.id },
+              tattooerId: same.id,
+              status: { not: "CANCELLED" },
+              startsAt: { lt: new Date(newEnd.getTime() + buffer) },
+              endsAt: { gt: new Date(newStart.getTime() - buffer) },
+            },
+          });
+          if (clash) throw new BookingError("SLOT_TAKEN", "Der Termin wurde gerade vergeben.");
+          await tx.consultation.update({
+            where: { id: c.id },
+            data: { startsAt: newStart, endsAt: newEnd },
+          });
+        });
+      } catch (err) {
+        if (err instanceof BookingError) throw err;
+        if (isOverlapViolation(err))
+          throw new BookingError("SLOT_TAKEN", "Der Termin wurde gerade vergeben.");
+        throw err;
+      }
+      if (!(await refreshConsultationEvent(deps, c.id))) {
+        await prisma.consultation.update({
+          where: { id: c.id },
+          data: { startsAt: c.startsAt, endsAt: c.endsAt },
+        });
+        throw new BookingError(
+          "CALENDAR_FAILED",
+          "Der Kalendereintrag konnte nicht verschoben werden. Nichts wurde geändert.",
+        );
+      }
+      return prisma.consultation.findUniqueOrThrow({ where: { id: c.id } });
+    }
+  }
+
+  // 2. Someone else: book the new time fairly, then drop the old consultation.
+  await prisma.consultation.update({
+    where: { id: c.id },
+    data: { status: "CANCELLED", cancelledAt: now },
+  });
+  try {
+    const booked = await bookConsultation(deps, {
+      leadId: c.leadId,
+      startsAt: newStart,
+      mode: c.mode,
+      createdById: c.createdById,
+    });
+    await removeEvent(deps, c.tattooerId, c.calendarId, c.calendarEventId);
+    return booked;
+  } catch (err) {
+    await prisma.consultation.update({
+      where: { id: c.id },
+      data: { status: "SCHEDULED", cancelledAt: null },
+    });
+    await prisma.lead.updateMany({
+      where: { id: c.leadId },
+      data: { status: "CONSULTATION_BOOKED" },
+    });
+    throw err;
+  }
+}

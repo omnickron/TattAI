@@ -4,6 +4,9 @@ import { MESSAGE_STATUS_LABELS, OUTBOUND_KIND_LABELS } from "@/lib/whatsapp/labe
 import { replyWindow } from "@/lib/whatsapp/replies";
 import { sendReplyAction } from "./actions";
 import { ReplyForm } from "./reply-form";
+import { BotToggle } from "./bot-toggle";
+import { setBotEnabledAction } from "./actions";
+import { BOT_REASON_LABELS, type BotDisabledReason } from "@/lib/bot/state";
 
 type ChatMessage = {
   id: string;
@@ -14,6 +17,7 @@ type ChatMessage = {
   errorCode: number | null;
   sentAt: Date;
   sentBy: { name: string } | null;
+  sentByBot: boolean;
 };
 
 type Planned = {
@@ -35,7 +39,15 @@ export function ChatSection({
   lastInboundAt,
   hasPhone,
   sendingPaused,
+  bot,
 }: {
+  bot: {
+    enabled: boolean;
+    globallyEnabled: boolean;
+    disabledAt: Date | null;
+    disabledReason: string | null;
+    disabledBy: string | null;
+  };
   leadId: string;
   hasPhone: boolean;
   sendingPaused: boolean;
@@ -63,6 +75,21 @@ export function ChatSection({
       >
         Chatverlauf
       </CardTitle>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/60 px-3 py-2">
+        <BotToggle
+          enabled={bot.enabled}
+          action={setBotEnabledAction.bind(null, leadId, !bot.enabled)}
+        />
+        <p className="text-xs text-ink-soft">
+          {!bot.globallyEnabled
+            ? "Der Bot ist für alle Chats ausgeschaltet (WhatsApp-Einstellungen)."
+            : bot.enabled
+              ? "Der Bot beantwortet Nachrichten in diesem Chat."
+              : `${BOT_REASON_LABELS[(bot.disabledReason ?? "MANUAL") as BotDisabledReason]}${
+                  bot.disabledBy ? ` von ${bot.disabledBy}` : ""
+                }${bot.disabledAt ? ` am ${formatDateTime(bot.disabledAt)}` : ""}.`}
+        </p>
+      </div>
       {messages.length === 0 ? (
         <p className="text-sm text-ink-soft">Noch keine Nachrichten.</p>
       ) : (
@@ -79,7 +106,7 @@ export function ChatSection({
               <span className="mt-1 block text-[11px] opacity-70">
                 {formatDateTime(m.sentAt)}
                 {m.direction === "OUTBOUND" &&
-                  (m.sentBy ? ` · ${m.sentBy.name}` : " · automatisch")}
+                  (m.sentBy ? ` · ${m.sentBy.name}` : m.sentByBot ? " · Bot" : " · automatisch")}
                 {m.direction === "OUTBOUND" && m.templateName && ` · ${m.templateName}`}
                 {m.direction === "OUTBOUND" &&
                   m.status &&
@@ -106,6 +133,11 @@ export function ChatSection({
               letzten Nachricht des Kunden).
               {sendingPaused && " Hinweis: Der automatische Versand ist gerade pausiert."}
             </p>
+            {bot.enabled && (
+              <p className="mb-2 text-xs text-amber-700 dark:text-amber-400">
+                Wenn du antwortest, übernimmst du den Chat – der Bot schaltet sich hier ab.
+              </p>
+            )}
             <ReplyForm action={sendReplyAction.bind(null, leadId)} />
           </>
         ) : (

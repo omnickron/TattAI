@@ -4,6 +4,7 @@
  */
 import type { PrismaClient } from "@/generated/prisma/client";
 import { classifyError, WhatsAppApiError, type WhatsAppClient } from "./client";
+import { botActiveFor, isBotGloballyEnabled, setBotEnabled } from "../bot/state";
 import { pauseSending } from "./messaging";
 
 export const REPLY_WINDOW_MS = 24 * 3600_000;
@@ -12,7 +13,14 @@ export const MAX_REPLY_LENGTH = 4096;
 export class ReplyError extends Error {
   constructor(
     readonly code:
-      "NOT_FOUND" | "NO_PHONE" | "OPT_OUT" | "WINDOW_CLOSED" | "EMPTY" | "TOO_LONG" | "SEND_FAILED",
+      | "NOT_FOUND"
+      | "NO_PHONE"
+      | "OPT_OUT"
+      | "WINDOW_CLOSED"
+      | "EMPTY"
+      | "TOO_LONG"
+      | "SEND_FAILED"
+      | "BOT_DISABLED",
     message: string,
   ) {
     super(message);
@@ -36,9 +44,39 @@ export interface ReplyDeps {
   now?: () => Date;
 }
 
+/** A person replies in the app: also hands the chat over from the bot to the person. */
 export async function sendManualReply(
   deps: ReplyDeps,
   input: { leadId: string; userId: string; text: string },
+) {
+  const message = await sendFreeText(deps, {
+    leadId: input.leadId,
+    text: input.text,
+    author: { userId: input.userId },
+  });
+  await setBotEnabled(deps.prisma, input.leadId, false, {
+    userId: input.userId,
+    reason: "HUMAN_TAKEOVER",
+    now: message.sentAt,
+  });
+  return message;
+}
+
+/** The chatbot replies via the bot API; refused if the bot is off for this chat. */
+export async function sendBotReply(deps: ReplyDeps, input: { leadId: string; text: string }) {
+  const lead = await deps.prisma.lead.findUnique({
+    where: { id: input.leadId },
+    select: { botEnabled: true, whatsappOptOut: true },
+  });
+  if (lead && !botActiveFor(lead, await isBotGloballyEnabled(deps.prisma))) {
+    throw new ReplyError("BOT_DISABLED", "Der Bot ist in diesem Chat ausgeschaltet.");
+  }
+  return sendFreeText(deps, { leadId: input.leadId, text: input.text, author: { bot: true } });
+}
+
+async function sendFreeText(
+  deps: ReplyDeps,
+  input: { leadId: string; text: string; author: { userId: string } | { bot: true } },
 ) {
   const { prisma, whatsapp } = deps;
   const now = (deps.now ?? (() => new Date()))();
@@ -101,7 +139,8 @@ export async function sendManualReply(
         waMessageId: messageId,
         body: text,
         status: "sent",
-        sentById: input.userId,
+        sentById: "userId" in input.author ? input.author.userId : null,
+        sentByBot: "bot" in input.author,
         sentAt: now,
       },
     }),

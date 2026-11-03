@@ -29,6 +29,7 @@ import {
   deleteReminderRule,
   pauseSendingAction,
   resumeSending,
+  setBotGloballyEnabled,
   setSendingEnabled,
   updateMessagingSettings,
 } from "./actions";
@@ -53,39 +54,49 @@ export default async function WhatsAppPage() {
   const sendTimes = parseSendTimes(settings.sendTimes);
   const today = localDateOf(now, APP_TIMEZONE);
 
-  const [templates, steps, reminders, sentToday, queuedByKind, queue, failures] = await Promise.all(
-    [
-      prisma.whatsAppTemplate.findMany({ orderBy: [{ purpose: "asc" }, { name: "asc" }] }),
-      prisma.followUpStep.findMany({ orderBy: { position: "asc" }, include: { template: true } }),
-      prisma.reminderRule.findMany({
-        orderBy: { hoursBefore: "desc" },
-        include: { template: true },
-      }),
-      prisma.outboundMessage.count({
-        where: { status: "SENT", sentAt: { gte: startOfLocalDay(today, APP_TIMEZONE) } },
-      }),
-      prisma.outboundMessage.groupBy({
-        by: ["kind"],
-        where: { status: "QUEUED" },
-        _count: { _all: true },
-      }),
-      prisma.outboundMessage.findMany({
-        where: { status: "QUEUED" },
-        orderBy: [{ notBefore: "asc" }],
-        take: 15,
-        include: {
-          lead: { select: { id: true, name: true } },
-          template: { select: { approvedName: true, name: true } },
-        },
-      }),
-      prisma.outboundMessage.findMany({
-        where: { status: "FAILED" },
-        orderBy: { updatedAt: "desc" },
-        take: 10,
-        include: { lead: { select: { id: true, name: true } } },
-      }),
-    ],
-  );
+  const [
+    templates,
+    steps,
+    reminders,
+    sentToday,
+    queuedByKind,
+    queue,
+    failures,
+    botStats,
+    takenOver,
+  ] = await Promise.all([
+    prisma.whatsAppTemplate.findMany({ orderBy: [{ purpose: "asc" }, { name: "asc" }] }),
+    prisma.followUpStep.findMany({ orderBy: { position: "asc" }, include: { template: true } }),
+    prisma.reminderRule.findMany({
+      orderBy: { hoursBefore: "desc" },
+      include: { template: true },
+    }),
+    prisma.outboundMessage.count({
+      where: { status: "SENT", sentAt: { gte: startOfLocalDay(today, APP_TIMEZONE) } },
+    }),
+    prisma.outboundMessage.groupBy({
+      by: ["kind"],
+      where: { status: "QUEUED" },
+      _count: { _all: true },
+    }),
+    prisma.outboundMessage.findMany({
+      where: { status: "QUEUED" },
+      orderBy: [{ notBefore: "asc" }],
+      take: 15,
+      include: {
+        lead: { select: { id: true, name: true } },
+        template: { select: { approvedName: true, name: true } },
+      },
+    }),
+    prisma.outboundMessage.findMany({
+      where: { status: "FAILED" },
+      orderBy: { updatedAt: "desc" },
+      take: 10,
+      include: { lead: { select: { id: true, name: true } } },
+    }),
+    prisma.botDelivery.groupBy({ by: ["status"], _count: { _all: true } }),
+    prisma.lead.count({ where: { botEnabled: false } }),
+  ]);
   const byPurpose = (p: string) => templates.filter((t) => t.purpose === p);
   const batch = activeBatch(now, cfg);
   const next = nextSendTime(now, cfg);
@@ -93,6 +104,10 @@ export default async function WhatsAppPage() {
   const queued = Object.fromEntries(queuedByKind.map((q) => [q.kind, q._count._all]));
   const workerStale =
     !settings.lastWorkerRunAt || now.getTime() - settings.lastWorkerRunAt.getTime() > 5 * 60_000;
+  const botCount = Object.fromEntries(botStats.map((b) => [b.status, b._count._all]));
+  const botConfigured = Boolean(
+    process.env.BOT_WEBHOOK_URL && process.env.BOT_WEBHOOK_SECRET && process.env.BOT_API_KEY,
+  );
   const firstTemplate = templates.find((t) => t.id === settings.firstContactTemplateId);
 
   return (
@@ -507,6 +522,43 @@ export default async function WhatsAppPage() {
               </Button>
             </div>
           </ActionForm>
+        </Card>
+        <Card className="lg:col-span-2">
+          <CardTitle
+            action={
+              settings.botGloballyEnabled ? <Badge tone="green">aktiv</Badge> : <Badge>aus</Badge>
+            }
+          >
+            Chatbot
+          </CardTitle>
+          <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-start">
+            <div className="space-y-1 text-sm text-ink-soft">
+              <p>
+                Der Bot beantwortet Kundennachrichten über die Bot-Schnittstelle. Sobald jemand im
+                Chat selbst antwortet, schaltet er sich dort ab; pro Chat lässt er sich auf der
+                Lead-Seite ein- und ausschalten.
+              </p>
+              <p>
+                Anbindung:{" "}
+                {botConfigured
+                  ? "eingerichtet"
+                  : "noch nicht eingerichtet (BOT_API_KEY, BOT_WEBHOOK_URL, BOT_WEBHOOK_SECRET)"}{" "}
+                · Chats ohne Bot: {takenOver} · Ereignisse: {botCount.PROCESSED ?? 0} zugestellt,{" "}
+                {botCount.PENDING ?? 0} offen, {botCount.FAILED ?? 0} mit Fehler,{" "}
+                {botCount.DEAD ?? 0} verworfen
+              </p>
+            </div>
+            <ActionForm
+              action={setBotGloballyEnabled.bind(null, !settings.botGloballyEnabled)}
+              confirm={
+                settings.botGloballyEnabled ? "Bot wirklich für alle Chats ausschalten?" : undefined
+              }
+            >
+              <Button type="submit" variant={settings.botGloballyEnabled ? "danger" : "primary"}>
+                {settings.botGloballyEnabled ? "Bot überall ausschalten" : "Bot wieder einschalten"}
+              </Button>
+            </ActionForm>
+          </div>
         </Card>
       </div>
     </>

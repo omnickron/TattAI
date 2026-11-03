@@ -28,6 +28,9 @@ services:
     env_file: ../.env
     environment:
       NODE_ENV: production
+      MEDIA_STORAGE_DIR: /data/media
+    volumes:
+      - media-data:/data/media
     depends_on:
       migrate: { condition: service_completed_successfully }
 
@@ -37,6 +40,11 @@ services:
     restart: unless-stopped
     env_file: ../.env
     command: npx tsx scripts/worker.ts
+    user: "1001:1001"
+    environment:
+      MEDIA_STORAGE_DIR: /data/media
+    volumes:
+      - media-data:/data/media
     depends_on:
       migrate: { condition: service_completed_successfully }
 
@@ -53,4 +61,6 @@ services:
 
 volumes:
   db-data:
+  # Private customer files (reference images), shared by app and worker
+  media-data:
   caddy-data:

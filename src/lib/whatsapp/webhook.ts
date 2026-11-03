@@ -4,6 +4,7 @@
  */
 import { createHash } from "node:crypto";
 import { Prisma, type PrismaClient } from "@/generated/prisma/client";
+import { botActiveFor, enqueueBotEvent, isBotGloballyEnabled } from "../bot/state";
 import { classifyError } from "./client";
 import { cancelQueued, isOptOut, pauseSending } from "./messaging";
 
@@ -18,7 +19,7 @@ interface WaMessage {
   button?: { text?: string };
   interactive?: { button_reply?: { title?: string }; list_reply?: { title?: string } };
   image?: { id?: string; caption?: string; mime_type?: string };
-  document?: { id?: string; caption?: string; filename?: string };
+  document?: { id?: string; caption?: string; filename?: string; mime_type?: string };
 }
 
 interface WaStatus {
@@ -87,18 +88,21 @@ async function handleInbound(prisma: PrismaClient, m: WaMessage, now: Date) {
   }
   const sentAt = m.timestamp ? new Date(Number(m.timestamp) * 1000) : now;
   const body = messageText(m);
+  let messageId: string;
   try {
-    await prisma.message.create({
-      data: {
-        leadId: lead.id,
-        direction: "INBOUND",
-        waMessageId: m.id,
-        body,
-        status: "received",
-        payload: m as unknown as Prisma.InputJsonValue,
-        sentAt,
-      },
-    });
+    messageId = (
+      await prisma.message.create({
+        data: {
+          leadId: lead.id,
+          direction: "INBOUND",
+          waMessageId: m.id,
+          body,
+          status: "received",
+          payload: m as unknown as Prisma.InputJsonValue,
+          sentAt,
+        },
+      })
+    ).id;
   } catch (err) {
     if (isUniqueViolation(err)) return "duplicate";
     throw err;
@@ -121,6 +125,44 @@ async function handleInbound(prisma: PrismaClient, m: WaMessage, now: Date) {
     lead.id,
     optOut ? ["FIRST_CONTACT", "FOLLOW_UP", "REMINDER"] : ["FIRST_CONTACT", "FOLLOW_UP"],
   );
+
+  // Images/documents (e.g. reference pictures) are downloaded by the worker.
+  const media = m.image ?? m.document;
+  const attachmentIds: string[] = [];
+  if (media?.id) {
+    const created = await prisma.leadAttachment.upsert({
+      where: { waMediaId: media.id },
+      update: {},
+      create: {
+        leadId: lead.id,
+        messageId,
+        waMediaId: media.id,
+        mimeType: media.mime_type ?? null,
+        fileName: m.document?.filename ?? null,
+        caption: media.caption ?? null,
+      },
+    });
+    attachmentIds.push(created.id);
+  }
+
+  // Forward to the chatbot only while it is active in this chat.
+  if (
+    botActiveFor(
+      { botEnabled: lead.botEnabled, whatsappOptOut: lead.whatsappOptOut || optOut },
+      await isBotGloballyEnabled(prisma),
+    )
+  ) {
+    await enqueueBotEvent(prisma, "message.received", lead.id, {
+      leadId: lead.id,
+      message: {
+        id: messageId,
+        type: m.type ?? "text",
+        text: body,
+        attachmentIds,
+        sentAt: sentAt.toISOString(),
+      },
+    });
+  }
   return optOut ? "opt-out" : "stored";
 }
 

@@ -43,3 +43,6 @@ next-env.d.ts
 
 # prisma generated client
 /src/generated/
+
+# private customer files (reference images)
+/storage/

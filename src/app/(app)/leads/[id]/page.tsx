@@ -12,6 +12,7 @@ import { LEAD_STATUS_LABELS, LEAD_STATUS_ORDER, PLATFORM_LABELS } from "@/lib/la
 import { getLeadForUser } from "@/lib/leads/queries";
 import { addLeadNote, deleteLead, updateLead } from "./actions";
 import { ChatSection } from "./chat";
+import { TattooIdea } from "./tattoo-idea";
 import { ConsultationsSection } from "./consultations";
 
 export const metadata: Metadata = { title: "Lead" };
@@ -34,7 +35,7 @@ export default async function LeadPage({ params, searchParams }: PageProps<"/lea
   const isAdmin = user.role === "ADMIN";
   const messaging = await prisma.messagingSettings.findUnique({
     where: { id: 1 },
-    select: { pausedAt: true },
+    select: { pausedAt: true, botGloballyEnabled: true },
   });
 
   return (
@@ -100,9 +101,7 @@ export default async function LeadPage({ params, searchParams }: PageProps<"/lea
 
           <Card>
             <CardTitle>Tattoo-Idee</CardTitle>
-            <p className="text-sm text-ink-soft">
-              Die Zusammenfassung erscheint hier, sobald der Chatbot sie übermittelt (Phase 3).
-            </p>
+            <TattooIdea summary={lead.tattooSummary} attachments={lead.attachments} />
           </Card>
 
           <ConsultationsSection
@@ -117,6 +116,13 @@ export default async function LeadPage({ params, searchParams }: PageProps<"/lea
             leadId={lead.id}
             hasPhone={Boolean(lead.phoneE164 && lead.phoneValid)}
             sendingPaused={Boolean(messaging?.pausedAt)}
+            bot={{
+              enabled: lead.botEnabled,
+              globallyEnabled: messaging?.botGloballyEnabled ?? true,
+              disabledAt: lead.botDisabledAt,
+              disabledReason: lead.botDisabledReason,
+              disabledBy: lead.botDisabledBy?.name ?? null,
+            }}
             messages={lead.messages}
             planned={lead.outboundMessages}
             optOut={lead.whatsappOptOut}

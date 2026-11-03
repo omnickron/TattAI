@@ -167,3 +167,17 @@ export async function cancelOutbound(id: string): Promise<ActionState> {
   });
   return ok("Nachricht aus der Warteschlange entfernt.");
 }
+
+export async function setBotGloballyEnabled(enabled: boolean): Promise<ActionState> {
+  await requireAdmin();
+  await loadMessagingSettings(prisma);
+  await prisma.messagingSettings.update({
+    where: { id: 1 },
+    data: { botGloballyEnabled: enabled },
+  });
+  return ok(
+    enabled
+      ? "Bot für alle Chats eingeschaltet (außer übernommene)."
+      : "Bot für alle Chats ausgeschaltet.",
+  );
+}

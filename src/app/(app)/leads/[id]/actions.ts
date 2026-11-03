@@ -17,8 +17,10 @@ import {
 } from "@/lib/scheduling/booking";
 import { schedulingDeps } from "@/lib/scheduling/deps";
 import { defaultPhoneCountry } from "@/lib/settings";
+import { setBotEnabled } from "@/lib/bot/state";
 import { createWhatsAppClient } from "@/lib/whatsapp/client";
 import { cancelQueued } from "@/lib/whatsapp/messaging";
+import { deleteLeadFiles } from "@/lib/whatsapp/media";
 import { ReplyError, sendManualReply } from "@/lib/whatsapp/replies";
 
 const leadSchema = z.object({
@@ -94,6 +96,7 @@ export async function addLeadNote(
 export async function deleteLead(leadId: string): Promise<ActionState> {
   await requireAdmin();
   await prisma.lead.delete({ where: { id: leadId } }).catch(() => null);
+  await deleteLeadFiles(leadId);
   revalidatePath("/leads");
   redirect("/leads");
 }
@@ -235,4 +238,26 @@ export async function sendReplyAction(
   }
   revalidatePath(`/leads/${leadId}`);
   return { ok: true, message: "Gesendet." };
+}
+
+// ---------------------------------------------------------------------------
+// Chatbot switch
+// ---------------------------------------------------------------------------
+
+/** Admin or a tattooer with access switches the bot for this chat on or off. */
+export async function setBotEnabledAction(leadId: string, enabled: boolean): Promise<ActionState> {
+  const user = await requireUser();
+  const lead = await prisma.lead.findFirst({
+    where: { AND: [leadScope(user), { id: leadId }] },
+    select: { id: true },
+  });
+  if (!lead) return { ok: false, message: "Kein Zugriff auf diesen Lead." };
+  await setBotEnabled(prisma, leadId, enabled, { userId: user.id, reason: "MANUAL" });
+  revalidatePath(`/leads/${leadId}`);
+  return {
+    ok: true,
+    message: enabled
+      ? "Bot ist in diesem Chat wieder aktiv."
+      : "Bot ist in diesem Chat ausgeschaltet.",
+  };
 }

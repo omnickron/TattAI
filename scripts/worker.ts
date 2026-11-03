@@ -1,4 +1,5 @@
-// Background worker: WhatsApp planning/dispatch and retries of failed Meta lead fetches.
+// Background worker: WhatsApp planning/dispatch, bot event delivery, media downloads
+// and retries of failed Meta lead fetches.
 // Runs every 30 seconds. Usage: npm run worker
 import "dotenv/config";
 import { processDueWebhookEvents } from "../src/lib/leads/meta-ingest";
@@ -7,6 +8,8 @@ import { createPrismaClient } from "../src/lib/prisma-client";
 import { defaultPhoneCountry } from "../src/lib/settings";
 import { createWhatsAppClient } from "../src/lib/whatsapp/client";
 import { runMessagingWorker } from "../src/lib/whatsapp/messaging";
+import { deliverBotEvents, deliveryConfigFromEnv } from "../src/lib/bot/deliveries";
+import { createMediaDownloader, downloadPendingAttachments } from "../src/lib/whatsapp/media";
 
 const INTERVAL_MS = 30_000;
 const prisma = createPrismaClient();
@@ -26,6 +29,18 @@ async function tick() {
     }
   } catch (err) {
     console.error("[worker] messaging run failed:", err);
+  }
+  try {
+    const bot = await deliverBotEvents(prisma, deliveryConfigFromEnv());
+    if (bot.delivered || bot.failed) console.info("[worker] bot events:", bot);
+  } catch (err) {
+    console.error("[worker] bot delivery failed:", err);
+  }
+  try {
+    const media = await downloadPendingAttachments(prisma, createMediaDownloader());
+    if (media.stored) console.info("[worker] stored attachments:", media.stored);
+  } catch (err) {
+    console.error("[worker] media download failed:", err);
   }
   if (Date.now() - lastLeadRetry > 5 * 60_000) {
     lastLeadRetry = Date.now();

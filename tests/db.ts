@@ -12,6 +12,7 @@ export async function resetDatabase(prisma: ReturnType<typeof createTestPrisma>)
     TRUNCATE "WebhookEvent", "LeadNote", "Message", "TattooBooking", "Consultation", "Lead",
              "AppSettings", "FairnessShare", "FairnessConfig", "AvailabilityRule",
              "AvailabilityException", "TattooerProfile", "User", "OutboundMessage", "FollowUpStep",
-             "ReminderRule", "WhatsAppTemplate", "MessagingSettings" RESTART IDENTITY CASCADE
+             "ReminderRule", "WhatsAppTemplate", "MessagingSettings", "LeadAttachment", "BotDelivery"
+             RESTART IDENTITY CASCADE
   `);
 }

@@ -67,6 +67,7 @@ export async function listLeads(user: CurrentUser, filters: LeadFilters) {
         email: true,
         status: true,
         whatsappConsent: true,
+        botEnabled: true,
         metaCampaignName: true,
         metaPlatform: true,
         source: true,
@@ -112,6 +113,12 @@ export async function getLeadForUser(user: CurrentUser, id: string) {
         orderBy: { sentAt: "desc" },
         take: 200,
         include: { sentBy: { select: { name: true } } },
+      },
+      botDisabledBy: { select: { name: true } },
+      attachments: {
+        where: { status: { in: ["STORED", "PENDING"] } },
+        orderBy: { createdAt: "asc" },
+        select: { id: true, status: true, mimeType: true, caption: true, createdAt: true },
       },
       outboundMessages: {
         where: { status: { in: ["QUEUED", "FAILED"] } },

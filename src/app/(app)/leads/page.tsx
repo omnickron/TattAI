@@ -109,6 +109,7 @@ export default async function LeadsPage({ searchParams }: PageProps<"/leads">) {
                   <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm tabular-nums">
                     {formatPhone(lead.phoneE164, lead.phoneRaw)}
                     {!lead.phoneValid && <Badge tone="red">ungültig</Badge>}
+                    {!lead.botEnabled && <Badge tone="violet">Bot aus</Badge>}
                     {!lead.whatsappConsent && lead.phoneValid && (
                       <Badge tone="amber">ohne Einwilligung</Badge>
                     )}
