@@ -32,6 +32,26 @@ const dayLabel = new Intl.DateTimeFormat("de-DE", {
   year: "numeric",
 });
 
+function PencilIcon() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      aria-hidden
+    >
+      <path
+        d="M13.6 3.4a1.9 1.9 0 0 1 2.7 2.7L7.1 15.3l-3.6.9.9-3.6 9.2-9.2Z"
+        strokeLinejoin="round"
+      />
+      <path d="m12.3 4.7 2.9 2.9" />
+    </svg>
+  );
+}
+
 const FORM_GRID =
   "grid grid-cols-2 items-center gap-2 space-y-0 sm:grid-cols-[10.5rem_7.5rem_7.5rem_8rem_auto]";
 
@@ -94,7 +114,17 @@ export function TattooSessions({
               <li key={s.id} className="px-3 py-2">
                 <details className="group">
                   <summary className="flex cursor-default list-none flex-wrap items-center gap-x-3 gap-y-1 [&::-webkit-details-marker]:hidden">
-                    <span className="font-medium">Termin {s.sessionNumber}</span>
+                    {canEdit && (
+                      <span
+                        role="button"
+                        aria-label={`Tattoo-Termin vom ${dayLabel.format(s.date)} bearbeiten`}
+                        title="Bearbeiten"
+                        className="-ml-1 flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-ink-soft hover:bg-muted hover:text-ink group-open:bg-muted group-open:text-ink"
+                      >
+                        <PencilIcon />
+                      </span>
+                    )}
+                    <span className="font-semibold">Tattoo-Termin</span>
                     <span
                       className={cn("tabular-nums", s.cancelled && "text-ink-soft line-through")}
                     >
@@ -111,24 +141,17 @@ export function TattooSessions({
                     >
                       {s.amountCents === null ? "Betrag fehlt" : formatEuro(s.amountCents)}
                     </span>
-                    <Badge tone={state.tone}>{state.label}</Badge>
-                    {!s.cancelled &&
-                      (s.calendarSyncPending || s.calendarSyncError ? (
-                        <span
-                          className="text-xs text-amber-700 dark:text-amber-400"
-                          title={s.calendarSyncError ?? undefined}
-                        >
-                          Kalender ausstehend
-                        </span>
-                      ) : s.calendarEventId ? (
-                        <span className="text-xs text-ink-soft">im Kalender</span>
-                      ) : null)}
-                    {canEdit && (
-                      <span className="ml-auto cursor-pointer rounded-md px-2 py-1 text-xs font-medium text-ink-soft hover:bg-muted hover:text-ink">
-                        <span className="group-open:hidden">Bearbeiten</span>
-                        <span className="hidden group-open:inline">Schließen</span>
+                    {!s.cancelled && (s.calendarSyncPending || s.calendarSyncError) && (
+                      <span
+                        className="text-xs text-amber-700 dark:text-amber-400"
+                        title={s.calendarSyncError ?? undefined}
+                      >
+                        Kalender ausstehend
                       </span>
                     )}
+                    <span className="ml-auto">
+                      <Badge tone={state.tone}>{state.label}</Badge>
+                    </span>
                   </summary>
                   {canEdit && (
                     <div className="mt-3 space-y-2 border-t border-line pt-3">

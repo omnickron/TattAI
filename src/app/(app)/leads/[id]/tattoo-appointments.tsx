@@ -17,7 +17,8 @@ type Project = {
 };
 
 function planLabel(p: Project) {
-  if (p.sessionPlan === "SINGLE") return "Ein Termin";
+  // A single appointment is obvious from the list itself.
+  if (p.sessionPlan === "SINGLE") return null;
   if (p.sessionPlan === "MULTIPLE") {
     return p.furtherSessionsScheduled
       ? "Mehrere Termine · weitere vergeben"
