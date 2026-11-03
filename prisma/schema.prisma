@@ -31,6 +31,7 @@ model User {
 
   tattooerProfile TattooerProfile?
   leadNotes       LeadNote[]
+  sentMessages    Message[]
 }
 
 model TattooerProfile {
@@ -209,6 +210,9 @@ model Message {
   payload      Json?
   outboundId   String?          @unique
   outbound     OutboundMessage? @relation(fields: [outboundId], references: [id], onDelete: SetNull)
+  // Set for manual replies written in the app (null = automatic or inbound)
+  sentById     String?
+  sentBy       User?            @relation(fields: [sentById], references: [id], onDelete: SetNull)
   sentAt       DateTime         @default(now())
   createdAt    DateTime         @default(now())
 

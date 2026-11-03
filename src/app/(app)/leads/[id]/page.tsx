@@ -6,6 +6,7 @@ import { ActionForm } from "@/components/action-form";
 import { LeadStatusBadge } from "@/components/lead-status-badge";
 import { Badge, Button, Card, CardTitle, Field, Input, Select, Textarea } from "@/components/ui";
 import { requireUser } from "@/lib/auth/session";
+import { prisma } from "@/lib/db";
 import { formatDateTime, formatPhone } from "@/lib/format";
 import { LEAD_STATUS_LABELS, LEAD_STATUS_ORDER, PLATFORM_LABELS } from "@/lib/labels";
 import { getLeadForUser } from "@/lib/leads/queries";
@@ -31,6 +32,10 @@ export default async function LeadPage({ params, searchParams }: PageProps<"/lea
   const lead = await getLeadForUser(user, id);
   if (!lead) notFound();
   const isAdmin = user.role === "ADMIN";
+  const messaging = await prisma.messagingSettings.findUnique({
+    where: { id: 1 },
+    select: { pausedAt: true },
+  });
 
   return (
     <>
@@ -109,6 +114,9 @@ export default async function LeadPage({ params, searchParams }: PageProps<"/lea
           />
 
           <ChatSection
+            leadId={lead.id}
+            hasPhone={Boolean(lead.phoneE164 && lead.phoneValid)}
+            sendingPaused={Boolean(messaging?.pausedAt)}
             messages={lead.messages}
             planned={lead.outboundMessages}
             optOut={lead.whatsappOptOut}

@@ -107,7 +107,12 @@ export async function getLeadForUser(user: CurrentUser, id: string) {
         orderBy: { startsAt: "desc" },
         include: { tattooer: { include: { user: { select: { name: true } } } } },
       },
-      messages: { orderBy: { sentAt: "asc" }, take: 200 },
+      // Latest 200 messages (re-sorted ascending on the page)
+      messages: {
+        orderBy: { sentAt: "desc" },
+        take: 200,
+        include: { sentBy: { select: { name: true } } },
+      },
       outboundMessages: {
         where: { status: { in: ["QUEUED", "FAILED"] } },
         orderBy: { notBefore: "asc" },

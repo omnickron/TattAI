@@ -4,7 +4,7 @@ Interne Web-App (PWA) für das Tattoo-Studio: Leads aus Meta-Lead-Formularen, Wh
 faire Verteilung von Beratungsterminen auf die Tätowierer, Google-Kalender, Umsatz-Auswertung.
 Spezifikation und verbindliche Entscheidungen: [`CLAUDE.md`](CLAUDE.md).
 
-**Stand: Phase 3a (WhatsApp-Versand)**
+**Stand: Phase 3a (WhatsApp-Versand und Antworten)**
 - Phase 1: Login, Tätowierer-Verwaltung, Lead-Eingang per Meta-Webhook, Leadliste.
 - Phase 2: Verfügbarkeiten, Beratungsdauer/Puffer, Google-Kalender (Free/Busy + Termine schreiben),
   faire Verteilung mit Admin-Einstellung, Buchen/Absagen/Umverteilen, App-Kalender (Tag/Woche).
@@ -117,6 +117,9 @@ Alles wird im Admin unter **WhatsApp** gepflegt:
   Meta zur Prüfung ein. Änderungen werden als neue Version eingereicht (`name_v2` …); bis zur Genehmigung wird
   die bisher genehmigte Fassung verschickt.
 - Nur Leads mit Einwilligung und gültiger Nummer werden angeschrieben. „STOP“/„Abmelden“ setzt ein Opt-out.
+- **Antworten aus der App**: Admin und zuständiger Tätowierer können auf der Lead-Seite frei antworten; die
+  Nachricht kommt beim Kunden in WhatsApp an und steht mit Absender im Chatverlauf. WhatsApp erlaubt freie
+  Nachrichten nur innerhalb von 24 Stunden nach der letzten Kundennachricht – danach ist das Feld gesperrt.
 
 Der Versand läuft im **Hintergrund-Dienst**: `npm run worker` (in Produktion der Dienst `worker` in
 `deploy/docker-compose.prod.yml`). Er läuft alle 30 Sekunden und wiederholt auch fehlgeschlagene Meta-Lead-Abrufe.

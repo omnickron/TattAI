@@ -17,7 +17,9 @@ import {
 } from "@/lib/scheduling/booking";
 import { schedulingDeps } from "@/lib/scheduling/deps";
 import { defaultPhoneCountry } from "@/lib/settings";
+import { createWhatsAppClient } from "@/lib/whatsapp/client";
 import { cancelQueued } from "@/lib/whatsapp/messaging";
+import { ReplyError, sendManualReply } from "@/lib/whatsapp/replies";
 
 const leadSchema = z.object({
   name: z.string().trim().min(1, "Name fehlt.").max(200),
@@ -201,4 +203,36 @@ export async function changeConsultationModeAction(
       ? "Beratungsform geändert."
       : "Geändert, aber der Kalendereintrag konnte nicht aktualisiert werden.",
   };
+}
+
+// ---------------------------------------------------------------------------
+// Manual WhatsApp replies
+// ---------------------------------------------------------------------------
+
+export type ReplyState = { ok: boolean; message: string; text?: string } | null;
+
+export async function sendReplyAction(
+  leadId: string,
+  _prev: ReplyState,
+  formData: FormData,
+): Promise<ReplyState> {
+  const user = await requireUser();
+  const text = String(formData.get("text") ?? "");
+  const lead = await prisma.lead.findFirst({
+    where: { AND: [leadScope(user), { id: leadId }] },
+    select: { id: true },
+  });
+  if (!lead) return { ok: false, message: "Kein Zugriff auf diesen Lead.", text };
+  try {
+    await sendManualReply(
+      { prisma, whatsapp: createWhatsAppClient() },
+      { leadId, userId: user.id, text },
+    );
+  } catch (err) {
+    if (err instanceof ReplyError) return { ok: false, message: err.message, text };
+    console.error("[whatsapp] manual reply failed:", err);
+    return { ok: false, message: "Unerwarteter Fehler beim Senden.", text };
+  }
+  revalidatePath(`/leads/${leadId}`);
+  return { ok: true, message: "Gesendet." };
 }

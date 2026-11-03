@@ -1,6 +1,9 @@
 import { Badge, Card, CardTitle, cn } from "@/components/ui";
 import { formatDateTime } from "@/lib/format";
 import { MESSAGE_STATUS_LABELS, OUTBOUND_KIND_LABELS } from "@/lib/whatsapp/labels";
+import { replyWindow } from "@/lib/whatsapp/replies";
+import { sendReplyAction } from "./actions";
+import { ReplyForm } from "./reply-form";
 
 type ChatMessage = {
   id: string;
@@ -10,6 +13,7 @@ type ChatMessage = {
   status: string | null;
   errorCode: number | null;
   sentAt: Date;
+  sentBy: { name: string } | null;
 };
 
 type Planned = {
@@ -23,20 +27,27 @@ type Planned = {
 };
 
 export function ChatSection({
-  messages,
+  leadId,
+  messages: latestFirst,
   planned,
   optOut,
   consent,
   lastInboundAt,
+  hasPhone,
+  sendingPaused,
 }: {
+  leadId: string;
+  hasPhone: boolean;
+  sendingPaused: boolean;
   messages: ChatMessage[];
   planned: Planned[];
   optOut: boolean;
   consent: boolean;
   lastInboundAt: Date | null;
 }) {
-  const now = new Date();
-  const windowOpen = lastInboundAt && now.getTime() - lastInboundAt.getTime() < 24 * 3600_000;
+  const messages = [...latestFirst].reverse();
+  const reply = replyWindow(lastInboundAt, new Date());
+  const windowOpen = reply.open;
   return (
     <Card>
       <CardTitle
@@ -67,6 +78,8 @@ export function ChatSection({
               {m.body ?? `[${m.templateName ?? "Nachricht"}]`}
               <span className="mt-1 block text-[11px] opacity-70">
                 {formatDateTime(m.sentAt)}
+                {m.direction === "OUTBOUND" &&
+                  (m.sentBy ? ` · ${m.sentBy.name}` : " · automatisch")}
                 {m.direction === "OUTBOUND" && m.templateName && ` · ${m.templateName}`}
                 {m.direction === "OUTBOUND" &&
                   m.status &&
@@ -77,6 +90,34 @@ export function ChatSection({
           ))}
         </ul>
       )}
+      <div className="mt-4 border-t border-line pt-3">
+        {!hasPhone ? (
+          <p className="text-sm text-ink-soft">
+            Keine gültige WhatsApp-Nummer – Antworten nicht möglich.
+          </p>
+        ) : optOut ? (
+          <p className="text-sm text-ink-soft">
+            Der Kunde hat sich abgemeldet (Opt-out). Bitte nicht mehr per WhatsApp schreiben.
+          </p>
+        ) : windowOpen ? (
+          <>
+            <p className="mb-2 text-xs text-ink-soft">
+              Freie Antworten sind bis {formatDateTime(reply.closesAt)} möglich (24 Stunden nach der
+              letzten Nachricht des Kunden).
+              {sendingPaused && " Hinweis: Der automatische Versand ist gerade pausiert."}
+            </p>
+            <ReplyForm action={sendReplyAction.bind(null, leadId)} />
+          </>
+        ) : (
+          <p className="text-sm text-ink-soft">
+            {lastInboundAt
+              ? `Das 24-Stunden-Fenster ist seit ${formatDateTime(reply.closesAt)} geschlossen.`
+              : "Der Kunde hat noch nicht geschrieben."}{" "}
+            WhatsApp erlaubt freie Nachrichten erst wieder, wenn der Kunde schreibt.
+          </p>
+        )}
+      </div>
+
       {planned.length > 0 && (
         <div className="mt-4 border-t border-line pt-3">
           <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-soft">
