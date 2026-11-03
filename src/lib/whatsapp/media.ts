@@ -22,7 +22,9 @@ export interface MediaDownloader {
 }
 
 export function mediaStorageDir(): string {
-  return path.resolve(process.env.MEDIA_STORAGE_DIR || "./storage/media");
+  return path.resolve(
+    /* turbopackIgnore: true */ process.env.MEDIA_STORAGE_DIR || "./storage/media",
+  );
 }
 
 /** Graph API: GET /{media-id} returns a short-lived URL that needs the token as well. */
@@ -89,9 +91,14 @@ export async function downloadPendingAttachments(
       const ext = ALLOWED_MEDIA[mimeType];
       if (!ext) throw new PermanentMediaError(`Dateityp nicht erlaubt: ${mimeType || "unbekannt"}`);
       if (data.length > MAX_MEDIA_BYTES) throw new PermanentMediaError("Datei zu groß");
-      const relative = path.join(a.leadId, `${a.id}.${ext}`);
-      await mkdir(path.join(storageDir, a.leadId), { recursive: true, mode: 0o700 });
-      await writeFile(path.join(storageDir, relative), data, { mode: 0o600 });
+      const relative = path.join(/* turbopackIgnore: true */ a.leadId, `${a.id}.${ext}`);
+      await mkdir(path.join(/* turbopackIgnore: true */ storageDir, a.leadId), {
+        recursive: true,
+        mode: 0o700,
+      });
+      await writeFile(path.join(/* turbopackIgnore: true */ storageDir, relative), data, {
+        mode: 0o600,
+      });
       await prisma.leadAttachment.update({
         where: { id: a.id },
         data: {
@@ -124,7 +131,7 @@ class PermanentMediaError extends Error {}
 
 /** Resolves a stored attachment path, refusing anything outside the storage dir. */
 export function attachmentFilePath(storagePath: string, storageDir = mediaStorageDir()): string {
-  const full = path.resolve(storageDir, storagePath);
+  const full = path.resolve(/* turbopackIgnore: true */ storageDir, storagePath);
   if (!full.startsWith(storageDir + path.sep)) throw new Error("Invalid attachment path");
   return full;
 }
@@ -132,5 +139,8 @@ export function attachmentFilePath(storagePath: string, storageDir = mediaStorag
 /** Deletes all files of a lead (GDPR deletion). */
 export async function deleteLeadFiles(leadId: string, storageDir = mediaStorageDir()) {
   if (!/^[a-z0-9]+$/i.test(leadId)) return;
-  await rm(path.join(storageDir, leadId), { recursive: true, force: true });
+  await rm(path.join(/* turbopackIgnore: true */ storageDir, leadId), {
+    recursive: true,
+    force: true,
+  });
 }
