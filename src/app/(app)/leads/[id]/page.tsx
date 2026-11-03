@@ -105,6 +105,8 @@ export default async function LeadPage({ params, searchParams }: PageProps<"/lea
             <TattooIdea summary={lead.tattooSummary} attachments={lead.attachments} />
           </Card>
 
+          <TattooAppointments user={user} consultations={lead.consultations} />
+
           <ConsultationsSection
             user={user}
             leadId={lead.id}
@@ -113,8 +115,6 @@ export default async function LeadPage({ params, searchParams }: PageProps<"/lea
             bookedId={typeof query.booked === "string" ? query.booked : undefined}
             savedId={typeof query.saved === "string" ? query.saved : undefined}
           />
-
-          <TattooAppointments user={user} consultations={lead.consultations} />
 
           <ChatSection
             leadId={lead.id}
