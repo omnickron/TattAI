@@ -102,7 +102,12 @@ export async function ConsultationsSection({
                     Kein Kalendereintrag vorhanden.
                   </p>
                 )}
-                <OutcomePanel c={c} now={now} returnTo={`/leads/${leadId}`} />
+                <OutcomePanel
+                  c={c}
+                  now={now}
+                  returnTo={`/leads/${leadId}`}
+                  sessionsInline={false}
+                />
                 {canManage && c.startsAt > now && (
                   <details>
                     <summary className="cursor-pointer text-xs font-medium text-ink-soft hover:text-ink">

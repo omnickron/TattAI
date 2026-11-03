@@ -12,6 +12,7 @@ import { LEAD_STATUS_LABELS, LEAD_STATUS_ORDER, PLATFORM_LABELS } from "@/lib/la
 import { getLeadForUser } from "@/lib/leads/queries";
 import { addLeadNote, deleteLead, updateLead } from "./actions";
 import { ChatSection } from "./chat";
+import { TattooAppointments } from "./tattoo-appointments";
 import { TattooIdea } from "./tattoo-idea";
 import { ConsultationsSection } from "./consultations";
 
@@ -112,6 +113,8 @@ export default async function LeadPage({ params, searchParams }: PageProps<"/lea
             bookedId={typeof query.booked === "string" ? query.booked : undefined}
             savedId={typeof query.saved === "string" ? query.saved : undefined}
           />
+
+          <TattooAppointments user={user} consultations={lead.consultations} />
 
           <ChatSection
             leadId={lead.id}

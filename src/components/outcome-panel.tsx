@@ -1,14 +1,9 @@
-import { ActionForm } from "@/components/action-form";
 import { OutcomeForm } from "@/components/outcome-form";
-import { Badge, Button, Input, TimeSelect } from "@/components/ui";
-import {
-  addSessionAction,
-  recordOutcomeAction,
-  setSessionCancelledAction,
-  updateSessionAction,
-} from "@/app/(app)/consultations/actions";
-import { APP_TIMEZONE, formatDate } from "@/lib/format";
-import { centsToInput, formatEuro } from "@/lib/outcomes/money";
+import { TattooSessions, type TattooSession } from "@/components/tattoo-sessions";
+import { Badge } from "@/components/ui";
+import { recordOutcomeAction } from "@/app/(app)/consultations/actions";
+import { APP_TIMEZONE } from "@/lib/format";
+import { centsToInput } from "@/lib/outcomes/money";
 import { formatTimeOfDay, localDateOf, localMinuteOf } from "@/lib/time";
 
 export type OutcomeConsultation = {
@@ -20,41 +15,11 @@ export type OutcomeConsultation = {
   furtherSessionsScheduled: boolean | null;
   outcomeNote: string | null;
   outcomeRecordedAt: Date | null;
-  tattooBookings: Array<{
-    id: string;
-    sessionNumber: number;
-    date: Date;
-    amountCents: number | null;
-    cancelled: boolean;
-    startsAt: Date | null;
-    endsAt: Date | null;
-    calendarEventId: string | null;
-    calendarSyncPending: boolean;
-    calendarSyncError: string | null;
-  }>;
+  tattooBookings: TattooSession[];
 };
 
 const localDate = (d: Date) => localDateOf(d, APP_TIMEZONE);
 const localTime = (d: Date | null) => (d ? formatTimeOfDay(localMinuteOf(d, APP_TIMEZONE)) : "");
-
-function TimeInputs({ start, end }: { start?: Date | null; end?: Date | null }) {
-  return (
-    <>
-      <TimeSelect
-        name="start"
-        defaultValue={localTime(start ?? null)}
-        aria-label="Beginn"
-        emptyLabel="von –"
-      />
-      <TimeSelect
-        name="end"
-        defaultValue={localTime(end ?? null)}
-        aria-label="Ende"
-        emptyLabel="bis –"
-      />
-    </>
-  );
-}
 
 export function outcomeSummary(c: OutcomeConsultation): string {
   if (c.status === "NO_SHOW") return "No-Show";
@@ -73,10 +38,13 @@ export function OutcomePanel({
   c,
   now,
   returnTo,
+  sessionsInline = true,
 }: {
   c: OutcomeConsultation;
   now: Date;
   returnTo: string;
+  /** false: sessions are shown in a separate card (lead page) */
+  sessionsInline?: boolean;
 }) {
   const started = c.startsAt <= now;
   const needsOutcome = c.status === "SCHEDULED" && started;
@@ -86,10 +54,6 @@ export function OutcomePanel({
     c.status === "NO_SHOW" ||
     (c.status === "CANCELLED" && Boolean(c.outcomeRecordedAt));
   const sessions = [...c.tattooBookings].sort((a, b) => a.sessionNumber - b.sessionNumber);
-  const total = sessions
-    .filter((s) => !s.cancelled)
-    .reduce((sum, s) => sum + (s.amountCents ?? 0), 0);
-  const missingAmounts = sessions.some((s) => !s.cancelled && s.amountCents === null);
   const defaults = {
     outcome: c.status === "SCHEDULED" ? null : c.status,
     tattoo:
@@ -131,132 +95,16 @@ export function OutcomePanel({
             <p className="whitespace-pre-wrap text-sm text-ink-soft">{c.outcomeNote}</p>
           )}
 
-          {c.status === "HELD" && c.tattooBooked && (
-            <div className="space-y-2">
-              <ul className="divide-y divide-line rounded-lg border border-line bg-surface text-sm">
-                {sessions.map((s) => (
-                  <li
-                    key={s.id}
-                    className="grid gap-2 px-3 py-2 sm:grid-cols-[5rem_1fr_auto] sm:items-center"
-                  >
-                    <span className="flex flex-col">
-                      <span className="font-medium">Termin {s.sessionNumber}</span>
-                      {!s.cancelled && (s.calendarSyncPending || s.calendarSyncError) ? (
-                        <span
-                          className="text-[11px] text-amber-700 dark:text-amber-400"
-                          title={s.calendarSyncError ?? undefined}
-                        >
-                          Kalender ausstehend
-                        </span>
-                      ) : !s.cancelled && s.calendarEventId ? (
-                        <span className="text-[11px] text-ink-soft">im Kalender</span>
-                      ) : null}
-                    </span>
-                    {s.cancelled ? (
-                      <>
-                        <span className="flex flex-wrap items-center gap-2">
-                          <span className="text-ink-soft line-through">
-                            {formatDate(s.date)}
-                            {s.startsAt &&
-                              ` ${localTime(s.startsAt)}–${localTime(s.endsAt)}`} ·{" "}
-                            {formatEuro(s.amountCents)}
-                          </span>
-                          <Badge>abgesagt</Badge>
-                        </span>
-                        <ActionForm
-                          action={setSessionCancelledAction.bind(null, s.id, false)}
-                          className="ml-auto"
-                        >
-                          <Button type="submit" variant="ghost" className="px-2 py-1 text-xs">
-                            Wiederherstellen
-                          </Button>
-                        </ActionForm>
-                      </>
-                    ) : (
-                      <>
-                        <ActionForm
-                          action={updateSessionAction.bind(null, s.id)}
-                          className="grid flex-1 grid-cols-2 items-center gap-2 space-y-0 sm:grid-cols-[10.5rem_7.5rem_7.5rem_8rem_auto]"
-                        >
-                          <Input
-                            type="date"
-                            name="date"
-                            defaultValue={localDate(s.date)}
-                            className="col-span-2 sm:col-span-1"
-                            required
-                            aria-label="Datum"
-                          />
-                          <TimeInputs start={s.startsAt} end={s.endsAt} />
-                          <Input
-                            name="amount"
-                            defaultValue={centsToInput(s.amountCents)}
-                            placeholder="Betrag €"
-                            inputMode="decimal"
-                            aria-label="Betrag"
-                          />
-                          <Button
-                            type="submit"
-                            variant="secondary"
-                            className="col-span-2 justify-self-start px-3 py-1.5 text-xs sm:col-span-1"
-                          >
-                            Speichern
-                          </Button>
-                        </ActionForm>
-                        <ActionForm
-                          action={setSessionCancelledAction.bind(null, s.id, true)}
-                          confirm={`Termin ${s.sessionNumber} als abgesagt markieren?`}
-                        >
-                          <Button type="submit" variant="ghost" className="px-2 py-1 text-xs">
-                            Absagen
-                          </Button>
-                        </ActionForm>
-                      </>
-                    )}
-                  </li>
-                ))}
-              </ul>
-              <p className="text-sm">
-                Umsatz: <span className="font-semibold tabular-nums">{formatEuro(total)}</span>
-                {missingAmounts && (
-                  <span className="text-amber-700 dark:text-amber-400">
-                    {" "}
-                    · Betrag fehlt noch bei einem Termin
-                  </span>
-                )}
+          {c.status === "HELD" &&
+            c.tattooBooked &&
+            (sessionsInline ? (
+              <TattooSessions consultationId={c.id} sessions={sessions} now={now} canEdit />
+            ) : (
+              <p className="text-sm text-ink-soft">
+                {sessions.filter((x) => !x.cancelled).length} Tattoo-Termin(e) – siehe
+                „Tattoo-Termine“.
               </p>
-              <details>
-                <summary className="cursor-pointer text-xs font-medium text-ink-soft hover:text-ink">
-                  + Weiteren Tattoo-Termin eintragen
-                </summary>
-                <ActionForm
-                  action={addSessionAction.bind(null, c.id)}
-                  className="mt-2 grid flex-1 grid-cols-2 items-center gap-2 space-y-0 sm:grid-cols-[10.5rem_7.5rem_7.5rem_8rem_auto]"
-                >
-                  <Input
-                    type="date"
-                    name="date"
-                    required
-                    aria-label="Datum"
-                    className="col-span-2 sm:col-span-1"
-                  />
-                  <TimeInputs />
-                  <Input
-                    name="amount"
-                    placeholder="Betrag € (optional)"
-                    inputMode="decimal"
-                    aria-label="Betrag"
-                  />
-                  <Button
-                    type="submit"
-                    variant="secondary"
-                    className="col-span-2 justify-self-start sm:col-span-1"
-                  >
-                    Hinzufügen
-                  </Button>
-                </ActionForm>
-              </details>
-            </div>
-          )}
+            ))}
 
           <details>
             <summary className="cursor-pointer text-xs font-medium text-ink-soft hover:text-ink">
