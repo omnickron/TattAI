@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "TattAI – Leads & Beratungen",
     short_name: "TattAI",
     description: "Leads und Beratungstermine für das Tattoo-Studio",
-    start_url: "/leads",
+    start_url: "/",
     display: "standalone",
     background_color: "#f7f6f3",
     theme_color: "#1c1b19",

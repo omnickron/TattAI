@@ -15,12 +15,12 @@ const ERRORS: Record<string, string> = {
 };
 
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
-  if (await getCurrentUser()) redirect("/leads");
+  if (await getCurrentUser()) redirect("/");
 
   const params = await searchParams;
   const error =
     typeof params.error === "string" ? (ERRORS[params.error] ?? ERRORS.AccessDenied) : null;
-  const callbackUrl = typeof params.callbackUrl === "string" ? params.callbackUrl : "/leads";
+  const callbackUrl = typeof params.callbackUrl === "string" ? params.callbackUrl : "/";
   const devUsers = isDevLoginEnabled()
     ? await prisma.user.findMany({
         where: { active: true },

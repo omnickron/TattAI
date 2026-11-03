@@ -163,6 +163,13 @@ schickt ihm Kundennachrichten als signierte Ereignisse. Details: [`docs/bot-api.
   erreichbar); angezeigt werden sie nur Admin und zuständigem Tätowierer. Beim Löschen eines Leads werden sie
   mitgelöscht. In Produktion liegt der Ordner im Volume `media-data`, das in Backups aufgenommen werden sollte.
 
+## Übersicht (Startseite)
+
+Nach dem Login öffnet sich die **Übersicht** (Admin: alles, Tätowierer: nur eigene):
+offene Ergebnisse vergangener Beratungen (direkt eintragbar), die Termine des Tages als Zeitleiste
+(„Jetzt“ / „Als Nächstes“), die Woche auf einen Blick (Beratungen und Tattoo-Termine pro Tag) und die
+letzten fünf automatischen WhatsApp-Kontakte mit Vorschau der letzten Chatnachricht.
+
 ## Ergebnisse und Auswertung
 
 - **Beratungen** (Navigation, Zahl = fehlende Ergebnisse): Nach Beginn einer Beratung trägt der Tätowierer (oder

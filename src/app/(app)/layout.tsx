@@ -11,11 +11,12 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const openOutcomes = await prisma.consultation.count({
     where: {
       status: "SCHEDULED",
-      startsAt: { lte: new Date() },
+      endsAt: { lte: new Date() },
       ...(isAdmin ? {} : { tattooerId: user.tattooerProfile?.id ?? "__none__" }),
     },
   });
   const items = [
+    { href: "/", label: "Übersicht" },
     { href: "/leads", label: "Leads" },
     { href: "/calendar", label: "Kalender" },
     { href: "/consultations", label: "Beratungen", badge: openOutcomes },

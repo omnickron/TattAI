@@ -61,7 +61,7 @@ export function ChatSection({
   const reply = replyWindow(lastInboundAt, new Date());
   const windowOpen = reply.open;
   return (
-    <Card>
+    <Card id="chat" className="scroll-mt-24">
       <CardTitle
         action={
           optOut ? (

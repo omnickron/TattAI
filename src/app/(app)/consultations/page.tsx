@@ -28,8 +28,9 @@ export default async function ConsultationsPage({ searchParams }: PageProps<"/co
     : { tattooerId: user.tattooerProfile?.id ?? "__none__" };
 
   const where: Record<Tab, Prisma.ConsultationWhereInput> = {
-    open: { ...scope, status: "SCHEDULED", startsAt: { lte: now } },
-    upcoming: { ...scope, status: "SCHEDULED", startsAt: { gt: now } },
+    // Ended consultations still waiting for their outcome
+    open: { ...scope, status: "SCHEDULED", endsAt: { lte: now } },
+    upcoming: { ...scope, status: "SCHEDULED", endsAt: { gt: now } },
     done: {
       ...scope,
       OR: [
