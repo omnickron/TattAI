@@ -4,12 +4,14 @@ Interne Web-App (PWA) für das Tattoo-Studio: Leads aus Meta-Lead-Formularen, Wh
 faire Verteilung von Beratungsterminen auf die Tätowierer, Google-Kalender, Umsatz-Auswertung.
 Spezifikation und verbindliche Entscheidungen: [`CLAUDE.md`](CLAUDE.md).
 
-**Stand: Phase 3a (WhatsApp-Versand und Antworten)**
+**Stand: Phase 3 (WhatsApp und Bot-Schnittstelle)**
 - Phase 1: Login, Tätowierer-Verwaltung, Lead-Eingang per Meta-Webhook, Leadliste.
 - Phase 2: Verfügbarkeiten, Beratungsdauer/Puffer, Google-Kalender (Free/Busy + Termine schreiben),
   faire Verteilung mit Admin-Einstellung, Buchen/Absagen/Umverteilen, App-Kalender (Tag/Woche).
 - Phase 3a: WhatsApp-Erstansprache zu festen Sendezeiten mit Staffelung, Nachfassen, Erinnerungen,
-  Texte (Templates) in der App pflegen und bei Meta einreichen, Chatverlauf. Offen: Bot-Schnittstelle (3b).
+  Texte (Templates) in der App pflegen und bei Meta einreichen, Chatverlauf, Antworten aus der App.
+- Phase 3b: Bot-Schnittstelle (siehe [`docs/bot-api.md`](docs/bot-api.md)), Bot-Schalter pro Chat und global,
+  automatische Übernahme durch Menschen, Referenzbilder im privaten Speicher.
 
 ## Technik
 
@@ -131,6 +133,19 @@ Für den echten Betrieb: WhatsApp-Business-Konto und Nummer in Meta anlegen, Sys
 `whatsapp_business_messaging` und `whatsapp_business_management`, Webhook-URL `https://<domain>/api/webhooks/whatsapp`
 (Felder: `messages`, `message_template_status_update`, `phone_number_quality_update`, `account_update`) und die
 Variablen `WHATSAPP_*` aus `.env.example` setzen.
+
+## Chatbot
+
+Der Chatbot selbst ist nicht Teil des Projekts; TattAI bietet ihm eine API (`/api/bot/v1`, API-Schlüssel) und
+schickt ihm Kundennachrichten als signierte Ereignisse. Details: [`docs/bot-api.md`](docs/bot-api.md).
+
+- **Übernahme**: Antwortet ein Mensch (Tätowierer/Admin) im Chat, schaltet sich der Bot dort dauerhaft ab.
+- **Schalter pro Chat** im Chatverlauf der Lead-Seite (an/aus, mit Grund, Person und Zeitpunkt).
+- **Hauptschalter** im Admin unter WhatsApp → Chatbot.
+- Ist der Bot aus, bekommt er keine Nachrichten dieses Chats mehr und alle seine Aktionen werden abgelehnt.
+- **Referenzbilder** der Kunden lädt der Hintergrund-Dienst in `MEDIA_STORAGE_DIR` (privat, nicht öffentlich
+  erreichbar); angezeigt werden sie nur Admin und zuständigem Tätowierer. Beim Löschen eines Leads werden sie
+  mitgelöscht. In Produktion liegt der Ordner im Volume `media-data`, das in Backups aufgenommen werden sollte.
 
 ## Produktion (Vorschlag: Hetzner Cloud)
 
