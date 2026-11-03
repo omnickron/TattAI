@@ -16,7 +16,7 @@ import {
 import { setBotEnabled } from "@/lib/bot/state";
 import type { CalendarClient, CalendarConnection, CalendarEventInput } from "@/lib/google/calendar";
 import { zonedTimeToUtc } from "@/lib/time";
-import type { SendTemplateInput, WhatsAppClient } from "@/lib/whatsapp/client";
+import type { WhatsAppClient } from "@/lib/whatsapp/client";
 import {
   attachmentFilePath,
   deleteLeadFiles,
@@ -62,7 +62,7 @@ class FakeWhatsApp implements WhatsAppClient {
     this.texts.push(input.body);
     return { messageId: `wamid.t${this.texts.length}` };
   }
-  async sendTemplate(_i: SendTemplateInput) {
+  async sendTemplate() {
     return { messageId: "x" };
   }
   async submitTemplate() {
@@ -303,7 +303,7 @@ describe("bot API auth", () => {
     expect(checkBotAuth(`Bearer ${key}`, key)).toBeNull();
     expect(checkBotAuth(`Bearer wrong`, key)).toBe(401);
     expect(checkBotAuth(null, key)).toBe(401);
-    expect(checkBotAuth(`Bearer ${key}`, undefined)).toBe(503);
+    expect(checkBotAuth(`Bearer ${key}`, "")).toBe(503);
     expect(checkBotAuth(`Bearer short`, "short")).toBe(503);
   });
 });
