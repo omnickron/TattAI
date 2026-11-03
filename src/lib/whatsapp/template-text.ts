@@ -11,6 +11,11 @@ export const TEMPLATE_VARIABLES = {
   Ort: { description: "Studioadresse bzw. „telefonisch“", example: "Musterstraße 1, Musterstadt" },
   Tätowierer: { description: "Vorname der Person, die berät", example: "Alex" },
   Studio: { description: "Name des Studios", example: "Studio" },
+  TattooDatum: {
+    description: "Datum des nächsten Tattoo-Termins",
+    example: "Donnerstag, 26. November",
+  },
+  TattooUhrzeit: { description: "Uhrzeit des nächsten Tattoo-Termins", example: "14:00" },
 } as const;
 
 export type TemplateVariable = keyof typeof TEMPLATE_VARIABLES;
@@ -79,12 +84,23 @@ export function exampleValues(): Record<TemplateVariable, string> {
 
 /** Variables available per purpose (appointment data only exists for reminders). */
 export const ALLOWED_VARIABLES: Record<
-  "FIRST_CONTACT" | "FOLLOW_UP" | "REMINDER",
+  "FIRST_CONTACT" | "FOLLOW_UP" | "REMINDER" | "AFTER_CONSULTATION",
   TemplateVariable[]
 > = {
   FIRST_CONTACT: ["Vorname", "Name", "Studio"],
   FOLLOW_UP: ["Vorname", "Name", "Studio"],
   REMINDER: ["Vorname", "Name", "Studio", "Datum", "Uhrzeit", "Ort", "Tätowierer"],
+  AFTER_CONSULTATION: [
+    "Vorname",
+    "Name",
+    "Studio",
+    "Datum",
+    "Uhrzeit",
+    "Ort",
+    "Tätowierer",
+    "TattooDatum",
+    "TattooUhrzeit",
+  ],
 };
 
 export function isValidTemplateName(name: string): boolean {

@@ -123,7 +123,9 @@ async function handleInbound(prisma: PrismaClient, m: WaMessage, now: Date) {
   await cancelQueued(
     prisma,
     lead.id,
-    optOut ? ["FIRST_CONTACT", "FOLLOW_UP", "REMINDER"] : ["FIRST_CONTACT", "FOLLOW_UP"],
+    optOut
+      ? ["FIRST_CONTACT", "FOLLOW_UP", "REMINDER", "AFTER_CONSULTATION"]
+      : ["FIRST_CONTACT", "FOLLOW_UP"],
   );
 
   // Images/documents (e.g. reference pictures) are downloaded by the worker.

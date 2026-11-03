@@ -50,7 +50,7 @@ let deps: MessagingDeps;
 let templates: Record<"first" | "follow" | "reminder", string>;
 
 async function template(
-  purpose: "FIRST_CONTACT" | "FOLLOW_UP" | "REMINDER",
+  purpose: "FIRST_CONTACT" | "FOLLOW_UP" | "REMINDER" | "AFTER_CONSULTATION",
   name: string,
   text: string,
   approved = true,
@@ -554,5 +554,89 @@ describe("template submission", () => {
     await expect(submitTemplateForReview(prisma, pendingClient, id)).rejects.toThrow(
       "bereits von Meta geprüft",
     );
+  });
+});
+
+describe("after the consultation", () => {
+  let afterTemplate: string;
+  let tattooerId: string;
+
+  beforeEach(async () => {
+    afterTemplate = await template(
+      "AFTER_CONSULTATION",
+      "nach_beratung",
+      "Hallo {{Vorname}}, dein Tattoo-Termin ist am {{TattooDatum}} um {{TattooUhrzeit}} bei {{Tätowierer}}. Bis dann!",
+    );
+    const u = await prisma.user.create({
+      data: {
+        name: "Alex Berger",
+        email: "alex.after@example.com",
+        role: "TATTOOER",
+        tattooerProfile: { create: {} },
+      },
+      include: { tattooerProfile: true },
+    });
+    tattooerId = u.tattooerProfile!.id;
+  });
+
+  async function heldConsultation(tattooBooked: boolean | null, endsAt = at(MON, "09:30")) {
+    const l = await lead({ status: "TATTOO_BOOKED" });
+    const c = await prisma.consultation.create({
+      data: {
+        leadId: l.id,
+        tattooerId,
+        startsAt: new Date(endsAt.getTime() - HOUR / 2),
+        endsAt,
+        status: "HELD",
+        tattooBooked,
+      },
+    });
+    return { lead: l, consultation: c };
+  }
+
+  it("sends at the next send time once the outcome matches, with tattoo date variables", async () => {
+    await prisma.afterConsultationRule.create({
+      data: { hoursAfter: 2, condition: "TATTOO_BOOKED", templateId: afterTemplate },
+    });
+    const { consultation } = await heldConsultation(true);
+    await prisma.tattooBooking.create({
+      data: {
+        consultationId: consultation.id,
+        date: at("2026-11-26", "00:00"),
+        startsAt: at("2026-11-26", "14:00"),
+        endsAt: at("2026-11-26", "18:00"),
+      },
+    });
+    await heldConsultation(false, at(MON, "08:30")); // other outcome → no message
+
+    clock = at(MON, "11:00"); // 1.5 h after the end → not yet due
+    expect((await planMessages(deps)).planned).toBe(0);
+    clock = at(MON, "11:45"); // due, but outside send times
+    expect((await planMessages(deps)).planned).toBe(1);
+    expect(await dispatchMessages(deps)).toMatchObject({
+      sent: 0,
+      waiting: "Außerhalb der Sendezeiten",
+    });
+    clock = at(MON, "17:00");
+    expect((await dispatchMessages(deps)).sent).toBe(1);
+    expect(wa.sent.at(-1)).toMatchObject({
+      name: "nach_beratung",
+      parameters: ["Lena", "Donnerstag, 26. November", "14:00", "Alex"],
+    });
+  });
+
+  it("drops the message if the outcome was corrected and skips long-overdue ones", async () => {
+    await prisma.afterConsultationRule.create({
+      data: { hoursAfter: 0, condition: "UNDECIDED", templateId: afterTemplate },
+    });
+    const { consultation } = await heldConsultation(null);
+    await heldConsultation(null, at("2026-10-30", "09:30")); // > 7 days ago
+    clock = at(MON, "10:00");
+    expect((await planMessages(deps)).planned).toBe(1);
+    await prisma.consultation.update({
+      where: { id: consultation.id },
+      data: { tattooBooked: false },
+    });
+    expect(await dispatchMessages(deps)).toMatchObject({ sent: 0, cancelled: 1 });
   });
 });

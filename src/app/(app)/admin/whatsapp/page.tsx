@@ -1,30 +1,26 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ActionForm } from "@/components/action-form";
-import {
-  Badge,
-  Button,
-  ButtonLink,
-  Card,
-  CardTitle,
-  Field,
-  Input,
-  PageHeader,
-  Select,
-} from "@/components/ui";
+import { Badge, Button, Card, CardTitle, Field, Input, PageHeader, Select } from "@/components/ui";
 import { requireAdmin } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { APP_TIMEZONE, formatDateTime } from "@/lib/format";
 import { WEEKDAY_LABELS } from "@/lib/labels-time";
 import { localDateOf, startOfLocalDay } from "@/lib/time";
 import { isWhatsAppMock } from "@/lib/whatsapp/client";
-import { OUTBOUND_KIND_LABELS, OUTBOUND_STATUS_LABELS } from "@/lib/whatsapp/labels";
+import {
+  AFTER_CONDITION_LABELS,
+  OUTBOUND_KIND_LABELS,
+  OUTBOUND_STATUS_LABELS,
+} from "@/lib/whatsapp/labels";
 import { loadMessagingSettings, throttleConfig } from "@/lib/whatsapp/messaging";
 import { activeBatch, dailyLimit, nextSendTime, parseSendTimes } from "@/lib/whatsapp/throttle";
 import {
+  addAfterRule,
   addFollowUpStep,
   addReminderRule,
   cancelOutbound,
+  deleteAfterRule,
   deleteFollowUpStep,
   deleteReminderRule,
   pauseSendingAction,
@@ -33,6 +29,7 @@ import {
   setSendingEnabled,
   updateMessagingSettings,
 } from "./actions";
+import { WhatsAppTabs } from "./tabs";
 
 export const metadata: Metadata = { title: "WhatsApp" };
 
@@ -98,6 +95,10 @@ export default async function WhatsAppPage() {
     prisma.lead.count({ where: { botEnabled: false } }),
   ]);
   const byPurpose = (p: string) => templates.filter((t) => t.purpose === p);
+  const afterRules = await prisma.afterConsultationRule.findMany({
+    orderBy: [{ condition: "asc" }, { hoursAfter: "asc" }],
+    include: { template: true },
+  });
   const batch = activeBatch(now, cfg);
   const next = nextSendTime(now, cfg);
   const limit = dailyLimit(today, cfg);
@@ -115,12 +116,8 @@ export default async function WhatsAppPage() {
       <PageHeader
         title="WhatsApp"
         description="Automatische Erstansprache, Nachfassen und Erinnerungen – gestaffelt, damit die Nummer nicht als Spam auffällt."
-        actions={
-          <ButtonLink href="/admin/whatsapp/templates" variant="secondary">
-            Texte (Templates)
-          </ButtonLink>
-        }
       />
+      <WhatsAppTabs active="sending" />
 
       {isWhatsAppMock() && (
         <p className="mb-4 rounded-lg border border-dashed border-line p-3 text-sm text-ink-soft">
@@ -241,7 +238,8 @@ export default async function WhatsAppPage() {
                     <span className="block text-xs text-ink-soft">
                       {OUTBOUND_KIND_LABELS[q.kind]}
                       {q.kind === "FOLLOW_UP" && ` ${q.step}`}
-                      {q.kind === "REMINDER" && ` ${q.step} h vorher`} · ab{" "}
+                      {q.kind === "REMINDER" && ` ${q.step} h vorher`}
+                      {q.kind === "AFTER_CONSULTATION" && ` ${q.step} h danach`} · ab{" "}
                       {formatDateTime(q.notBefore)}
                       {q.lastError && ` · ${q.lastError}`}
                     </span>
@@ -523,6 +521,70 @@ export default async function WhatsAppPage() {
             </div>
           </ActionForm>
         </Card>
+        <Card className="lg:col-span-2">
+          <CardTitle>Nach dem Termin</CardTitle>
+          {afterRules.length === 0 ? (
+            <p className="mb-3 text-sm text-ink-soft">
+              Keine Nachrichten nach dem Termin eingerichtet.
+            </p>
+          ) : (
+            <ul className="mb-3 divide-y divide-line text-sm">
+              {afterRules.map((r) => (
+                <li key={r.id} className="flex items-center justify-between gap-2 py-2">
+                  <span>
+                    {r.hoursAfter === 0 ? "Direkt" : `${r.hoursAfter} Std.`} nach der Beratung ·{" "}
+                    {AFTER_CONDITION_LABELS[r.condition]} ·{" "}
+                    <span className="text-ink-soft">{r.template.name}</span>
+                  </span>
+                  <ActionForm action={deleteAfterRule.bind(null, r.id)}>
+                    <Button type="submit" variant="ghost" className="px-2 py-1 text-xs">
+                      Entfernen
+                    </Button>
+                  </ActionForm>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mb-3 text-xs text-ink-soft">
+            Gesendet wird, sobald das Ergebnis der Beratung eingetragen ist und der Abstand erreicht
+            ist – zu den Sendezeiten und innerhalb der Limits. Passt das Ergebnis beim Versand nicht
+            mehr (z. B. korrigiert), entfällt die Nachricht; mehr als 7 Tage überfällige Nachrichten
+            werden nicht mehr verschickt.
+          </p>
+          <ActionForm
+            action={addAfterRule}
+            className="grid items-end gap-2 space-y-0 sm:grid-cols-[7rem_1fr_1fr_auto]"
+          >
+            <Field label="Std. danach" htmlFor="hoursAfter">
+              <Input id="hoursAfter" name="hoursAfter" type="number" min={0} defaultValue={2} />
+            </Field>
+            <Field label="Wann" htmlFor="condition">
+              <Select id="condition" name="condition" defaultValue="TATTOO_BOOKED">
+                {Object.entries(AFTER_CONDITION_LABELS).map(([k, v]) => (
+                  <option key={k} value={k}>
+                    {v}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Template" htmlFor="after-template">
+              <Select id="after-template" name="templateId">
+                {byPurpose("AFTER_CONSULTATION").length === 0 && (
+                  <option value="">– erst unter „Texte“ ein Template anlegen –</option>
+                )}
+                {byPurpose("AFTER_CONSULTATION").map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Button type="submit" variant="secondary">
+              Hinzufügen
+            </Button>
+          </ActionForm>
+        </Card>
+
         <Card className="lg:col-span-2">
           <CardTitle
             action={

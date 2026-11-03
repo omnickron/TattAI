@@ -181,3 +181,42 @@ export async function setBotGloballyEnabled(enabled: boolean): Promise<ActionSta
       : "Bot für alle Chats ausgeschaltet.",
   );
 }
+
+const AFTER_CONDITIONS = ["HELD", "TATTOO_BOOKED", "UNDECIDED", "NO_TATTOO", "NO_SHOW"] as const;
+
+export async function addAfterRule(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  await requireAdmin();
+  const hoursAfter = Number(formData.get("hoursAfter"));
+  const condition = String(formData.get("condition") ?? "") as (typeof AFTER_CONDITIONS)[number];
+  const templateId = String(formData.get("templateId") ?? "");
+  if (!Number.isInteger(hoursAfter) || hoursAfter < 0 || hoursAfter > 24 * 30) {
+    return { ok: false, message: "Abstand: 0 bis 720 Stunden nach der Beratung." };
+  }
+  if (!AFTER_CONDITIONS.includes(condition))
+    return { ok: false, message: "Bitte einen Anlass wählen." };
+  const t = await prisma.whatsAppTemplate.findFirst({
+    where: { id: templateId, purpose: "AFTER_CONSULTATION" },
+  });
+  if (!t) return { ok: false, message: "Bitte ein Template „Nach dem Termin“ wählen." };
+  if (
+    await prisma.afterConsultationRule.findUnique({
+      where: { hoursAfter_condition: { hoursAfter, condition } },
+    })
+  ) {
+    return { ok: false, message: "Diese Nachricht gibt es für diesen Anlass und Abstand schon." };
+  }
+  await prisma.afterConsultationRule.create({ data: { hoursAfter, condition, templateId } });
+  return ok("Nachricht nach dem Termin hinzugefügt.");
+}
+
+export async function deleteAfterRule(id: string): Promise<ActionState> {
+  await requireAdmin();
+  await prisma.$transaction([
+    prisma.outboundMessage.updateMany({
+      where: { afterRuleId: id, status: "QUEUED" },
+      data: { status: "CANCELLED" },
+    }),
+    prisma.afterConsultationRule.delete({ where: { id } }),
+  ]);
+  return ok("Nachricht nach dem Termin entfernt.");
+}

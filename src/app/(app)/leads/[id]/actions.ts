@@ -66,7 +66,12 @@ export async function updateLead(
     },
   });
   if (whatsappOptOut)
-    await cancelQueued(prisma, leadId, ["FIRST_CONTACT", "FOLLOW_UP", "REMINDER"]);
+    await cancelQueued(prisma, leadId, [
+      "FIRST_CONTACT",
+      "FOLLOW_UP",
+      "REMINDER",
+      "AFTER_CONSULTATION",
+    ]);
   revalidatePath(`/leads/${leadId}`);
   return {
     ok: true,

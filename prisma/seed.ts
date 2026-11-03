@@ -71,6 +71,12 @@ const TEMPLATES = [
       "Hallo {{Vorname}}, das ist unsere letzte Nachricht zu deiner Anfrage. Wenn du später Lust hast, schreib uns einfach hier. [Platzhalter]",
   },
   {
+    purpose: "AFTER_CONSULTATION" as const,
+    name: "nach_beratung_tattoo",
+    bodyText:
+      "Hallo {{Vorname}}, danke für deinen Besuch bei {{Studio}}! Wir freuen uns auf deinen Tattoo-Termin am {{TattooDatum}} um {{TattooUhrzeit}} bei {{Tätowierer}}. [Platzhalter]",
+  },
+  {
     purpose: "REMINDER" as const,
     name: "erinnerung",
     bodyText:

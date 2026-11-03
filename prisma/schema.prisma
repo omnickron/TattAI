@@ -392,6 +392,7 @@ enum TemplatePurpose {
   FIRST_CONTACT
   FOLLOW_UP
   REMINDER
+  AFTER_CONSULTATION
 }
 
 enum TemplateCategory {
@@ -435,6 +436,7 @@ model WhatsAppTemplate {
 
   followUpSteps    FollowUpStep[]
   reminderRules    ReminderRule[]
+  afterRules       AfterConsultationRule[]
   outboundMessages OutboundMessage[]
 
   @@unique([name, language])
@@ -498,6 +500,29 @@ enum OutboundKind {
   FIRST_CONTACT
   FOLLOW_UP
   REMINDER
+  AFTER_CONSULTATION
+}
+
+// Which consultations an "after the consultation" message is for
+enum AfterConsultationCondition {
+  HELD // every consultation that took place
+  TATTOO_BOOKED // took place and a tattoo was booked
+  UNDECIDED // took place, customer still deciding
+  NO_TATTOO // took place, no tattoo
+  NO_SHOW // customer did not come
+}
+
+model AfterConsultationRule {
+  id         String                     @id @default(cuid())
+  hoursAfter Int
+  condition  AfterConsultationCondition
+  templateId String
+  template   WhatsAppTemplate           @relation(fields: [templateId], references: [id])
+  createdAt  DateTime                   @default(now())
+
+  outboundMessages OutboundMessage[]
+
+  @@unique([hoursAfter, condition])
 }
 
 enum OutboundStatus {
@@ -509,26 +534,28 @@ enum OutboundStatus {
 
 // Queue of automatic template messages. The unique key makes planning idempotent.
 model OutboundMessage {
-  id             String           @id @default(cuid())
+  id             String                 @id @default(cuid())
   leadId         String
-  lead           Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  lead           Lead                   @relation(fields: [leadId], references: [id], onDelete: Cascade)
   consultationId String?
-  consultation   Consultation?    @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  consultation   Consultation?          @relation(fields: [consultationId], references: [id], onDelete: Cascade)
   kind           OutboundKind
-  // Follow-up position or reminder hours; 0 for first contact
-  step           Int              @default(0)
+  // Follow-up position, reminder hours or hours after the consultation; 0 for first contact
+  step           Int                    @default(0)
+  afterRuleId    String?
+  afterRule      AfterConsultationRule? @relation(fields: [afterRuleId], references: [id], onDelete: SetNull)
   // Uniqueness key: lead (first contact/follow-up) or consultation (reminder)
-  dedupeKey      String           @unique
+  dedupeKey      String                 @unique
   templateId     String
-  template       WhatsAppTemplate @relation(fields: [templateId], references: [id])
+  template       WhatsAppTemplate       @relation(fields: [templateId], references: [id])
   notBefore      DateTime
-  status         OutboundStatus   @default(QUEUED)
-  attempts       Int              @default(0)
+  status         OutboundStatus         @default(QUEUED)
+  attempts       Int                    @default(0)
   lastError      String?
   waMessageId    String?
   sentAt         DateTime?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
 
   message Message?
 

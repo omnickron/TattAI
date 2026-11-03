@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import type { ActionState } from "@/lib/action-state";
@@ -17,7 +18,7 @@ import { submitTemplateForReview, TemplateError } from "@/lib/whatsapp/templates
 const PATH = "/admin/whatsapp/templates";
 
 const createSchema = z.object({
-  purpose: z.enum(["FIRST_CONTACT", "FOLLOW_UP", "REMINDER"]),
+  purpose: z.enum(["FIRST_CONTACT", "FOLLOW_UP", "REMINDER", "AFTER_CONSULTATION"]),
   name: z.string().trim().toLowerCase(),
   category: z.enum(["UTILITY", "MARKETING"]),
   bodyText: z.string(),
@@ -36,8 +37,9 @@ export async function createTemplate(_prev: ActionState, formData: FormData): Pr
   }
   const compiled = compileTemplate(bodyText, ALLOWED_VARIABLES[purpose]);
   if (!compiled.ok) return { ok: false, message: compiled.error };
+  let created: { id: string };
   try {
-    await prisma.whatsAppTemplate.create({
+    created = await prisma.whatsAppTemplate.create({
       data: { purpose, name, category, bodyText: bodyText.trim() },
     });
   } catch (err) {
@@ -47,7 +49,8 @@ export async function createTemplate(_prev: ActionState, formData: FormData): Pr
     throw err;
   }
   revalidatePath(PATH);
-  return { ok: true, message: "Template angelegt. Jetzt bei Meta zur Prüfung einreichen." };
+  // Fresh page (resets the form) and jump to the new template.
+  redirect(`${PATH}?created=${created.id}#template-${created.id}`);
 }
 
 export async function updateTemplateText(

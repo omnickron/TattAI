@@ -127,7 +127,11 @@ Alles wird im Admin unter **WhatsApp** gepflegt:
 - **Nachfassen**: frei definierbare Schritte (z. B. nach 24 h und 72 h). Eine Antwort des Kunden stoppt sie;
   ohne Antwort wird der Lead nach der eingestellten Zeit „Keine Antwort“.
 - **Erinnerungen** vor dem Termin (Standard 24 h und 2 h) – pünktlich, auch außerhalb der Sendezeiten.
-- **Texte (Templates)** mit Platzhaltern wie `{{Vorname}}`, `{{Datum}}`, `{{Uhrzeit}}`. Die App reicht sie bei
+- **Nach dem Termin**: Nachrichten X Stunden nach der Beratung, je nach Ergebnis (stattgefunden, Tattoo
+  gebucht, Kunde überlegt, kein Tattoo, No-Show) – zu den Sendezeiten; passt das Ergebnis beim Versand nicht
+  mehr, entfällt die Nachricht; mehr als 7 Tage überfällige werden nicht verschickt.
+- **Texte (Templates)** im Reiter „Texte“ mit Variablen wie `{{Vorname}}`, `{{Datum}}`, `{{Uhrzeit}}`,
+  `{{TattooDatum}}` (per Klick einfügbar, mit Live-Vorschau). Die App reicht sie bei
   Meta zur Prüfung ein. Änderungen werden als neue Version eingereicht (`name_v2` …); bis zur Genehmigung wird
   die bisher genehmigte Fassung verschickt.
 - Nur Leads mit Einwilligung und gültiger Nummer werden angeschrieben. „STOP“/„Abmelden“ setzt ein Opt-out.

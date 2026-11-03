@@ -2,7 +2,12 @@
  * Automatic WhatsApp messages: planning (first contact, follow-ups, reminders)
  * and dispatching with anti-spam staggering. Called periodically by the worker.
  */
-import type { MessagingSettings, OutboundKind, PrismaClient } from "@/generated/prisma/client";
+import type {
+  AfterConsultationCondition,
+  MessagingSettings,
+  OutboundKind,
+  PrismaClient,
+} from "@/generated/prisma/client";
 import { DEFAULT_TIME_ZONE, localDateOf, startOfLocalDay } from "../time";
 import { classifyError, WhatsAppApiError, type WhatsAppClient } from "./client";
 import {
@@ -33,7 +38,10 @@ const HOUR = 3600_000;
 const MAX_ATTEMPTS = 5;
 /** Messages sent per worker run at most (the gap usually stops earlier). */
 const MAX_PER_RUN = 10;
-const BULK_KINDS: OutboundKind[] = ["FIRST_CONTACT", "FOLLOW_UP"];
+// Bulk messages: released only at send times and within the limits.
+const BULK_KINDS: OutboundKind[] = ["FIRST_CONTACT", "FOLLOW_UP", "AFTER_CONSULTATION"];
+/** After-consultation messages that are overdue by more than this are skipped. */
+const AFTER_MAX_LATE_MS = 7 * 24 * HOUR;
 const OPT_OUT_WORDS = new Set(["stop", "stopp", "abmelden", "keine nachrichten", "unsubscribe"]);
 
 export async function loadMessagingSettings(prisma: PrismaClient): Promise<MessagingSettings> {
@@ -202,7 +210,61 @@ export async function planMessages(deps: MessagingDeps) {
       planned += (await prisma.outboundMessage.createMany({ data, skipDuplicates: true })).count;
   }
 
+  // 4. Messages after the consultation (depending on the outcome)
+  const afterRules = await prisma.afterConsultationRule.findMany();
+  if (afterRules.length) {
+    const maxHours = Math.max(...afterRules.map((r) => r.hoursAfter));
+    const recent = await prisma.consultation.findMany({
+      where: {
+        status: { in: ["HELD", "NO_SHOW"] },
+        endsAt: { lte: now, gte: new Date(now.getTime() - maxHours * HOUR - AFTER_MAX_LATE_MS) },
+        lead: eligibleLead,
+      },
+      select: { id: true, leadId: true, endsAt: true, status: true, tattooBooked: true },
+    });
+    const data = recent.flatMap((c) =>
+      afterRules.flatMap((r) => {
+        const due = new Date(c.endsAt.getTime() + r.hoursAfter * HOUR);
+        if (due > now || now.getTime() - due.getTime() > AFTER_MAX_LATE_MS) return [];
+        if (!matchesAfterCondition(r.condition, c)) return [];
+        return [
+          {
+            leadId: c.leadId,
+            consultationId: c.id,
+            kind: "AFTER_CONSULTATION" as const,
+            step: r.hoursAfter,
+            afterRuleId: r.id,
+            dedupeKey: `after:${c.id}:${r.id}`,
+            templateId: r.templateId,
+            notBefore: due,
+          },
+        ];
+      }),
+    );
+    if (data.length)
+      planned += (await prisma.outboundMessage.createMany({ data, skipDuplicates: true })).count;
+  }
+
   return { planned, noResponse };
+}
+
+/** Does a consultation outcome match an "after the consultation" rule? */
+export function matchesAfterCondition(
+  condition: AfterConsultationCondition,
+  c: { status: string; tattooBooked: boolean | null },
+): boolean {
+  switch (condition) {
+    case "HELD":
+      return c.status === "HELD";
+    case "TATTOO_BOOKED":
+      return c.status === "HELD" && c.tattooBooked === true;
+    case "UNDECIDED":
+      return c.status === "HELD" && c.tattooBooked === null;
+    case "NO_TATTOO":
+      return c.status === "HELD" && c.tattooBooked === false;
+    case "NO_SHOW":
+      return c.status === "NO_SHOW";
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -240,6 +302,15 @@ async function templateValues(
     values.Uhrzeit = timeOnly(tz).format(c.startsAt);
     values.Ort = c.mode === "PHONE" ? "telefonisch" : app?.studioAddress || "im Studio";
     values.Tätowierer = c.tattooer.user.name.split(/\s+/)[0];
+    // Next tattoo session of this consultation (for confirmations after the consultation)
+    const sessions = await deps.prisma.tattooBooking.findMany({
+      where: { consultationId: c.id, cancelled: false },
+      orderBy: [{ date: "asc" }, { sessionNumber: "asc" }],
+    });
+    const nowTs = (deps.now ?? (() => new Date()))().getTime() - 24 * HOUR;
+    const next = sessions.find((x) => x.date.getTime() >= nowTs) ?? sessions[0];
+    values.TattooDatum = next ? weekdayDate(tz).format(next.startsAt ?? next.date) : "noch offen";
+    values.TattooUhrzeit = next?.startsAt ? timeOnly(tz).format(next.startsAt) : "nach Absprache";
   }
   return values;
 }
@@ -247,7 +318,13 @@ async function templateValues(
 /** Re-checks right before sending whether the message is still wanted. */
 async function stillApplicable(
   prisma: PrismaClient,
-  o: { kind: OutboundKind; leadId: string; consultationId: string | null; dedupeKey: string },
+  o: {
+    kind: OutboundKind;
+    leadId: string;
+    consultationId: string | null;
+    dedupeKey: string;
+    afterRuleId?: string | null;
+  },
   now: Date,
 ): Promise<boolean> {
   const lead = await prisma.lead.findUnique({ where: { id: o.leadId } });
@@ -256,6 +333,16 @@ async function stillApplicable(
   if (o.kind === "FIRST_CONTACT") return lead.status === "NEW";
   if (o.kind === "FOLLOW_UP") return lead.status === "CONTACTED";
   if (!o.consultationId) return false;
+  if (o.kind === "AFTER_CONSULTATION") {
+    // The outcome may have been corrected since planning.
+    const [c, rule] = await Promise.all([
+      prisma.consultation.findUnique({ where: { id: o.consultationId } }),
+      o.afterRuleId
+        ? prisma.afterConsultationRule.findUnique({ where: { id: o.afterRuleId } })
+        : null,
+    ]);
+    return Boolean(c && rule && matchesAfterCondition(rule.condition, c));
+  }
   const c = await prisma.consultation.findUnique({ where: { id: o.consultationId } });
   return Boolean(
     c &&

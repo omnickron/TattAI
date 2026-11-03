@@ -1,17 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { ActionForm } from "@/components/action-form";
-import {
-  Badge,
-  Button,
-  Card,
-  CardTitle,
-  Field,
-  Input,
-  PageHeader,
-  Select,
-  Textarea,
-} from "@/components/ui";
+import { Badge, Button, Card, CardTitle, Field, Input, PageHeader, Select } from "@/components/ui";
 import { requireAdmin } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { formatDateTime } from "@/lib/format";
@@ -22,26 +11,24 @@ import {
   renderTemplate,
   TEMPLATE_VARIABLES,
 } from "@/lib/whatsapp/template-text";
+import { NewTemplateFields, TemplateTextField } from "@/components/template-text-field";
 import { createTemplate, deleteTemplate, submitTemplate, updateTemplateText } from "./actions";
+import { WhatsAppTabs } from "../tabs";
 
 export const metadata: Metadata = { title: "WhatsApp-Texte" };
 
-function Variables({ purpose }: { purpose: keyof typeof ALLOWED_VARIABLES }) {
-  return (
-    <p className="text-xs text-ink-soft">
-      Platzhalter:{" "}
-      {ALLOWED_VARIABLES[purpose].map((v, i) => (
-        <span key={v}>
-          {i > 0 && ", "}
-          <code className="rounded bg-muted px-1">{`{{${v}}}`}</code>
-        </span>
-      ))}
-    </p>
-  );
-}
+const variablesFor = (purpose: keyof typeof ALLOWED_VARIABLES) =>
+  ALLOWED_VARIABLES[purpose].map((name) => ({
+    name,
+    description: TEMPLATE_VARIABLES[name].description,
+  }));
 
-export default async function TemplatesPage() {
+export default async function TemplatesPage({
+  searchParams,
+}: PageProps<"/admin/whatsapp/templates">) {
   await requireAdmin();
+  const params = await searchParams;
+  const created = typeof params.created === "string" ? params.created : null;
   const templates = await prisma.whatsAppTemplate.findMany({
     orderBy: [{ purpose: "asc" }, { name: "asc" }],
   });
@@ -49,13 +36,19 @@ export default async function TemplatesPage() {
 
   return (
     <>
-      <Link href="/admin/whatsapp" className="text-sm text-ink-soft hover:text-ink">
-        ← WhatsApp
-      </Link>
       <PageHeader
-        title="WhatsApp-Texte"
+        title="WhatsApp"
         description="Automatische Nachrichten dürfen nur mit Texten verschickt werden, die Meta vorab genehmigt hat. Geänderte Texte werden als neue Version eingereicht; bis zur Genehmigung wird die bisherige Fassung verwendet."
       />
+      <WhatsAppTabs active="texts" />
+      {created && (
+        <p
+          role="status"
+          className="mb-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+        >
+          Template angelegt (grün markiert). Als Nächstes bei Meta zur Prüfung einreichen.
+        </p>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-[1fr_22rem]">
         <div className="space-y-4">
@@ -65,7 +58,11 @@ export default async function TemplatesPage() {
             const canSubmit =
               t.status !== "PENDING" && (t.approvedText !== t.bodyText || t.status !== "APPROVED");
             return (
-              <Card key={t.id}>
+              <Card
+                key={t.id}
+                id={`template-${t.id}`}
+                className={created === t.id ? "ring-2 ring-emerald-500/60" : undefined}
+              >
                 <div className="mb-3 flex flex-wrap items-center gap-2">
                   <h2 className="font-semibold">{t.name}</h2>
                   <Badge tone="violet">{PURPOSE_LABELS[t.purpose]}</Badge>
@@ -90,17 +87,13 @@ export default async function TemplatesPage() {
                   </div>
                 )}
                 <ActionForm action={updateTemplateText.bind(null, t.id)}>
-                  <Field label="Text" htmlFor={`text-${t.id}`}>
-                    <Textarea
-                      id={`text-${t.id}`}
-                      name="bodyText"
-                      defaultValue={t.bodyText}
-                      rows={4}
-                      maxLength={1024}
-                      disabled={t.status === "PENDING"}
-                    />
-                  </Field>
-                  <Variables purpose={t.purpose} />
+                  <TemplateTextField
+                    id={`text-${t.id}`}
+                    defaultValue={t.bodyText}
+                    variables={variablesFor(t.purpose)}
+                    examples={examples}
+                    disabled={t.status === "PENDING"}
+                  />
                   <div className="flex flex-wrap items-end gap-2">
                     <Select
                       name="category"
@@ -150,15 +143,16 @@ export default async function TemplatesPage() {
         <Card className="h-fit">
           <CardTitle>Neuer Text</CardTitle>
           <ActionForm action={createTemplate}>
-            <Field label="Verwendung" htmlFor="purpose">
-              <Select id="purpose" name="purpose" defaultValue="FIRST_CONTACT">
-                {Object.entries(PURPOSE_LABELS).map(([k, v]) => (
-                  <option key={k} value={k}>
-                    {v}
-                  </option>
-                ))}
-              </Select>
-            </Field>
+            <NewTemplateFields
+              purposes={Object.entries(PURPOSE_LABELS).map(([value, label]) => ({ value, label }))}
+              variablesByPurpose={Object.fromEntries(
+                Object.keys(PURPOSE_LABELS).map((p) => [
+                  p,
+                  variablesFor(p as keyof typeof ALLOWED_VARIABLES),
+                ]),
+              )}
+              examples={examples}
+            />
             <Field
               label="Name bei Meta"
               htmlFor="name"
@@ -176,24 +170,6 @@ export default async function TemplatesPage() {
                 <option value="MARKETING">Marketing</option>
               </Select>
             </Field>
-            <Field label="Text" htmlFor="bodyText">
-              <Textarea
-                id="bodyText"
-                name="bodyText"
-                rows={5}
-                required
-                maxLength={1024}
-                placeholder="Hallo {{Vorname}}, danke für deine Anfrage …"
-              />
-            </Field>
-            <div className="space-y-1 text-xs text-ink-soft">
-              {Object.entries(TEMPLATE_VARIABLES).map(([k, v]) => (
-                <p key={k}>
-                  <code className="rounded bg-muted px-1">{`{{${k}}}`}</code> {v.description}
-                </p>
-              ))}
-              <p>Datum, Uhrzeit, Ort und Tätowierer gibt es nur in Erinnerungen.</p>
-            </div>
             <Button type="submit">Anlegen</Button>
           </ActionForm>
         </Card>

@@ -13,7 +13,7 @@ export async function resetDatabase(prisma: ReturnType<typeof createTestPrisma>)
              "AppSettings", "FairnessShare", "FairnessConfig", "AvailabilityRule",
              "AvailabilityException", "TattooerProfile", "User", "OutboundMessage", "FollowUpStep",
              "ReminderRule", "WhatsAppTemplate", "MessagingSettings", "LeadAttachment", "BotDelivery",
-             "CalendarEventDeletion"
+             "CalendarEventDeletion", "AfterConsultationRule"
              RESTART IDENTITY CASCADE
   `);
 }

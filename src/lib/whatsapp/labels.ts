@@ -2,6 +2,7 @@ export const PURPOSE_LABELS = {
   FIRST_CONTACT: "Erstkontakt",
   FOLLOW_UP: "Nachfassen",
   REMINDER: "Erinnerung",
+  AFTER_CONSULTATION: "Nach dem Termin",
 } as const;
 
 export const TEMPLATE_STATUS_LABELS = {
@@ -16,6 +17,15 @@ export const OUTBOUND_KIND_LABELS = {
   FIRST_CONTACT: "Erstkontakt",
   FOLLOW_UP: "Nachfassen",
   REMINDER: "Erinnerung",
+  AFTER_CONSULTATION: "Nach dem Termin",
+} as const;
+
+export const AFTER_CONDITION_LABELS = {
+  HELD: "nach jeder stattgefundenen Beratung",
+  TATTOO_BOOKED: "wenn ein Tattoo gebucht wurde",
+  UNDECIDED: "wenn der Kunde noch überlegt",
+  NO_TATTOO: "wenn kein Tattoo gebucht wurde",
+  NO_SHOW: "bei No-Show",
 } as const;
 
 export const OUTBOUND_STATUS_LABELS = {
