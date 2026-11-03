@@ -54,6 +54,7 @@ export function OutcomePanel({
     c.status === "NO_SHOW" ||
     (c.status === "CANCELLED" && Boolean(c.outcomeRecordedAt));
   const sessions = [...c.tattooBookings].sort((a, b) => a.sessionNumber - b.sessionNumber);
+  const activeSessions = sessions.filter((x) => !x.cancelled).length;
   const defaults = {
     outcome: c.status === "SCHEDULED" ? null : c.status,
     tattoo:
@@ -101,8 +102,8 @@ export function OutcomePanel({
               <TattooSessions consultationId={c.id} sessions={sessions} now={now} canEdit />
             ) : (
               <p className="text-sm text-ink-soft">
-                {sessions.filter((x) => !x.cancelled).length} Tattoo-Termin(e) – siehe
-                „Tattoo-Termine“.
+                {activeSessions === 1 ? "1 Tattoo-Termin" : `${activeSessions} Tattoo-Termine`} –
+                siehe „Tattoo-Termine“.
               </p>
             ))}
 
