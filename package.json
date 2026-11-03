@@ -18,7 +18,10 @@
     "jobs:webhooks": "tsx scripts/retry-webhooks.ts",
     "dev:simulate-lead": "tsx scripts/simulate-lead.ts",
     "worker": "tsx scripts/worker.ts",
-    "dev:simulate-whatsapp": "tsx scripts/simulate-whatsapp.ts"
+    "dev:simulate-whatsapp": "tsx scripts/simulate-whatsapp.ts",
+    "predev": "prisma generate",
+    "prebuild": "prisma generate",
+    "db:update": "prisma migrate deploy && prisma generate"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.1",

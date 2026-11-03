@@ -50,6 +50,15 @@ npm run dev:simulate-lead          # 1 Lead
 npm run dev:simulate-lead -- 5     # 5 Leads
 ```
 
+## Update holen
+
+```bash
+git pull
+npm install          # nur nötig, wenn sich Abhängigkeiten geändert haben (schadet nie)
+npm run db:update    # Datenbank-Migrationen + Datenbank-Client neu erzeugen
+npm run dev          # erzeugt den Datenbank-Client vor dem Start ebenfalls automatisch
+```
+
 ## Befehle
 
 | Befehl | Zweck |
@@ -59,6 +68,7 @@ npm run dev:simulate-lead -- 5     # 5 Leads
 | `npm run typecheck` / `npm run lint` | Typprüfung / Linting |
 | `npm run db:migrate` | Neue Migration erzeugen/anwenden |
 | `npm run db:seed` | Beispieldaten einspielen (mehrfach ausführbar) |
+| `npm run db:update` | Migrationen anwenden und Datenbank-Client erzeugen (nach `git pull`) |
 | `npm run jobs:webhooks` | Fehlgeschlagene Lead-Abrufe erneut versuchen |
 | `npm run worker` | Hintergrund-Dienst (WhatsApp-Versand, Retries) |
 
