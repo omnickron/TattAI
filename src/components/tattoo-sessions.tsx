@@ -2,9 +2,12 @@ import { ActionForm } from "@/components/action-form";
 import { Badge, Button, cn, Input, TimeSelect } from "@/components/ui";
 import {
   addSessionAction,
+  retrySessionSyncAction,
   setSessionCancelledAction,
   updateSessionAction,
 } from "@/app/(app)/consultations/actions";
+import { SyncRetry } from "@/components/sync-retry";
+import { describeCalendarError } from "@/lib/scheduling/session-calendar";
 import { APP_TIMEZONE } from "@/lib/format";
 import { centsToInput, formatEuro } from "@/lib/outcomes/money";
 import { formatTimeOfDay, localDateOf, localMinuteOf } from "@/lib/time";
@@ -141,14 +144,7 @@ export function TattooSessions({
                     >
                       {s.amountCents === null ? "Betrag fehlt" : formatEuro(s.amountCents)}
                     </span>
-                    {!s.cancelled && (s.calendarSyncPending || s.calendarSyncError) && (
-                      <span
-                        className="text-xs text-amber-700 dark:text-amber-400"
-                        title={s.calendarSyncError ?? undefined}
-                      >
-                        Kalender ausstehend
-                      </span>
-                    )}
+
                     <span className="ml-auto">
                       <Badge tone={state.tone}>{state.label}</Badge>
                     </span>
@@ -207,6 +203,13 @@ export function TattooSessions({
                     </div>
                   )}
                 </details>
+                {!s.cancelled && (s.calendarSyncPending || s.calendarSyncError) && (
+                  <SyncRetry
+                    action={retrySessionSyncAction.bind(null, s.id)}
+                    reason={s.calendarSyncError ? describeCalendarError(s.calendarSyncError) : null}
+                    canRetry={canEdit}
+                  />
+                )}
               </li>
             );
           })}

@@ -7,7 +7,7 @@ import { requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { APP_TIMEZONE } from "@/lib/format";
 import { schedulingDeps } from "@/lib/scheduling/deps";
-import { syncConsultationSessions } from "@/lib/scheduling/session-calendar";
+import { retrySessionSync, syncConsultationSessions } from "@/lib/scheduling/session-calendar";
 import {
   addSession,
   OutcomeError,
@@ -160,4 +160,14 @@ export async function setSessionCancelledAction(
   await syncConsultationSessions(schedulingDeps(), access.consultation.id);
   revalidate(access.consultation.leadId);
   return { ok: true, message: cancelled ? "Termin abgesagt." : "Termin wiederhergestellt." };
+}
+
+/** Manually retries the Google Calendar sync of one tattoo session. */
+export async function retrySessionSyncAction(sessionId: string): Promise<ActionState> {
+  const access = await sessionAccess(sessionId);
+  if (!access) return { ok: false, message: "Kein Zugriff." };
+  const result = await retrySessionSync(schedulingDeps(), sessionId);
+  // On success the client shows the confirmation first and refreshes itself shortly after.
+  if (!result.ok) revalidate(access.consultation.leadId);
+  return result;
 }

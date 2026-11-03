@@ -291,29 +291,32 @@ model Consultation {
 }
 
 model TattooBooking {
-  id                  String       @id @default(cuid())
-  consultationId      String
-  consultation        Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  id                    String       @id @default(cuid())
+  consultationId        String
+  consultation          Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
   // 1, 2, 3 … within the tattoo
-  sessionNumber       Int          @default(1)
+  sessionNumber         Int          @default(1)
   // Local day of the session (stored as local midnight)
-  date                DateTime
+  date                  DateTime
   // Optional time slot; shown in the calendar and blocks consultation slots
-  startsAt            DateTime?
-  endsAt              DateTime?
+  startsAt              DateTime?
+  endsAt                DateTime?
   // Google Calendar sync (same app calendar as the consultations)
-  calendarId          String?
-  calendarEventId     String?
-  calendarSyncPending Boolean      @default(false)
-  calendarSyncError   String?
-  calendarSyncedAt    DateTime?
+  calendarId            String?
+  calendarEventId       String?
+  calendarSyncPending   Boolean      @default(false)
+  calendarSyncError     String?
+  calendarSyncedAt      DateTime?
+  // Automatic retries back off (1, 2, 4 … min, max. 60 min); a manual retry ignores this
+  calendarSyncAttempts  Int          @default(0)
+  calendarNextAttemptAt DateTime?
   // Entered manually; may be added later
-  amountCents         Int?
-  currency            String       @default("EUR")
-  cancelled           Boolean      @default(false)
-  note                String?
-  createdAt           DateTime     @default(now())
-  updatedAt           DateTime     @updatedAt
+  amountCents           Int?
+  currency              String       @default("EUR")
+  cancelled             Boolean      @default(false)
+  note                  String?
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
 
   @@index([date])
   @@index([startsAt])

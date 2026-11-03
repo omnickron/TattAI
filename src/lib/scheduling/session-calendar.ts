@@ -13,6 +13,32 @@ type Tx = Pick<PrismaClient, "calendarEventDeletion" | "tattooBooking" | "consul
 
 const MAX_DELETION_ATTEMPTS = 10;
 
+/** Automatic retry delay: 1, 2, 4 … minutes, at most one hour. */
+export function retryDelayMs(attempts: number): number {
+  return Math.min(60_000 * 2 ** Math.max(0, attempts - 1), 60 * 60_000);
+}
+
+/** Turns a technical calendar error into a short German explanation. */
+export function describeCalendarError(message: string | null | undefined): string {
+  const m = (message ?? "").toLowerCase();
+  if (
+    m.includes("invalid_grant") ||
+    m.includes(" 401") ||
+    m.includes("nicht verbunden") ||
+    m.includes("token")
+  ) {
+    return "Die Verbindung zu Google ist abgelaufen. Bitte den Google-Kalender unter „Verfügbarkeit“ neu verbinden.";
+  }
+  if (m.includes(" 403"))
+    return "Google verweigert den Zugriff auf den Kalender. Bitte den Google-Kalender neu verbinden.";
+  if (m.includes(" 404") || m.includes(" 410"))
+    return "Der Kalender wurde in Google nicht gefunden – er wird neu angelegt.";
+  if (m.includes("timeout") || m.includes("fetch failed") || /\b5\d\d\b/.test(m)) {
+    return "Google war nicht erreichbar. Bitte später erneut versuchen.";
+  }
+  return "Die Übertragung zu Google ist fehlgeschlagen.";
+}
+
 /** Queues removal of the calendar events of the given sessions (call before deleting them). */
 export async function queueSessionEventDeletions(
   db: Tx,
@@ -102,7 +128,12 @@ export async function syncSessionEvent(deps: SchedulingDeps, sessionId: string):
     if (!wanted || !profile.googleConnectedAt) {
       await prisma.tattooBooking.update({
         where: { id: s.id },
-        data: { calendarSyncPending: false, calendarSyncError: null },
+        data: {
+          calendarSyncPending: false,
+          calendarSyncError: null,
+          calendarSyncAttempts: 0,
+          calendarNextAttemptAt: null,
+        },
       });
       return true;
     }
@@ -139,6 +170,8 @@ export async function syncSessionEvent(deps: SchedulingDeps, sessionId: string):
         calendarEventId: eventId,
         calendarSyncPending: false,
         calendarSyncError: null,
+        calendarSyncAttempts: 0,
+        calendarNextAttemptAt: null,
         calendarSyncedAt: new Date(),
       },
     });
@@ -148,7 +181,14 @@ export async function syncSessionEvent(deps: SchedulingDeps, sessionId: string):
     console.error(`[calendar] tattoo session ${s.id} sync failed:`, message);
     await prisma.tattooBooking.update({
       where: { id: s.id },
-      data: { calendarSyncPending: true, calendarSyncError: message },
+      data: {
+        calendarSyncPending: true,
+        calendarSyncError: message,
+        calendarSyncAttempts: { increment: 1 },
+        calendarNextAttemptAt: new Date(
+          (deps.now ?? (() => new Date()))().getTime() + retryDelayMs(s.calendarSyncAttempts + 1),
+        ),
+      },
     });
     return false;
   }
@@ -196,8 +236,12 @@ export async function syncConsultationSessions(deps: SchedulingDeps, consultatio
 
 /** Worker: retry sessions whose calendar sync failed or is still open. */
 export async function syncPendingSessions(deps: SchedulingDeps, limit = 25) {
+  const now = (deps.now ?? (() => new Date()))();
   const pending = await deps.prisma.tattooBooking.findMany({
-    where: { calendarSyncPending: true },
+    where: {
+      calendarSyncPending: true,
+      OR: [{ calendarNextAttemptAt: null }, { calendarNextAttemptAt: { lte: now } }],
+    },
     orderBy: { updatedAt: "asc" },
     take: limit,
     select: { id: true },
@@ -206,4 +250,29 @@ export async function syncPendingSessions(deps: SchedulingDeps, limit = 25) {
   for (const s of pending) if (await syncSessionEvent(deps, s.id)) synced++;
   const deletions = await processCalendarDeletions(deps);
   return { synced, deleted: deletions.deleted };
+}
+
+/** Manual retry from the app: syncs right away (ignores the backoff) and explains the result. */
+export async function retrySessionSync(deps: SchedulingDeps, sessionId: string) {
+  const ok = await syncSessionEvent(deps, sessionId);
+  if (ok) return { ok: true, message: "Mit Google synchronisiert." };
+  const s = await deps.prisma.tattooBooking.findUnique({
+    where: { id: sessionId },
+    select: { calendarSyncError: true },
+  });
+  return { ok: false, message: describeCalendarError(s?.calendarSyncError) };
+}
+
+/** After (re)connecting Google: retry all open sessions of this tattooer right away. */
+export async function resyncTattooerSessions(deps: SchedulingDeps, tattooerId: string) {
+  await deps.prisma.tattooBooking.updateMany({
+    where: { consultation: { tattooerId }, calendarSyncPending: true },
+    data: { calendarNextAttemptAt: null },
+  });
+  const pending = await deps.prisma.tattooBooking.findMany({
+    where: { consultation: { tattooerId }, calendarSyncPending: true },
+    select: { id: true },
+  });
+  for (const p of pending) await syncSessionEvent(deps, p.id);
+  return pending.length;
 }

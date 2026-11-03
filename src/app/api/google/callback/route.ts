@@ -6,6 +6,7 @@ import { encryptSecret } from "@/lib/crypto";
 import { prisma } from "@/lib/db";
 import { APP_CALENDAR_NAME } from "@/lib/google/calendar";
 import { createCalendarClient } from "@/lib/google/client";
+import { resyncTattooerSessions } from "@/lib/scheduling/session-calendar";
 import { CALENDAR_SCOPES, exchangeCalendarCode, STATE_COOKIE } from "@/lib/google/oauth";
 
 function back(request: NextRequest, result: string) {
@@ -62,6 +63,11 @@ export async function GET(request: NextRequest) {
             : APP_CALENDAR_NAME,
       },
     });
+    // Catch up on tattoo sessions that could not be written before (best effort).
+    await resyncTattooerSessions(
+      { prisma, calendar: createCalendarClient(), appUrl: process.env.APP_URL },
+      profile.id,
+    ).catch((err) => console.error("[google] resync after connect failed:", err));
     return back(request, "connected");
   } catch (err) {
     console.error("[google] calendar connection failed:", err instanceof Error ? err.message : err);

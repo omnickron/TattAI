@@ -3,7 +3,9 @@ import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
+import { createCalendarClient } from "@/lib/google/client";
 import { isCalendarMock } from "@/lib/google/mock-calendar";
+import { resyncTattooerSessions } from "@/lib/scheduling/session-calendar";
 import { buildCalendarAuthUrl } from "@/lib/google/oauth";
 
 import { STATE_COOKIE } from "@/lib/google/oauth";
@@ -23,6 +25,10 @@ export async function GET(request: NextRequest) {
         consultationCalendarId: `mock-beratungen-${user.tattooerProfile.id}`,
       },
     });
+    await resyncTattooerSessions(
+      { prisma, calendar: createCalendarClient(), appUrl: process.env.APP_URL },
+      user.tattooerProfile.id,
+    ).catch((err) => console.error("[google] resync after connect failed:", err));
     return NextResponse.redirect(new URL("/availability?google=connected", request.url));
   }
 

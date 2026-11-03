@@ -17,7 +17,10 @@ import {
   type SchedulingDeps,
 } from "@/lib/scheduling/booking";
 import {
+  describeCalendarError,
   processCalendarDeletions,
+  resyncTattooerSessions,
+  retrySessionSync,
   queueLeadEventDeletions,
   syncConsultationSessions,
   syncPendingSessions,
@@ -189,7 +192,9 @@ describe("tattoo sessions in Google Calendar", () => {
       sessions.every((s) => s.calendarSyncPending && s.calendarSyncError === "google down"),
     ).toBe(true);
     calendar.fail = false;
-    expect(await syncPendingSessions(deps)).toMatchObject({ synced: 2 });
+    // The worker only retries after the backoff (first retry after 1 minute)
+    const later = new Date(Date.now() + 2 * 60_000);
+    expect(await syncPendingSessions({ ...deps, now: () => later })).toMatchObject({ synced: 2 });
     expect(calendar.events.size).toBe(2);
   });
 
@@ -267,5 +272,80 @@ describe("app calendar name and recovery", () => {
       (await prisma.tattooerProfile.findUniqueOrThrow({ where: { id: tattooerId } }))
         .consultationCalendarId,
     ).toBeNull();
+  });
+});
+
+describe("sync retries", () => {
+  it("backs off automatic retries, while a manual retry goes through right away", async () => {
+    let clock = new Date("2026-11-10T10:00:00Z");
+    const d = { ...deps, now: () => clock };
+    calendar.fail = true;
+    await recordOutcome(prisma, {
+      consultationId,
+      userId,
+      now: NOW,
+      outcome: {
+        outcome: "HELD",
+        tattoo: "YES",
+        sessionPlan: "SINGLE",
+        sessions: [{ date: "2026-12-01" }],
+      },
+    });
+    await syncConsultationSessions(d, consultationId);
+    let s = await prisma.tattooBooking.findFirstOrThrow({ where: { consultationId } });
+    expect(s).toMatchObject({ calendarSyncPending: true, calendarSyncAttempts: 1 });
+    expect(s.calendarNextAttemptAt?.toISOString()).toBe("2026-11-10T10:01:00.000Z");
+
+    // Not due yet → the worker leaves it alone
+    calendar.fail = false;
+    expect(await syncPendingSessions(d)).toMatchObject({ synced: 0 });
+
+    // Manual retry ignores the backoff
+    expect(await retrySessionSync(d, s.id)).toEqual({
+      ok: true,
+      message: "Mit Google synchronisiert.",
+    });
+    s = await prisma.tattooBooking.findFirstOrThrow({ where: { consultationId } });
+    expect(s).toMatchObject({
+      calendarSyncPending: false,
+      calendarSyncAttempts: 0,
+      calendarNextAttemptAt: null,
+    });
+
+    // Second failure doubles the wait
+    calendar.fail = true;
+    await updateSession(prisma, { sessionId: s.id, date: "2026-12-02" });
+    await syncConsultationSessions(d, consultationId);
+    await prisma.tattooBooking.update({
+      where: { id: s.id },
+      data: { calendarNextAttemptAt: null },
+    });
+    clock = new Date("2026-11-10T11:00:00Z");
+    await syncPendingSessions(d);
+    s = await prisma.tattooBooking.findFirstOrThrow({ where: { consultationId } });
+    expect(s.calendarSyncAttempts).toBe(2);
+    expect(s.calendarNextAttemptAt?.toISOString()).toBe("2026-11-10T11:02:00.000Z");
+  });
+
+  it("explains failures and catches up after reconnecting", async () => {
+    calendar.fail = true;
+    const [first] = await recordTwoSessions();
+    await prisma.tattooBooking.updateMany({
+      data: {
+        calendarSyncError: "Google token endpoint 400: invalid_grant",
+        calendarNextAttemptAt: new Date("2030-01-01"),
+      },
+    });
+    const res = await retrySessionSync(deps, first.id);
+    expect(res.ok).toBe(false);
+    expect(res.message).toBe("Die Übertragung zu Google ist fehlgeschlagen.");
+    expect(describeCalendarError("Google token endpoint 400: invalid_grant")).toContain(
+      "neu verbinden",
+    );
+    expect(describeCalendarError("Google Calendar 503: backend")).toContain("nicht erreichbar");
+
+    calendar.fail = false;
+    expect(await resyncTattooerSessions(deps, tattooerId)).toBe(2);
+    expect(await prisma.tattooBooking.count({ where: { calendarSyncPending: true } })).toBe(0);
   });
 });
