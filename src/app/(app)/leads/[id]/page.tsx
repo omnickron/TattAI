@@ -85,7 +85,8 @@ export default async function LeadPage({ params, searchParams }: PageProps<"/lea
                     <span className="text-ink-soft">
                       am {formatDateTime(lead.whatsappConsentAt)}
                     </span>
-                    {lead.whatsappConsentText && (
+                    {/* The exact wording is only relevant for the admin (proof of consent). */}
+                    {isAdmin && lead.whatsappConsentText && (
                       <span className="mt-1 block rounded-lg bg-muted p-2 text-xs text-ink-soft">
                         „{lead.whatsappConsentText}“
                       </span>
@@ -96,7 +97,7 @@ export default async function LeadPage({ params, searchParams }: PageProps<"/lea
                 )}
               </Row>
               <Row label="Eingang">{formatDateTime(lead.createdAt)}</Row>
-              <Row label="Status seit">{formatDateTime(lead.statusChangedAt)}</Row>
+              {isAdmin && <Row label="Status seit">{formatDateTime(lead.statusChangedAt)}</Row>}
             </dl>
           </Card>
 

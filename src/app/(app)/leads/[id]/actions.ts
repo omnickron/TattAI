@@ -6,12 +6,14 @@ import { z } from "zod";
 import type { ActionState } from "@/lib/action-state";
 import { leadScope, requireAdmin, requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
+import { APP_TIMEZONE } from "@/lib/format";
 import { LEAD_STATUS_ORDER } from "@/lib/labels";
 import { normalizePhone } from "@/lib/phone";
 import {
   BookingError,
   bookConsultation,
   cancelConsultation,
+  moveConsultation,
   reassignConsultation,
   updateConsultationMode,
 } from "@/lib/scheduling/booking";
@@ -21,6 +23,7 @@ import {
   queueLeadEventDeletions,
 } from "@/lib/scheduling/session-calendar";
 import { defaultPhoneCountry } from "@/lib/settings";
+import { isLocalDate, isQuarterHour, parseTimeOfDay, zonedTimeToUtc } from "@/lib/time";
 import { setBotEnabled } from "@/lib/bot/state";
 import { createWhatsAppClient } from "@/lib/whatsapp/client";
 import { cancelQueued } from "@/lib/whatsapp/messaging";
@@ -269,4 +272,30 @@ export async function setBotEnabledAction(leadId: string, enabled: boolean): Pro
       ? "Bot ist in diesem Chat wieder aktiv."
       : "Bot ist in diesem Chat ausgeschaltet.",
   };
+}
+
+export async function moveConsultationAction(
+  consultationId: string,
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const access = await requireConsultationAccess(consultationId);
+  if (!access) return { ok: false, message: "Kein Zugriff auf diesen Termin." };
+  const date = String(formData.get("date") ?? "");
+  const minutes = parseTimeOfDay(String(formData.get("time") ?? ""));
+  if (!isLocalDate(date) || minutes === null || !isQuarterHour(minutes) || minutes >= 1440) {
+    return { ok: false, message: "Bitte Datum und Uhrzeit (Viertelstunden) wählen." };
+  }
+  try {
+    await moveConsultation(
+      schedulingDeps(),
+      consultationId,
+      zonedTimeToUtc(date, minutes, APP_TIMEZONE),
+    );
+  } catch (err) {
+    return bookingMessage(err);
+  }
+  revalidatePath(`/leads/${access.consultation.leadId}`);
+  revalidatePath("/calendar");
+  return { ok: true, message: "Beratung verschoben. Kalender und Erinnerungen wurden angepasst." };
 }

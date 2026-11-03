@@ -1,9 +1,19 @@
 import { ActionForm } from "@/components/action-form";
 import { OutcomePanel, type OutcomeConsultation } from "@/components/outcome-panel";
-import { Badge, Button, Card, CardTitle, Input, Select } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  CardTitle,
+  Field,
+  Input,
+  PencilIcon,
+  Select,
+  TimeSelect,
+} from "@/components/ui";
 import type { CurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
-import { APP_TIMEZONE, formatDateTime } from "@/lib/format";
+import { APP_TIMEZONE } from "@/lib/format";
 import { getAvailableSlots } from "@/lib/scheduling/booking";
 import { schedulingDeps } from "@/lib/scheduling/deps";
 import { CONSULTATION_MODE_LABELS } from "@/lib/scheduling/event-content";
@@ -19,8 +29,26 @@ import {
   bookConsultationAction,
   cancelConsultationAction,
   changeConsultationModeAction,
+  moveConsultationAction,
   reassignConsultationAction,
 } from "./actions";
+
+const dayOnly = new Intl.DateTimeFormat("de-DE", {
+  timeZone: APP_TIMEZONE,
+  weekday: "short",
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+});
+const dayTime = new Intl.DateTimeFormat("de-DE", {
+  timeZone: APP_TIMEZONE,
+  weekday: "short",
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
 
 const STATUS_LABELS = {
   SCHEDULED: { label: "geplant", tone: "blue" },
@@ -87,16 +115,123 @@ export async function ConsultationsSection({
             const status = STATUS_LABELS[c.status];
             const canManage =
               c.status === "SCHEDULED" && (isAdmin || c.tattooerId === user.tattooerProfile?.id);
+            const editable = canManage && c.startsAt > now;
             return (
               <li key={c.id} className="space-y-2 py-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium tabular-nums">{formatDateTime(c.startsAt)}</span>
-                  <Badge tone={status.tone}>{status.label}</Badge>
-                  <Badge tone={c.mode === "PHONE" ? "violet" : "gray"}>
-                    {CONSULTATION_MODE_LABELS[c.mode]}
-                  </Badge>
-                  <span className="ml-auto text-ink-soft">{c.tattooer.user.name}</span>
-                </div>
+                <details className="group">
+                  <summary className="flex cursor-default list-none flex-wrap items-center gap-x-3 gap-y-1 [&::-webkit-details-marker]:hidden">
+                    {editable && (
+                      <span
+                        role="button"
+                        aria-label={`Beratungstermin vom ${dayTime.format(c.startsAt)} bearbeiten`}
+                        title="Bearbeiten"
+                        className="-ml-1 flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-ink-soft hover:bg-muted hover:text-ink group-open:bg-muted group-open:text-ink"
+                      >
+                        <PencilIcon />
+                      </span>
+                    )}
+                    <span className="font-semibold">Beratungstermin</span>
+                    <span className="tabular-nums">
+                      {dayOnly.format(c.startsAt)} ·{" "}
+                      {formatTimeOfDay(localMinuteOf(c.startsAt, APP_TIMEZONE))} Uhr
+                    </span>
+                    <span className="text-ink-soft">{c.tattooer.user.name}</span>
+                    <span className="ml-auto flex items-center gap-1.5">
+                      <Badge tone={c.mode === "PHONE" ? "violet" : "gray"}>
+                        {CONSULTATION_MODE_LABELS[c.mode]}
+                      </Badge>
+                      <Badge tone={status.tone}>{status.label}</Badge>
+                    </span>
+                  </summary>
+                  {editable && (
+                    <div className="mt-3 space-y-3 rounded-lg border border-line bg-surface p-3">
+                      <ActionForm
+                        action={moveConsultationAction.bind(null, c.id)}
+                        className="grid grid-cols-2 items-end gap-2 space-y-0 sm:grid-cols-[10.5rem_7.5rem_auto]"
+                      >
+                        <Field label="Datum" htmlFor={`move-date-${c.id}`}>
+                          <Input
+                            id={`move-date-${c.id}`}
+                            type="date"
+                            name="date"
+                            defaultValue={localDateOf(c.startsAt, APP_TIMEZONE)}
+                            min={localDateOf(now, APP_TIMEZONE)}
+                            required
+                          />
+                        </Field>
+                        <Field label="Beginn" htmlFor={`move-time-${c.id}`}>
+                          <TimeSelect
+                            id={`move-time-${c.id}`}
+                            name="time"
+                            defaultValue={formatTimeOfDay(localMinuteOf(c.startsAt, APP_TIMEZONE))}
+                            required
+                          />
+                        </Field>
+                        <Button
+                          type="submit"
+                          variant="secondary"
+                          className="col-span-2 justify-self-start sm:col-span-1"
+                        >
+                          Verschieben
+                        </Button>
+                      </ActionForm>
+                      <div className="flex flex-wrap items-end gap-3 border-t border-line pt-3">
+                        <ActionForm
+                          action={changeConsultationModeAction.bind(null, c.id)}
+                          className="flex items-end gap-2 space-y-0"
+                        >
+                          <Select
+                            name="mode"
+                            defaultValue={c.mode}
+                            aria-label="Beratungsform"
+                            className="w-44"
+                          >
+                            <option value="ON_SITE">Vor Ort</option>
+                            <option value="PHONE">Telefon (kann nicht anreisen)</option>
+                          </Select>
+                          <Button type="submit" variant="secondary">
+                            Ändern
+                          </Button>
+                        </ActionForm>
+                        {isAdmin && (
+                          <ActionForm
+                            action={reassignConsultationAction.bind(null, c.id)}
+                            className="flex items-end gap-2 space-y-0"
+                          >
+                            <Select
+                              name="tattooerId"
+                              defaultValue=""
+                              aria-label="Umverteilen an"
+                              className="w-44"
+                            >
+                              <option value="" disabled>
+                                Umverteilen an …
+                              </option>
+                              {tattooers
+                                .filter((t) => t.id !== c.tattooerId)
+                                .map((t) => (
+                                  <option key={t.id} value={t.id}>
+                                    {t.user.name}
+                                  </option>
+                                ))}
+                            </Select>
+                            <Button type="submit" variant="secondary">
+                              Umverteilen
+                            </Button>
+                          </ActionForm>
+                        )}
+                        <ActionForm
+                          action={cancelConsultationAction.bind(null, c.id)}
+                          confirm="Termin wirklich absagen?"
+                        >
+                          <Button type="submit" variant="ghost" className="text-red-600">
+                            Termin absagen
+                          </Button>
+                        </ActionForm>
+                      </div>
+                    </div>
+                  )}
+                </details>
                 {c.status === "SCHEDULED" && !c.calendarEventId && (
                   <p className="text-xs text-amber-700 dark:text-amber-400">
                     Kein Kalendereintrag vorhanden.
@@ -108,67 +243,6 @@ export async function ConsultationsSection({
                   returnTo={`/leads/${leadId}`}
                   sessionsInline={false}
                 />
-                {canManage && c.startsAt > now && (
-                  <details>
-                    <summary className="cursor-pointer text-xs font-medium text-ink-soft hover:text-ink">
-                      Termin verwalten
-                    </summary>
-                    <div className="mt-2 flex flex-wrap items-end gap-3">
-                      <ActionForm
-                        action={changeConsultationModeAction.bind(null, c.id)}
-                        className="flex items-end gap-2 space-y-0"
-                      >
-                        <Select
-                          name="mode"
-                          defaultValue={c.mode}
-                          aria-label="Beratungsform"
-                          className="w-44"
-                        >
-                          <option value="ON_SITE">Vor Ort</option>
-                          <option value="PHONE">Telefon (kann nicht anreisen)</option>
-                        </Select>
-                        <Button type="submit" variant="secondary">
-                          Ändern
-                        </Button>
-                      </ActionForm>
-                      {isAdmin && (
-                        <ActionForm
-                          action={reassignConsultationAction.bind(null, c.id)}
-                          className="flex items-end gap-2 space-y-0"
-                        >
-                          <Select
-                            name="tattooerId"
-                            defaultValue=""
-                            aria-label="Umverteilen an"
-                            className="w-44"
-                          >
-                            <option value="" disabled>
-                              Umverteilen an …
-                            </option>
-                            {tattooers
-                              .filter((t) => t.id !== c.tattooerId)
-                              .map((t) => (
-                                <option key={t.id} value={t.id}>
-                                  {t.user.name}
-                                </option>
-                              ))}
-                          </Select>
-                          <Button type="submit" variant="secondary">
-                            Umverteilen
-                          </Button>
-                        </ActionForm>
-                      )}
-                      <ActionForm
-                        action={cancelConsultationAction.bind(null, c.id)}
-                        confirm="Termin wirklich absagen?"
-                      >
-                        <Button type="submit" variant="danger">
-                          Absagen
-                        </Button>
-                      </ActionForm>
-                    </div>
-                  </details>
-                )}
               </li>
             );
           })}

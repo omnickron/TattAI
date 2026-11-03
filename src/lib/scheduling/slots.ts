@@ -123,7 +123,8 @@ export function availabilityWindows(input: SlotInput, from: Date, to: Date): Int
   return subtractIntervals(clipped, unavailable);
 }
 
-function blockedBy(input: SlotInput, slot: Interval): boolean {
+/** Whether a slot (incl. buffer) collides with busy times. */
+export function blockedBy(input: SlotInput, slot: Interval): boolean {
   const buffer = input.bufferMinutes * MIN;
   const padded = {
     start: new Date(slot.start.getTime() - buffer),

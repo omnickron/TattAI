@@ -14,6 +14,7 @@ import { DEFAULT_TIME_ZONE } from "../time";
 import { buildConsultationEvent } from "./event-content";
 import { chooseTattooer, type FairnessMember } from "./fairness";
 import {
+  blockedBy,
   computeFreeSlots,
   isSlotFree,
   poolSlots,
@@ -777,4 +778,115 @@ export async function rescheduleConsultation(
     });
     throw err;
   }
+}
+
+/**
+ * Manual move of a consultation by admin/tattooer: same tattooer, new start.
+ * Only conflicts are checked (other consultations, tattoo sessions, Google busy,
+ * buffer) – not the availability windows, since the time was agreed personally.
+ */
+export async function moveConsultation(
+  deps: SchedulingDeps,
+  consultationId: string,
+  newStart: Date,
+) {
+  const { prisma } = deps;
+  const now = nowOf(deps);
+  const c = await prisma.consultation.findUnique({ where: { id: consultationId } });
+  if (!c) throw new BookingError("NOT_FOUND", "Termin nicht gefunden.");
+  if (c.status !== "SCHEDULED" || c.startsAt <= now) {
+    throw new BookingError(
+      "INVALID_STATE",
+      "Nur künftige, geplante Termine können verschoben werden.",
+    );
+  }
+  if (newStart <= now)
+    throw new BookingError("INVALID_STATE", "Der neue Termin muss in der Zukunft liegen.");
+  if (newStart.getTime() === c.startsAt.getTime()) return c;
+
+  const profile = await prisma.tattooerProfile.findUniqueOrThrow({
+    where: { id: c.tattooerId },
+    include: tattooerInclude,
+  });
+  const newEnd = new Date(newStart.getTime() + profile.consultationMinutes * MIN);
+
+  // Busy times: other consultations, tattoo sessions and (if connected) Google.
+  if (profile.googleConnectedAt) {
+    const inputs = await buildSlotInputs(
+      deps,
+      [profile],
+      new Date(newStart.getTime() - DAY),
+      new Date(newStart.getTime() + DAY),
+      { excludeConsultationId: c.id },
+    );
+    const input = inputs.get(profile.id);
+    if (!input) {
+      throw new BookingError(
+        "CALENDAR_FAILED",
+        "Der Google-Kalender ist gerade nicht erreichbar. Bitte später erneut versuchen.",
+      );
+    }
+    if (blockedBy(input, { start: newStart, end: newEnd })) {
+      throw new BookingError(
+        "NO_TATTOOER_FREE",
+        `${profile.user.name} hat zu dieser Zeit bereits einen Termin.`,
+      );
+    }
+  }
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${BOOKING_LOCK_KEY})`;
+      const buffer = profile.bufferMinutes * MIN;
+      const clash = await tx.consultation.count({
+        where: {
+          id: { not: c.id },
+          tattooerId: profile.id,
+          status: { not: "CANCELLED" },
+          startsAt: { lt: new Date(newEnd.getTime() + buffer) },
+          endsAt: { gt: new Date(newStart.getTime() - buffer) },
+        },
+      });
+      if (clash)
+        throw new BookingError(
+          "SLOT_TAKEN",
+          `${profile.user.name} hat zu dieser Zeit bereits eine Beratung.`,
+        );
+      const sessionClash = await tx.tattooBooking.count({
+        where: {
+          cancelled: false,
+          consultation: { tattooerId: profile.id, status: "HELD" },
+          startsAt: { not: null, lt: new Date(newEnd.getTime() + buffer) },
+          endsAt: { gt: new Date(newStart.getTime() - buffer) },
+        },
+      });
+      if (sessionClash) {
+        throw new BookingError(
+          "SLOT_TAKEN",
+          `${profile.user.name} hat zu dieser Zeit einen Tattoo-Termin.`,
+        );
+      }
+      await tx.consultation.update({
+        where: { id: c.id },
+        data: { startsAt: newStart, endsAt: newEnd },
+      });
+    });
+  } catch (err) {
+    if (err instanceof BookingError) throw err;
+    if (isOverlapViolation(err))
+      throw new BookingError("SLOT_TAKEN", "Der Termin kollidiert mit einer anderen Beratung.");
+    throw err;
+  }
+
+  if (!(await refreshConsultationEvent(deps, c.id))) {
+    await prisma.consultation.update({
+      where: { id: c.id },
+      data: { startsAt: c.startsAt, endsAt: c.endsAt },
+    });
+    throw new BookingError(
+      "CALENDAR_FAILED",
+      "Der Kalendereintrag konnte nicht verschoben werden. Nichts wurde geändert.",
+    );
+  }
+  return prisma.consultation.findUniqueOrThrow({ where: { id: c.id } });
 }

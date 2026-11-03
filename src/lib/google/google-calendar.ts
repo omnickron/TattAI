@@ -65,6 +65,11 @@ export class GoogleCalendarClient implements CalendarClient {
       pageToken = page.nextPageToken;
     } while (pageToken);
     if (!ids.includes("primary")) ids.unshift("primary");
+    // The app calendar ("Studio-Termine") only holds entries the database knows already;
+    // excluding it lets a consultation move within its own old time slot.
+    const relevant = ids.filter((id) => id !== conn.calendarId);
+    ids.length = 0;
+    ids.push(...relevant);
 
     const busy: Interval[] = [];
     for (let i = 0; i < ids.length; i += 50) {

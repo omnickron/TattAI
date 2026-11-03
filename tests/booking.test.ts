@@ -6,6 +6,7 @@ import {
   bookConsultation,
   cancelConsultation,
   getAvailableSlots,
+  moveConsultation,
   reassignConsultation,
   type SchedulingDeps,
 } from "@/lib/scheduling/booking";
@@ -281,6 +282,88 @@ describe("tattoo sessions", () => {
     expect(starts).not.toContain(at("10:00").getTime());
     expect(starts).not.toContain(at("10:30").getTime());
     expect(starts).toContain(at("11:00").getTime());
+  });
+});
+
+describe("moveConsultation", () => {
+  it("moves within the same tattooer, also overlapping its own old slot and outside windows", async () => {
+    const c = await bookConsultation(deps, {
+      leadId: await lead(),
+      startsAt: at("10:00"),
+      tattooerId: ids.a,
+    });
+    const moved = await moveConsultation(deps, c.id, at("10:15"));
+    expect(moved).toMatchObject({ tattooerId: ids.a });
+    expect(moved.startsAt).toEqual(at("10:15"));
+    expect(moved.endsAt).toEqual(at("10:45"));
+    // 19:00 is outside the availability window (10–12) but agreed personally
+    expect((await moveConsultation(deps, c.id, at("19:00"))).startsAt).toEqual(at("19:00"));
+  });
+
+  it("refuses conflicts with consultations, tattoo sessions and Google", async () => {
+    const c1 = await bookConsultation(deps, {
+      leadId: await lead(),
+      startsAt: at("10:00"),
+      tattooerId: ids.a,
+    });
+    const c2 = await bookConsultation(deps, {
+      leadId: await lead(),
+      startsAt: at("11:00"),
+      tattooerId: ids.a,
+    });
+    await expect(moveConsultation(deps, c2.id, at("10:15"))).rejects.toMatchObject({
+      code: "NO_TATTOOER_FREE",
+    });
+
+    const held = await prisma.consultation.create({
+      data: {
+        leadId: await lead(),
+        tattooerId: ids.a,
+        startsAt: at("09:00", "2026-11-02"),
+        endsAt: at("09:30", "2026-11-02"),
+        status: "HELD",
+        tattooBooked: true,
+      },
+    });
+    await prisma.tattooBooking.create({
+      data: {
+        consultationId: held.id,
+        date: at("00:00"),
+        startsAt: at("14:00"),
+        endsAt: at("16:00"),
+      },
+    });
+    await expect(moveConsultation(deps, c1.id, at("15:00"))).rejects.toMatchObject({
+      code: "NO_TATTOOER_FREE",
+    });
+
+    calendar.busy.set(ids.a, [{ start: at("17:00"), end: at("18:00") }]);
+    await expect(moveConsultation(deps, c1.id, at("17:15"))).rejects.toMatchObject({
+      code: "NO_TATTOOER_FREE",
+    });
+    expect(
+      (await prisma.consultation.findUniqueOrThrow({ where: { id: c1.id } })).startsAt,
+    ).toEqual(at("10:00"));
+  });
+
+  it("refuses past times and reverts when the calendar cannot be updated", async () => {
+    const c = await bookConsultation(deps, {
+      leadId: await lead(),
+      startsAt: at("10:00"),
+      tattooerId: ids.a,
+    });
+    await expect(moveConsultation(deps, c.id, at("07:00", "2026-11-02"))).rejects.toMatchObject({
+      code: "INVALID_STATE",
+    });
+    calendar.updateEvent = async () => {
+      throw new Error("down");
+    };
+    await expect(moveConsultation(deps, c.id, at("11:00"))).rejects.toMatchObject({
+      code: "CALENDAR_FAILED",
+    });
+    expect((await prisma.consultation.findUniqueOrThrow({ where: { id: c.id } })).startsAt).toEqual(
+      at("10:00"),
+    );
   });
 });
 
