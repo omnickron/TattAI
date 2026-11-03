@@ -71,6 +71,7 @@ npm run dev          # erzeugt den Datenbank-Client vor dem Start ebenfalls auto
 | `npm run db:update` | Migrationen anwenden und Datenbank-Client erzeugen (nach `git pull`) |
 | `npm run jobs:webhooks` | Fehlgeschlagene Lead-Abrufe erneut versuchen |
 | `npm run worker` | Hintergrund-Dienst (WhatsApp-Versand, Retries) |
+| `npm run dev:open-consultations` | Beispiel-Beratungen ohne Ergebnis anlegen (zum Ausprobieren) |
 
 ## Meta-Lead-Eingang
 
