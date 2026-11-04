@@ -10,7 +10,7 @@ if ! { : < /dev/tty; } 2>/dev/null; then
 fi
 
 REPO="${REPO:-git@github.com:omnickron/TattAI.git}"
-BRANCH="${BRANCH:-claude/new-session-ti5a92}"
+BRANCH="${BRANCH:-main}"
 DIR="${DIR:-/opt/needl}"
 
 echo "==> System aktualisieren"
