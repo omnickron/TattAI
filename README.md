@@ -213,6 +213,13 @@ letzten fünf automatischen WhatsApp-Kontakte mit Vorschau der letzten Chatnachr
   später stattfinden). Ein Lead zählt für den Tätowierer, bei dem die Beratung stattfand (sonst der letzten
   Beratung) – Umbuchungen zählen nicht doppelt.
 
+## Ablauf für Änderungen
+
+1. Entwicklung auf dem Branch `claude/new-session-ti5a92`, lokal testen (`git pull`,
+   `npm run db:update`, `npm run dev`).
+2. Getestete Stände per Pull Request nach `main` mergen.
+3. Der Server läuft auf `main`: `cd /opt/needl && bash deploy/update.sh`.
+
 ## Produktion (IONOS VPS oder anderer Ubuntu-Server)
 
 1. **Server anlegen:** VPS mit Ubuntu 24.04, mindestens 2 vCores und 4 GB RAM, Rechenzentrum in
