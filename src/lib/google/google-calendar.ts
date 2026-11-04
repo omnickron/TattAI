@@ -19,7 +19,10 @@ export class GoogleCalendarClient implements CalendarClient {
   private async accessToken(conn: CalendarConnection): Promise<string> {
     const cached = accessTokens.get(conn.tattooerId);
     if (cached && cached.expiresAt > Date.now()) return cached.token;
-    if (!conn.refreshTokenEnc) throw new CalendarError("Google-Kalender ist nicht verbunden.");
+    if (!conn.refreshTokenEnc)
+      throw new CalendarError(
+        "Google-Kalender ist nicht verbunden (kein Google-Zugang gespeichert).",
+      );
     const { accessToken, expiresAt } = await refreshAccessToken(
       decryptSecret(conn.refreshTokenEnc),
     );

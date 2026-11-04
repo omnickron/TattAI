@@ -39,6 +39,9 @@ export function describeCalendarError(message: string | null | undefined): strin
       return "TeamUp war nicht erreichbar. Bitte später erneut versuchen.";
     return "Die Übertragung zu TeamUp ist fehlgeschlagen.";
   }
+  if (m.includes("kein google-zugang")) {
+    return "Für diese Person ist kein Google-Zugang gespeichert (z. B. aus den Beispieldaten). Sie muss unter „Verfügbarkeit“ ihren Google-Kalender verbinden.";
+  }
   if (m.includes("nicht verbunden")) {
     return "Diese Person hat ihren Kalender noch nicht verbunden (unter „Verfügbarkeit“).";
   }
