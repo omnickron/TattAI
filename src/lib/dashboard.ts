@@ -47,7 +47,12 @@ export async function loadDashboard(user: CurrentUser, now = new Date()) {
     }),
     prisma.consultation.count({ where: { ...own, status: "SCHEDULED", endsAt: { lte: now } } }),
     prisma.consultation.findMany({
-      where: { ...own, status: { not: "CANCELLED" }, startsAt: { gte: dayStart, lt: dayEnd } },
+      where: {
+        ...own,
+        status: { not: "CANCELLED" },
+        walkIn: false,
+        startsAt: { gte: dayStart, lt: dayEnd },
+      },
       orderBy: { startsAt: "asc" },
       include: {
         lead: { select: { id: true, name: true, phoneE164: true } },
@@ -67,16 +72,22 @@ export async function loadDashboard(user: CurrentUser, now = new Date()) {
       },
     }),
     prisma.consultation.findMany({
-      where: { ...own, status: { not: "CANCELLED" }, startsAt: { gte: weekStart, lt: weekEnd } },
+      where: {
+        ...own,
+        status: { not: "CANCELLED" },
+        walkIn: false,
+        startsAt: { gte: weekStart, lt: weekEnd },
+      },
       select: { startsAt: true },
     }),
     prisma.tattooBooking.findMany({
       where: sessionScope(weekStart, weekEnd),
       select: { startsAt: true, date: true },
     }),
-    // Latest automatic/bot messages (no human author) to leads in scope
+    // Latest chat replies of the bot to leads in scope (automatic template messages such as
+    // first contact, follow-ups and reminders don't count)
     prisma.message.findMany({
-      where: { direction: "OUTBOUND", sentById: null, lead: leadScope(user) },
+      where: { direction: "OUTBOUND", sentByBot: true, lead: leadScope(user) },
       orderBy: { sentAt: "desc" },
       take: 60,
       select: { leadId: true, sentAt: true },
@@ -149,7 +160,9 @@ export async function loadDashboard(user: CurrentUser, now = new Date()) {
       name: true,
       status: true,
       botEnabled: true,
+      // Latest message of the actual chat (customer, bot or tattooer) – no automatic messages
       messages: {
+        where: { NOT: { direction: "OUTBOUND", sentByBot: false, sentById: null } },
         orderBy: { sentAt: "desc" },
         take: 1,
         select: {

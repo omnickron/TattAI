@@ -271,6 +271,9 @@ model Consultation {
   calendarId               String?
   cancelledAt              DateTime?
   createdById              String?
+  // Walk-in customer: tattoo project without a consultation. Holds the tattoo sessions only and
+  // is excluded from every consultation list, count, fairness and reminder.
+  walkIn                   Boolean            @default(false)
   // Outcome entered after the consultation (status HELD / NO_SHOW / CANCELLED)
   outcomeNote              String?
   tattooBooked             Boolean?

@@ -111,7 +111,7 @@ export default async function LeadPage({ params, searchParams }: PageProps<"/lea
           <ConsultationsSection
             user={user}
             leadId={lead.id}
-            consultations={lead.consultations}
+            consultations={lead.consultations.filter((c) => !c.walkIn)}
             bookDate={typeof query.bookDate === "string" ? query.bookDate : undefined}
             bookedId={typeof query.booked === "string" ? query.booked : undefined}
             savedId={typeof query.saved === "string" ? query.saved : undefined}

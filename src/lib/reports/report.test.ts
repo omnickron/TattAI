@@ -45,6 +45,30 @@ const session = (date: string, amountCents: number | null, cancelled = false) =>
 const opts = { now: NOW, from: "2026-11-01", to: "2026-11-30" };
 
 describe("buildReport", () => {
+  it("counts walk-in tattoos as won with revenue, but not as consultations", () => {
+    const report = buildReport(
+      [
+        lead("2026-11-02T10:00:00Z", [
+          c({
+            walkIn: true,
+            tattooBooked: true,
+            sessions: [session("2026-11-10T00:00:00Z", 30000)],
+          }),
+        ]),
+      ],
+      opts,
+    );
+    expect(report.totals).toMatchObject({
+      leads: 1,
+      booked: 0,
+      held: 0,
+      won: 1,
+      sessions: 1,
+      revenueCents: 30000,
+    });
+    expect(report.byTattooer).toHaveLength(1);
+  });
+
   it("counts the funnel per lead and sums revenue of non-cancelled sessions", () => {
     const report = buildReport(
       [

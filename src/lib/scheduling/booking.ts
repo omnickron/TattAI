@@ -123,6 +123,7 @@ async function buildSlotInputs(
     where: {
       tattooerId: { in: ids },
       status: { not: "CANCELLED" },
+      walkIn: false,
       startsAt: { lt: new Date(to.getTime() + margin) },
       endsAt: { gt: new Date(from.getTime() - margin) },
       ...(opts.excludeConsultationId ? { id: { not: opts.excludeConsultationId } } : {}),
@@ -228,7 +229,7 @@ export async function loadFairnessMembers(
     }),
     prisma.consultation.groupBy({
       by: ["tattooerId"],
-      where: { status: { not: "CANCELLED" }, startsAt: { gte: since } },
+      where: { status: { not: "CANCELLED" }, walkIn: false, startsAt: { gte: since } },
       _count: { _all: true },
       _max: { startsAt: true },
     }),
@@ -453,6 +454,7 @@ export async function bookConsultation(deps: SchedulingDeps, input: BookInput) {
             where: {
               tattooerId: id,
               status: { not: "CANCELLED" },
+              walkIn: false,
               startsAt: { lt: new Date(end.getTime() + buffer) },
               endsAt: { gt: new Date(input.startsAt.getTime() - buffer) },
             },
@@ -722,6 +724,7 @@ export async function rescheduleConsultation(
               id: { not: c.id },
               tattooerId: same.id,
               status: { not: "CANCELLED" },
+              walkIn: false,
               startsAt: { lt: new Date(newEnd.getTime() + buffer) },
               endsAt: { gt: new Date(newStart.getTime() - buffer) },
             },
@@ -825,6 +828,7 @@ export async function moveConsultation(
           id: { not: c.id },
           tattooerId: profile.id,
           status: { not: "CANCELLED" },
+          walkIn: false,
           startsAt: { lt: new Date(newEnd.getTime() + buffer) },
           endsAt: { gt: new Date(newStart.getTime() - buffer) },
         },
@@ -908,6 +912,7 @@ export async function findConflict(
     where: {
       tattooerId: profile.id,
       status: { not: "CANCELLED" },
+      walkIn: false,
       startsAt: { lt: new Date(end.getTime() + buffer) },
       endsAt: { gt: new Date(start.getTime() - buffer) },
       ...(opts.excludeConsultationId ? { id: { not: opts.excludeConsultationId } } : {}),
@@ -1002,6 +1007,7 @@ export async function createManualConsultation(
         where: {
           tattooerId: profile.id,
           status: { not: "CANCELLED" },
+          walkIn: false,
           startsAt: { lt: endsAt },
           endsAt: { gt: input.startsAt },
         },
@@ -1120,4 +1126,48 @@ export async function checkSessionSlot(
   const conflict = await findConflict(deps, profile, start, end);
   if (conflict) throw new BookingError("NO_TATTOOER_FREE", conflict);
   return profile;
+}
+
+/**
+ * Walk-in customer: creates a tattoo project without a consultation (a consultation record
+ * flagged `walkIn`, already "held" with a booked tattoo). The sessions are added to it like
+ * to any other booked tattoo. It never shows up as a consultation.
+ */
+export async function createWalkInProject(
+  deps: SchedulingDeps,
+  input: { leadId: string; tattooerId: string; startsAt: Date; endsAt: Date; createdById: string },
+): Promise<string> {
+  const { prisma } = deps;
+  if (input.endsAt <= input.startsAt)
+    throw new BookingError("INVALID_STATE", "Das Ende muss nach dem Beginn liegen.");
+  const lead = await prisma.lead.findUnique({ where: { id: input.leadId } });
+  if (!lead) throw new BookingError("LEAD_NOT_FOUND", "Kontakt nicht gefunden.");
+  const profile = await profileForManual(prisma, input.tattooerId);
+  const conflict = await findConflict(deps, profile, input.startsAt, input.endsAt);
+  if (conflict) throw new BookingError("NO_TATTOOER_FREE", conflict);
+  const now = nowOf(deps);
+  const project = await prisma.$transaction(async (tx) => {
+    const c = await tx.consultation.create({
+      data: {
+        leadId: lead.id,
+        tattooerId: profile.id,
+        walkIn: true,
+        // Zero-length range: never overlaps consultations (exclusion constraint)
+        startsAt: input.startsAt,
+        endsAt: input.startsAt,
+        status: "HELD",
+        tattooBooked: true,
+        sessionPlan: "SINGLE",
+        outcomeRecordedAt: now,
+        outcomeRecordedById: input.createdById,
+        createdById: input.createdById,
+      },
+    });
+    await tx.lead.update({
+      where: { id: lead.id },
+      data: { status: "TATTOO_BOOKED", statusChangedAt: now },
+    });
+    return c;
+  });
+  return project.id;
 }

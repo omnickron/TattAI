@@ -10,6 +10,8 @@ import {
   createManualConsultation,
   createBlocker,
   checkSessionSlot,
+  createWalkInProject,
+  loadFairnessMembers,
   reassignConsultation,
   type SchedulingDeps,
 } from "@/lib/scheduling/booking";
@@ -453,6 +455,67 @@ describe("manual entries from the calendar", () => {
       code: "NO_TATTOOER_FREE",
     });
     await expect(checkSessionSlot(deps, held.id, at("14:00"), at("17:00"))).resolves.toBeTruthy();
+  });
+});
+
+describe("walk-in customers", () => {
+  it("creates a tattoo project without consultation that blocks the time but counts nowhere", async () => {
+    const leadId = await lead("Laufkundin");
+    const id = await createWalkInProject(deps, {
+      leadId,
+      tattooerId: ids.a,
+      startsAt: at("10:00"),
+      endsAt: at("13:00"),
+      createdById: "admin",
+    });
+    await prisma.tattooBooking.create({
+      data: {
+        consultationId: id,
+        date: at("00:00"),
+        startsAt: at("10:00"),
+        endsAt: at("13:00"),
+      },
+    });
+    const project = await prisma.consultation.findUniqueOrThrow({ where: { id } });
+    expect(project).toMatchObject({ walkIn: true, status: "HELD", tattooBooked: true });
+    expect((await prisma.lead.findUniqueOrThrow({ where: { id: leadId } })).status).toBe(
+      "TATTOO_BOOKED",
+    );
+    // The session blocks the slot …
+    await expect(
+      createManualConsultation(deps, {
+        leadId: await lead(),
+        tattooerId: ids.a,
+        startsAt: at("11:00"),
+        mode: "ON_SITE",
+      }),
+    ).rejects.toMatchObject({ code: "NO_TATTOOER_FREE" });
+    // … but the zero-length project itself doesn't (e.g. right before the session, incl. buffer)
+    await expect(
+      createManualConsultation(deps, {
+        leadId: await lead(),
+        tattooerId: ids.a,
+        startsAt: at("09:30"),
+        mode: "ON_SITE",
+      }),
+    ).resolves.toBeTruthy();
+    // Fairness only counts real consultations
+    const { members } = await loadFairnessMembers(prisma, at("23:00"));
+    expect(members.find((m) => m.tattooerId === ids.a)?.count).toBe(1);
+  });
+
+  it("refuses walk-ins over other appointments", async () => {
+    await createBlocker(deps, { tattooerId: ids.b, startsAt: at("15:00"), endsAt: at("16:00") });
+    await expect(
+      createWalkInProject(deps, {
+        leadId: await lead(),
+        tattooerId: ids.b,
+        startsAt: at("14:00"),
+        endsAt: at("15:30"),
+        createdById: "admin",
+      }),
+    ).rejects.toMatchObject({ code: "NO_TATTOOER_FREE" });
+    expect(await prisma.consultation.count({ where: { walkIn: true } })).toBe(0);
   });
 });
 

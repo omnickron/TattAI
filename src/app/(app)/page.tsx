@@ -305,7 +305,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
         </SectionTitle>
         {data.contacts.length === 0 ? (
           <p className="rounded-lg border border-dashed border-line px-4 py-6 text-center text-sm text-ink-soft">
-            Noch keine automatischen WhatsApp-Kontakte.
+            Der Bot hat noch mit niemandem gechattet.
           </p>
         ) : (
           <ul className="divide-y divide-line">

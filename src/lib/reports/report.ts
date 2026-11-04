@@ -20,6 +20,8 @@ export interface ReportConsultation {
   status: "SCHEDULED" | "HELD" | "NO_SHOW" | "CANCELLED";
   startsAt: Date;
   tattooBooked: boolean | null;
+  // Walk-in tattoo without consultation: counts for won/revenue, not as a consultation
+  walkIn?: boolean;
   sessions: ReportSession[];
 }
 
@@ -75,15 +77,16 @@ export function attributedTattooer(lead: ReportLead): string | null {
 }
 
 function addLead(m: Metrics, lead: ReportLead, now: Date) {
-  const cs = lead.consultations;
+  const all = lead.consultations;
+  const cs = all.filter((c) => !c.walkIn);
   m.leads++;
   if (cs.length) m.booked++;
   const held = cs.some((c) => c.status === "HELD");
   if (held) m.held++;
   else if (cs.some((c) => c.status === "NO_SHOW")) m.noShow++;
-  if (cs.some((c) => c.status === "HELD" && c.tattooBooked === true)) m.won++;
+  if (all.some((c) => c.status === "HELD" && c.tattooBooked === true)) m.won++;
   m.open += cs.filter((c) => c.status === "SCHEDULED" && c.startsAt <= now).length;
-  for (const c of cs) {
+  for (const c of all) {
     if (!(c.status === "HELD" && c.tattooBooked)) continue;
     for (const s of c.sessions) {
       if (s.cancelled) continue;

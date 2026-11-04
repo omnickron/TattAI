@@ -320,6 +320,9 @@ function EntryDialog({
 }) {
   const router = useRouter();
   const [type, setType] = useState<EntryType>("consultation");
+  const [walkIn, setWalkIn] = useState(false);
+  // The person follows from the booked tattoo – except for walk-ins
+  const personFromTattoo = type === "tattoo" && !walkIn;
   const [tattooerId, setTattooerId] = useState(
     defaultTattooerId ?? (isAdmin ? "" : (tattooers[0]?.id ?? "")),
   );
@@ -416,10 +419,10 @@ function EntryDialog({
                 name="tattooerId"
                 value={tattooerId}
                 onChange={(e) => setTattooerId(e.target.value)}
-                required={type !== "tattoo"}
+                required={!personFromTattoo}
               >
-                <option value="" disabled={type !== "tattoo"}>
-                  {type === "tattoo" ? "Alle (ergibt sich aus dem Tattoo)" : "Person auswählen …"}
+                <option value="" disabled={!personFromTattoo}>
+                  {personFromTattoo ? "Alle (ergibt sich aus dem Tattoo)" : "Person auswählen …"}
                 </option>
                 {tattooers.map((t) => (
                   <option key={t.id} value={t.id}>
@@ -488,17 +491,39 @@ function EntryDialog({
 
           {type === "tattoo" && (
             <>
+              <label className="flex items-start gap-2 rounded-lg border border-line p-3 text-sm">
+                <input
+                  type="checkbox"
+                  name="walkIn"
+                  value="1"
+                  checked={walkIn}
+                  onChange={(e) => setWalkIn(e.target.checked)}
+                  className="mt-0.5 size-4 accent-current"
+                />
+                <span>
+                  <span className="font-medium">Laufkunde (ohne Beratung)</span>
+                  <span className="block text-xs text-ink-soft">
+                    Tattoo direkt eintragen – wird auf der Lead-Seite als Laufkunde vermerkt.
+                  </span>
+                </span>
+              </label>
               <div className="space-y-1.5">
                 <p className="text-sm font-medium">Kontakt</p>
-                <LeadPicker
-                  key={`t-${tattooerId}`}
-                  type="tattoo"
-                  tattooerId={tattooerId || null}
-                  allowNew={false}
-                />
-                <p className="text-xs text-ink-soft">
-                  Tattoo-Termine gehören zu einem gebuchten Tattoo (Ergebnis einer Beratung).
-                </p>
+                {walkIn ? (
+                  <LeadPicker key="walkin" type="consultation" tattooerId={null} allowNew />
+                ) : (
+                  <>
+                    <LeadPicker
+                      key={`t-${tattooerId}`}
+                      type="tattoo"
+                      tattooerId={tattooerId || null}
+                      allowNew={false}
+                    />
+                    <p className="text-xs text-ink-soft">
+                      Für Kontakte mit gebuchtem Tattoo (Ergebnis einer Beratung).
+                    </p>
+                  </>
+                )}
               </div>
               <label className="block space-y-1.5 text-sm font-medium">
                 <span>Betrag (optional)</span>

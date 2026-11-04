@@ -152,6 +152,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
   const consultations = await prisma.consultation.findMany({
     where: {
       status: { not: "CANCELLED" },
+      walkIn: false,
       startsAt: {
         gte: startOfLocalDay(first, APP_TIMEZONE),
         lt: startOfLocalDay(addDays(first, dayCount), APP_TIMEZONE),

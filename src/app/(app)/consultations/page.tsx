@@ -33,6 +33,7 @@ export default async function ConsultationsPage({ searchParams }: PageProps<"/co
     upcoming: { ...scope, status: "SCHEDULED", endsAt: { gt: now } },
     done: {
       ...scope,
+      walkIn: false,
       OR: [
         { status: { in: ["HELD", "NO_SHOW"] } },
         { status: "CANCELLED", outcomeRecordedAt: { not: null } },

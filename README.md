@@ -102,7 +102,9 @@ npm run dev          # erzeugt den Datenbank-Client vor dem Start ebenfalls auto
 - Bis der Chatbot (Phase 3) bucht, kann der Admin auf der Lead-Seite Termine buchen.
 - **Eintragen im App-Kalender**: Klick auf eine freie Stelle (oder „+ Termin“) öffnet einen Dialog für
   *Beratung* (bestehender oder neuer Kontakt, Dauer aus der Einstellung der Person, auch außerhalb der
-  Zeitfenster), *Tattoo* (nur für Kontakte mit gebuchtem Tattoo, wird als weiterer Tattoo-Termin angehängt)
+  Zeitfenster), *Tattoo* (für Kontakte mit gebuchtem Tattoo als weiterer Tattoo-Termin; oder als
+  **Laufkunde ohne Beratung** – zählt in der Auswertung als Abschluss mit Umsatz, aber nicht als Beratung
+  und nicht für die Fairness, auf der Lead-Seite als „Laufkunde“ markiert)
   oder *Blocker* (wird als Abwesenheit gespeichert, dort teilt der Bot keine Beratungen zu; Löschen per Klick).
   Der Admin wählt „Für wen?“, Tätowierer tragen für sich selbst ein. Geprüft wird gegen Beratungen,
   Tattoo-Termine, Blocker/Abwesenheiten und den Google-Kalender.

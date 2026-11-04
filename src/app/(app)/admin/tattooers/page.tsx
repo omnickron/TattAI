@@ -27,7 +27,7 @@ export default async function TattooersPage() {
         select: {
           consultationMinutes: true,
           googleConnectedAt: true,
-          _count: { select: { consultations: true } },
+          _count: { select: { consultations: { where: { walkIn: false } } } },
         },
       },
     },

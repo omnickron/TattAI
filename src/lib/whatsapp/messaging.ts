@@ -217,6 +217,7 @@ export async function planMessages(deps: MessagingDeps) {
     const recent = await prisma.consultation.findMany({
       where: {
         status: { in: ["HELD", "NO_SHOW"] },
+        walkIn: false,
         endsAt: { lte: now, gte: new Date(now.getTime() - maxHours * HOUR - AFTER_MAX_LATE_MS) },
         lead: eligibleLead,
       },

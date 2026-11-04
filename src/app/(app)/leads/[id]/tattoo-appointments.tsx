@@ -10,6 +10,7 @@ type Project = {
   startsAt: Date;
   tattooerId: string;
   tattooBooked: boolean | null;
+  walkIn: boolean;
   sessionPlan: "SINGLE" | "MULTIPLE" | null;
   furtherSessionsScheduled: boolean | null;
   tattooer: { user: { name: string } };
@@ -63,9 +64,13 @@ export function TattooAppointments({
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <span className="font-medium">Tattoo bei {p.tattooer.user.name}</span>
                 {plan && <Badge tone="violet">{plan}</Badge>}
-                <span className="text-xs text-ink-soft">
-                  aus der Beratung vom {formatDate(p.startsAt)}
-                </span>
+                {p.walkIn ? (
+                  <Badge tone="amber">Laufkunde · ohne Beratung</Badge>
+                ) : (
+                  <span className="text-xs text-ink-soft">
+                    aus der Beratung vom {formatDate(p.startsAt)}
+                  </span>
+                )}
               </div>
               <TattooSessions
                 consultationId={p.id}

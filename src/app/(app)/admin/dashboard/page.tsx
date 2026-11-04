@@ -153,6 +153,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin/
             status: true,
             startsAt: true,
             tattooBooked: true,
+            walkIn: true,
             tattooBookings: { select: { date: true, amountCents: true, cancelled: true } },
           },
         },

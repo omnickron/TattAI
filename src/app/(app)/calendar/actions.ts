@@ -2,16 +2,18 @@
 
 import { revalidatePath } from "next/cache";
 import type { ActionState } from "@/lib/action-state";
-import { leadScope, requireTattooer, requireUser } from "@/lib/auth/session";
+import { type CurrentUser, leadScope, requireTattooer, requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { APP_TIMEZONE } from "@/lib/format";
 import { LEAD_STATUS_LABELS } from "@/lib/labels";
+import { parseEuroToCents } from "@/lib/outcomes/money";
 import { addSession, OutcomeError } from "@/lib/outcomes/outcome";
 import { normalizePhone } from "@/lib/phone";
 import {
   BookingError,
   checkSessionSlot,
   createBlocker,
+  createWalkInProject,
   createManualConsultation,
 } from "@/lib/scheduling/booking";
 import { schedulingDeps } from "@/lib/scheduling/deps";
@@ -133,8 +135,9 @@ export async function createCalendarEntryAction(
   const tattooerId = isAdmin
     ? String(formData.get("tattooerId") ?? "")
     : (user?.tattooerProfile.id ?? "");
-  // For tattoo sessions the person follows from the booked tattoo.
-  if (!tattooerId && type !== "tattoo")
+  const walkIn = type === "tattoo" && formData.get("walkIn") === "1";
+  // For tattoo sessions the person follows from the booked tattoo (except walk-ins).
+  if (!tattooerId && (type !== "tattoo" || walkIn))
     return { ok: false, message: "Bitte auswählen, für wen der Termin ist." };
   const deps = schedulingDeps();
 
@@ -156,36 +159,9 @@ export async function createCalendarEntryAction(
     if (type === "consultation") {
       const slot = parseSlot(formData, false);
       if (!slot) return { ok: false, message: "Bitte Datum und Beginn (Viertelstunden) wählen." };
-      let leadId = String(formData.get("leadId") ?? "");
-      let createdLead = false;
-      if (!leadId) {
-        const name = String(formData.get("newName") ?? "").trim();
-        const phoneRaw = String(formData.get("newPhone") ?? "").trim();
-        if (!name)
-          return { ok: false, message: "Bitte einen Kontakt auswählen oder einen neuen anlegen." };
-        const phone = normalizePhone(phoneRaw, defaultPhoneCountry());
-        if (phoneRaw && !phone.valid)
-          return { ok: false, message: "Die Telefonnummer ist ungültig." };
-        leadId = (
-          await prisma.lead.create({
-            data: {
-              source: "MANUAL",
-              name: name.slice(0, 200),
-              phoneRaw: phoneRaw || null,
-              phoneE164: phone.e164,
-              phoneValid: phone.valid,
-            },
-          })
-        ).id;
-        createdLead = true;
-      } else if (
-        !(await prisma.lead.findFirst({
-          where: { AND: [leadScope(anyUser), { id: leadId }] },
-          select: { id: true },
-        }))
-      ) {
-        return { ok: false, message: "Kein Zugriff auf diesen Kontakt." };
-      }
+      const resolved = await resolveLead(formData, anyUser);
+      if ("message" in resolved) return { ok: false, message: resolved.message };
+      const { leadId, created: createdLead } = resolved;
       const mode = formData.get("mode") === "PHONE" ? "PHONE" : "ON_SITE";
       try {
         await createManualConsultation(deps, {
@@ -209,6 +185,45 @@ export async function createCalendarEntryAction(
       const slot = parseSlot(formData, true);
       if (!slot)
         return { ok: false, message: "Bitte Datum, Beginn und Ende (Viertelstunden) wählen." };
+      if (walkIn) {
+        if (parseEuroToCents(String(formData.get("amount") ?? "")) === "invalid")
+          return { ok: false, message: "Betrag ist ungültig (z. B. 450 oder 1.250,50)." };
+        const resolved = await resolveLead(formData, anyUser);
+        if ("message" in resolved) return { ok: false, message: resolved.message };
+        let projectId: string | null = null;
+        try {
+          projectId = await createWalkInProject(deps, {
+            leadId: resolved.leadId,
+            tattooerId,
+            startsAt: slot.startsAt,
+            endsAt: slot.endsAt!,
+            createdById: anyUser.id,
+          });
+          await addSession(prisma, {
+            consultationId: projectId,
+            date: slot.date,
+            start: slot.startTime,
+            end: slot.endTime ?? undefined,
+            amount: String(formData.get("amount") ?? ""),
+            timeZone: APP_TIMEZONE,
+          });
+        } catch (err) {
+          // Roll back: no empty project, no orphaned contact
+          if (projectId)
+            await prisma.consultation.delete({ where: { id: projectId } }).catch(() => {});
+          if (resolved.created)
+            await prisma.lead.delete({ where: { id: resolved.leadId } }).catch(() => {});
+          throw err;
+        }
+        await prisma.consultation.update({
+          where: { id: projectId },
+          data: { sessionPlan: "SINGLE", furtherSessionsScheduled: null },
+        });
+        await syncConsultationSessions(deps, projectId);
+        revalidatePath("/calendar");
+        revalidatePath(`/leads/${resolved.leadId}`);
+        return { ok: true, message: "Tattoo-Termin für Laufkunde eingetragen." };
+      }
       const consultationId = String(formData.get("consultationId") ?? "");
       const c = await prisma.consultation.findUnique({
         where: { id: consultationId },
@@ -235,6 +250,41 @@ export async function createCalendarEntryAction(
     return fail(err);
   }
   return { ok: false, message: "Bitte eine Art auswählen." };
+}
+
+/** Selected contact (in the user's scope) or a newly created one from name/phone. */
+async function resolveLead(
+  formData: FormData,
+  user: CurrentUser,
+): Promise<{ leadId: string; created: boolean } | { message: string }> {
+  const leadId = String(formData.get("leadId") ?? "");
+  if (!leadId) {
+    const name = String(formData.get("newName") ?? "").trim();
+    const phoneRaw = String(formData.get("newPhone") ?? "").trim();
+    if (!name) return { message: "Bitte einen Kontakt auswählen oder einen neuen anlegen." };
+    const phone = normalizePhone(phoneRaw, defaultPhoneCountry());
+    if (phoneRaw && !phone.valid) return { message: "Die Telefonnummer ist ungültig." };
+    const id = (
+      await prisma.lead.create({
+        data: {
+          source: "MANUAL",
+          name: name.slice(0, 200),
+          phoneRaw: phoneRaw || null,
+          phoneE164: phone.e164,
+          phoneValid: phone.valid,
+        },
+      })
+    ).id;
+    return { leadId: id, created: true };
+  } else if (
+    !(await prisma.lead.findFirst({
+      where: { AND: [leadScope(user), { id: leadId }] },
+      select: { id: true },
+    }))
+  ) {
+    return { message: "Kein Zugriff auf diesen Kontakt." };
+  }
+  return { leadId, created: false };
 }
 
 /** Removes a blocker (admin or the owner). */
