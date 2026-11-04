@@ -11,6 +11,12 @@ function normalizeEmail(email: string | null | undefined) {
   return email?.trim().toLowerCase() || null;
 }
 
+/** Rejects a sign-in and logs why (server log only, the user sees the generic message). */
+function deny(email: string, reason: string): false {
+  console.warn(`[auth] Anmeldung abgelehnt für ${email}: ${reason}`);
+  return false;
+}
+
 /** Creates the configured admin account on first sign-in. */
 async function ensureBootstrapAdmin(email: string) {
   const adminEmail = normalizeEmail(process.env.ADMIN_EMAIL);
@@ -60,10 +66,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (!email) return false;
 
       if (account?.provider === "google") {
-        if (profile?.email_verified !== true) return false;
+        if (profile?.email_verified !== true) return deny(email, "Google-E-Mail nicht bestätigt");
         if (workspaceDomain) {
           const hd = typeof profile.hd === "string" ? profile.hd.toLowerCase() : null;
-          if (hd !== workspaceDomain || !email.endsWith(`@${workspaceDomain}`)) return false;
+          if (hd !== workspaceDomain || !email.endsWith(`@${workspaceDomain}`))
+            return deny(email, `gehört nicht zu GOOGLE_WORKSPACE_DOMAIN=${workspaceDomain}`);
         }
         await ensureBootstrapAdmin(email);
       } else if (account?.provider !== "dev") {
@@ -72,7 +79,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
       // Only accounts created by the admin (or the bootstrap admin) may sign in.
       const dbUser = await prisma.user.findUnique({ where: { email } });
-      if (!dbUser?.active) return false;
+      if (!dbUser)
+        return deny(
+          email,
+          "kein Nutzer in der App (vom Admin anlegen lassen oder als ADMIN_EMAIL eintragen)",
+        );
+      if (!dbUser.active) return deny(email, "Nutzer ist deaktiviert");
       await prisma.user.update({ where: { id: dbUser.id }, data: { lastLoginAt: new Date() } });
       return true;
     },
