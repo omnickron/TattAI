@@ -14,7 +14,6 @@ import { DEFAULT_TIME_ZONE } from "../time";
 import { buildConsultationEvent } from "./event-content";
 import { chooseTattooer, type FairnessMember } from "./fairness";
 import {
-  blockedBy,
   computeFreeSlots,
   isSlotFree,
   poolSlots,
@@ -810,29 +809,12 @@ export async function moveConsultation(
   });
   const newEnd = new Date(newStart.getTime() + profile.consultationMinutes * MIN);
 
-  // Busy times: other consultations, tattoo sessions and (if connected) Google.
-  if (profile.googleConnectedAt) {
-    const inputs = await buildSlotInputs(
-      deps,
-      [profile],
-      new Date(newStart.getTime() - DAY),
-      new Date(newStart.getTime() + DAY),
-      { excludeConsultationId: c.id },
-    );
-    const input = inputs.get(profile.id);
-    if (!input) {
-      throw new BookingError(
-        "CALENDAR_FAILED",
-        "Der Google-Kalender ist gerade nicht erreichbar. Bitte später erneut versuchen.",
-      );
-    }
-    if (blockedBy(input, { start: newStart, end: newEnd })) {
-      throw new BookingError(
-        "NO_TATTOOER_FREE",
-        `${profile.user.name} hat zu dieser Zeit bereits einen Termin.`,
-      );
-    }
-  }
+  // Busy times: consultations, tattoo sessions, blockers/absences and Google.
+  const conflict = await findConflict(deps, profile, newStart, newEnd, {
+    excludeConsultationId: c.id,
+    bufferMinutes: profile.bufferMinutes,
+  });
+  if (conflict) throw new BookingError("NO_TATTOOER_FREE", conflict);
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -889,4 +871,253 @@ export async function moveConsultation(
     );
   }
   return prisma.consultation.findUniqueOrThrow({ where: { id: c.id } });
+}
+
+// ---------------------------------------------------------------------------
+// Manual entries from the calendar (consultation, tattoo session, blocker)
+// ---------------------------------------------------------------------------
+
+const timeFmt = new Intl.DateTimeFormat("de-DE", {
+  timeZone: DEFAULT_TIME_ZONE,
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+/**
+ * Describes why the tattooer is not free in [start, end) – or null if free.
+ * Checks consultations (with buffer), timed tattoo sessions, blockers/absences
+ * and, if connected, Google busy times (the app calendar itself is excluded).
+ */
+export async function findConflict(
+  deps: SchedulingDeps,
+  profile: {
+    id: string;
+    googleConnectedAt: Date | null;
+    googleRefreshTokenEnc: string | null;
+    consultationCalendarId: string | null;
+    user: { name: string };
+  },
+  start: Date,
+  end: Date,
+  opts: { excludeConsultationId?: string; bufferMinutes?: number } = {},
+): Promise<string | null> {
+  const { prisma } = deps;
+  const buffer = (opts.bufferMinutes ?? 0) * MIN;
+  const name = profile.user.name;
+  const consultation = await prisma.consultation.findFirst({
+    where: {
+      tattooerId: profile.id,
+      status: { not: "CANCELLED" },
+      startsAt: { lt: new Date(end.getTime() + buffer) },
+      endsAt: { gt: new Date(start.getTime() - buffer) },
+      ...(opts.excludeConsultationId ? { id: { not: opts.excludeConsultationId } } : {}),
+    },
+    include: { lead: { select: { name: true } } },
+  });
+  if (consultation) {
+    return `${name} hat um ${timeFmt.format(consultation.startsAt)} Uhr bereits eine Beratung (${consultation.lead.name}).`;
+  }
+  const session = await prisma.tattooBooking.findFirst({
+    where: {
+      cancelled: false,
+      consultation: { tattooerId: profile.id, status: "HELD" },
+      startsAt: { not: null, lt: end },
+      endsAt: { gt: start },
+    },
+  });
+  if (session)
+    return `${name} hat um ${timeFmt.format(session.startsAt!)} Uhr einen Tattoo-Termin.`;
+  const block = await prisma.availabilityException.findFirst({
+    where: {
+      tattooerId: profile.id,
+      kind: "UNAVAILABLE",
+      startsAt: { lt: end },
+      endsAt: { gt: start },
+    },
+  });
+  if (block) return `${name} ist in dieser Zeit geblockt${block.note ? ` („${block.note}“)` : ""}.`;
+  if (profile.googleConnectedAt) {
+    let busy: Interval[];
+    try {
+      busy = await deps.calendar.getBusy(connectionOf(profile), start, end);
+    } catch {
+      throw new BookingError(
+        "CALENDAR_FAILED",
+        "Der Google-Kalender ist gerade nicht erreichbar. Bitte später erneut versuchen.",
+      );
+    }
+    if (busy.some((b) => b.start < end && b.end > start))
+      return `${name} hat zu dieser Zeit einen Termin im Google-Kalender.`;
+  }
+  return null;
+}
+
+async function profileForManual(prisma: PrismaClient, tattooerId: string) {
+  const profile = await prisma.tattooerProfile.findUnique({
+    where: { id: tattooerId },
+    include: { user: { select: { name: true, active: true } } },
+  });
+  if (!profile || !profile.user.active)
+    throw new BookingError("NOT_FOUND", "Diese Person ist nicht (mehr) aktiv.");
+  return profile;
+}
+
+/** Consultation entered by hand: chosen tattooer, conflicts checked, availability windows not enforced. */
+export async function createManualConsultation(
+  deps: SchedulingDeps,
+  input: {
+    leadId: string;
+    tattooerId: string;
+    startsAt: Date;
+    mode: ConsultationMode;
+    createdById?: string | null;
+  },
+) {
+  const { prisma } = deps;
+  const now = nowOf(deps);
+  if (input.startsAt <= now)
+    throw new BookingError("INVALID_STATE", "Der Termin muss in der Zukunft liegen.");
+  const lead = await prisma.lead.findUnique({ where: { id: input.leadId } });
+  if (!lead) throw new BookingError("LEAD_NOT_FOUND", "Kontakt nicht gefunden.");
+  const upcoming = await prisma.consultation.findFirst({
+    where: { leadId: lead.id, status: "SCHEDULED", endsAt: { gt: now } },
+  });
+  if (upcoming)
+    throw new BookingError(
+      "ALREADY_BOOKED",
+      "Für diesen Kontakt ist bereits eine Beratung geplant.",
+    );
+  const profile = await profileForManual(prisma, input.tattooerId);
+  const endsAt = new Date(input.startsAt.getTime() + profile.consultationMinutes * MIN);
+  const conflict = await findConflict(deps, profile, input.startsAt, endsAt, {
+    bufferMinutes: profile.bufferMinutes,
+  });
+  if (conflict) throw new BookingError("NO_TATTOOER_FREE", conflict);
+
+  let created;
+  try {
+    created = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${BOOKING_LOCK_KEY})`;
+      const clash = await tx.consultation.count({
+        where: {
+          tattooerId: profile.id,
+          status: { not: "CANCELLED" },
+          startsAt: { lt: endsAt },
+          endsAt: { gt: input.startsAt },
+        },
+      });
+      if (clash) throw new BookingError("SLOT_TAKEN", "Der Termin wurde gerade vergeben.");
+      const c = await tx.consultation.create({
+        data: {
+          leadId: lead.id,
+          tattooerId: profile.id,
+          startsAt: input.startsAt,
+          endsAt,
+          mode: input.mode,
+          createdById: input.createdById ?? null,
+        },
+      });
+      if (
+        [
+          "NEW",
+          "CONTACTED",
+          "IN_CHAT",
+          "NO_RESPONSE",
+          "CANCELLED",
+          "NO_SHOW",
+          "CONSULTATION_DONE",
+        ].includes(lead.status)
+      ) {
+        await tx.lead.update({
+          where: { id: lead.id },
+          data: { status: "CONSULTATION_BOOKED", statusChangedAt: now },
+        });
+      }
+      return c;
+    });
+  } catch (err) {
+    if (err instanceof BookingError) throw err;
+    if (isOverlapViolation(err))
+      throw new BookingError("SLOT_TAKEN", "Der Termin kollidiert mit einer anderen Beratung.");
+    throw err;
+  }
+
+  if (profile.googleConnectedAt) {
+    try {
+      const { calendarId, eventId } = await writeEvent(deps, created.id, profile.id);
+      await prisma.consultation.update({
+        where: { id: created.id },
+        data: { calendarId, calendarEventId: eventId },
+      });
+    } catch (err) {
+      console.error(
+        `[booking] manual consultation calendar write failed:`,
+        err instanceof Error ? err.message : err,
+      );
+      await prisma.$transaction([
+        prisma.consultation.delete({ where: { id: created.id } }),
+        prisma.lead.updateMany({
+          where: { id: lead.id, status: "CONSULTATION_BOOKED" },
+          data: { status: lead.status, statusChangedAt: lead.statusChangedAt },
+        }),
+      ]);
+      throw new BookingError(
+        "CALENDAR_FAILED",
+        "Der Kalendereintrag konnte nicht erstellt werden. Der Termin wurde nicht angelegt.",
+      );
+    }
+  }
+  return created;
+}
+
+/** Blocker: time in which the tattooer gets no consultations (stored as unavailability). */
+export async function createBlocker(
+  deps: SchedulingDeps,
+  input: { tattooerId: string; startsAt: Date; endsAt: Date; note?: string | null },
+) {
+  if (input.endsAt <= input.startsAt)
+    throw new BookingError("INVALID_STATE", "Das Ende muss nach dem Beginn liegen.");
+  const profile = await profileForManual(deps.prisma, input.tattooerId);
+  const consultation = await deps.prisma.consultation.findFirst({
+    where: {
+      tattooerId: profile.id,
+      status: "SCHEDULED",
+      startsAt: { lt: input.endsAt },
+      endsAt: { gt: input.startsAt },
+    },
+  });
+  if (consultation) {
+    throw new BookingError(
+      "NO_TATTOOER_FREE",
+      `In dieser Zeit liegt bereits eine Beratung (${timeFmt.format(consultation.startsAt)} Uhr).`,
+    );
+  }
+  return deps.prisma.availabilityException.create({
+    data: {
+      tattooerId: profile.id,
+      kind: "UNAVAILABLE",
+      startsAt: input.startsAt,
+      endsAt: input.endsAt,
+      note: input.note?.trim().slice(0, 200) || "Blocker",
+    },
+  });
+}
+
+/** Checks a tattoo session slot of a booked tattoo; returns the profile for further use. */
+export async function checkSessionSlot(
+  deps: SchedulingDeps,
+  consultationId: string,
+  start: Date,
+  end: Date,
+) {
+  const c = await deps.prisma.consultation.findUnique({ where: { id: consultationId } });
+  if (!c || c.status !== "HELD" || c.tattooBooked !== true) {
+    throw new BookingError("INVALID_STATE", "Für diesen Kontakt ist kein Tattoo gebucht.");
+  }
+  if (end <= start)
+    throw new BookingError("INVALID_STATE", "Das Ende muss nach dem Beginn liegen.");
+  const profile = await profileForManual(deps.prisma, c.tattooerId);
+  const conflict = await findConflict(deps, profile, start, end);
+  if (conflict) throw new BookingError("NO_TATTOOER_FREE", conflict);
+  return profile;
 }

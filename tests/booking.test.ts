@@ -7,6 +7,9 @@ import {
   cancelConsultation,
   getAvailableSlots,
   moveConsultation,
+  createManualConsultation,
+  createBlocker,
+  checkSessionSlot,
   reassignConsultation,
   type SchedulingDeps,
 } from "@/lib/scheduling/booking";
@@ -364,6 +367,92 @@ describe("moveConsultation", () => {
     expect((await prisma.consultation.findUniqueOrThrow({ where: { id: c.id } })).startsAt).toEqual(
       at("10:00"),
     );
+  });
+});
+
+describe("manual entries from the calendar", () => {
+  it("creates a consultation for the chosen tattooer outside the windows and writes the event", async () => {
+    const leadId = await lead("Mara");
+    const c = await createManualConsultation(deps, {
+      leadId,
+      tattooerId: ids.b,
+      startsAt: at("19:00"),
+      mode: "PHONE",
+    });
+    expect(c).toMatchObject({ tattooerId: ids.b, mode: "PHONE" });
+    expect(c.endsAt).toEqual(at("19:30"));
+    expect(calendar.created.at(-1)?.event.summary).toBe("Beratung: Mara (Telefon)");
+    expect((await prisma.lead.findUniqueOrThrow({ where: { id: leadId } })).status).toBe(
+      "CONSULTATION_BOOKED",
+    );
+    await expect(
+      createManualConsultation(deps, {
+        leadId,
+        tattooerId: ids.b,
+        startsAt: at("20:00"),
+        mode: "ON_SITE",
+      }),
+    ).rejects.toMatchObject({ code: "ALREADY_BOOKED" });
+  });
+
+  it("refuses conflicts with blockers and tells why", async () => {
+    await createBlocker(deps, {
+      tattooerId: ids.a,
+      startsAt: at("13:00"),
+      endsAt: at("14:00"),
+      note: "Arzttermin",
+    });
+    const err = await createManualConsultation(deps, {
+      leadId: await lead(),
+      tattooerId: ids.a,
+      startsAt: at("13:15"),
+      mode: "ON_SITE",
+    }).catch((e) => e);
+    expect(err).toMatchObject({ code: "NO_TATTOOER_FREE" });
+    expect(err.message).toContain("Arzttermin");
+    // Blockers also remove free slots for the fair booking / the bot
+    const slots = await getAvailableSlots(deps, { from: at("00:00"), to: at("23:59") });
+    expect(
+      slots.some(
+        (s) =>
+          s.tattooers.some((t) => t.tattooerId === ids.a) &&
+          s.start >= at("13:00") &&
+          s.start < at("14:00"),
+      ),
+    ).toBe(false);
+  });
+
+  it("does not place a blocker over a booked consultation", async () => {
+    await bookConsultation(deps, {
+      leadId: await lead(),
+      startsAt: at("10:00"),
+      tattooerId: ids.a,
+    });
+    await expect(
+      createBlocker(deps, { tattooerId: ids.a, startsAt: at("09:30"), endsAt: at("10:15") }),
+    ).rejects.toMatchObject({ code: "NO_TATTOOER_FREE" });
+  });
+
+  it("checks tattoo session slots against other appointments", async () => {
+    const held = await prisma.consultation.create({
+      data: {
+        leadId: await lead(),
+        tattooerId: ids.a,
+        startsAt: at("09:00", "2026-11-02"),
+        endsAt: at("09:30", "2026-11-02"),
+        status: "HELD",
+        tattooBooked: true,
+      },
+    });
+    await bookConsultation(deps, {
+      leadId: await lead(),
+      startsAt: at("10:00"),
+      tattooerId: ids.a,
+    });
+    await expect(checkSessionSlot(deps, held.id, at("09:00"), at("12:00"))).rejects.toMatchObject({
+      code: "NO_TATTOOER_FREE",
+    });
+    await expect(checkSessionSlot(deps, held.id, at("14:00"), at("17:00"))).resolves.toBeTruthy();
   });
 });
 

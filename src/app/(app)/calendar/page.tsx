@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { APP_TIMEZONE } from "@/lib/format";
 import { CONSULTATION_MODE_LABELS } from "@/lib/scheduling/event-content";
+import { AddEntryButton, BlockerChip, ClickLayer, NewEntryProvider } from "./new-entry";
 import {
   addDays,
   isLocalDate,
@@ -55,6 +56,21 @@ const TATTOO_TEXTURE = {
     "repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, currentColor 8%, transparent) 6px 12px)",
 };
 
+const BLOCK_TONE =
+  "border-l-zinc-400 bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300";
+const BLOCK_TEXTURE = {
+  backgroundImage:
+    "repeating-linear-gradient(45deg, transparent 0 5px, color-mix(in srgb, currentColor 10%, transparent) 5px 10px)",
+};
+
+function BlockTag() {
+  return (
+    <span className="mr-1 rounded bg-zinc-500 px-1 py-px text-[10px] font-semibold uppercase tracking-wide text-white">
+      Blocker
+    </span>
+  );
+}
+
 function TattooTag({ n }: { n?: number }) {
   return (
     <span className="mr-1 rounded bg-ink/80 px-1 py-px text-[10px] font-semibold uppercase tracking-wide text-paper">
@@ -65,7 +81,10 @@ function TattooTag({ n }: { n?: number }) {
 
 type Item = {
   id: string;
-  kind: "CONSULTATION" | "TATTOO";
+  kind: "CONSULTATION" | "TATTOO" | "BLOCKER";
+  blockId?: string;
+  note?: string | null;
+  tattooerId?: string;
   sessionNumber?: number;
   leadId: string;
   leadName: string;
@@ -224,6 +243,59 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
       allDay.push({ ...base, day: localDateOf(sn.date, APP_TIMEZONE), startMin: 0, endMin: 0 });
     }
   }
+  // Blockers and absences (unavailability), clipped to the visible days
+  const blocks = await prisma.availabilityException.findMany({
+    where: {
+      kind: "UNAVAILABLE",
+      startsAt: { lt: rangeEnd },
+      endsAt: { gt: rangeStart },
+      ...(scopeTattooer ? { tattooerId: scopeTattooer } : {}),
+    },
+    include: { tattooer: { select: { id: true, user: { select: { name: true } } } } },
+  });
+  for (const b of blocks) {
+    for (const d of days) {
+      const dayStart = startOfLocalDay(d, APP_TIMEZONE);
+      const dayEnd = startOfLocalDay(addDays(d, 1), APP_TIMEZONE);
+      if (b.startsAt >= dayEnd || b.endsAt <= dayStart) continue;
+      const base = {
+        id: `block-${b.id}-${d}`,
+        kind: "BLOCKER" as const,
+        blockId: b.id,
+        note: b.note,
+        tattooerId: b.tattooerId,
+        leadId: "",
+        leadName: b.note || "Blocker",
+        tattooerName: b.tattooer.user.name,
+        tone: BLOCK_TONE,
+        status: "BLOCKER",
+        mode: null,
+        day: d,
+        lane: 0,
+        lanes: 1,
+      };
+      if (b.startsAt <= dayStart && b.endsAt >= dayEnd) {
+        allDay.push({ ...base, startMin: 0, endMin: 0 });
+      } else {
+        const from = b.startsAt > dayStart ? localMinuteOf(b.startsAt, APP_TIMEZONE) : 0;
+        const to = b.endsAt < dayEnd ? localMinuteOf(b.endsAt, APP_TIMEZONE) : 1440;
+        items.push({ ...base, startMin: from, endMin: Math.max(from + 15, to) });
+      }
+    }
+  }
+
+  // People the "new appointment" dialog offers (admin: all active, tattooer: self)
+  const dialogTattooers = (
+    await prisma.tattooerProfile.findMany({
+      where: isAdmin ? { user: { active: true } } : { id: user.tattooerProfile?.id ?? "__none__" },
+      select: { id: true, consultationMinutes: true, user: { select: { name: true } } },
+      orderBy: { createdAt: "asc" },
+    })
+  ).map((t) => ({ id: t.id, name: t.user.name, consultationMinutes: t.consultationMinutes }));
+  const canCreate = dialogTattooers.length > 0;
+  const canDeleteBlock = (tattooerId?: string) =>
+    isAdmin || tattooerId === user.tattooerProfile?.id;
+
   items.sort((a, b) => a.day.localeCompare(b.day) || a.startMin - b.startMin);
   for (const d of days) layoutLanes(items.filter((i) => i.day === d));
 
@@ -246,17 +318,24 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
       : longDay.format(asUtcDate(date));
 
   return (
-    <>
+    <NewEntryProvider
+      isAdmin={isAdmin}
+      tattooers={dialogTattooers}
+      defaultTattooerId={isAdmin ? filter : (user.tattooerProfile?.id ?? null)}
+    >
       <PageHeader
         title="Kalender"
         description={
           isAdmin
-            ? "Beratungen und Tattoo-Termine aller Tätowierer"
-            : "Deine Beratungen und Tattoo-Termine"
+            ? "Beratungen, Tattoo-Termine und Blocker aller Tätowierer – mit „+ Termin“ oder einem Klick auf eine freie Stelle trägst du etwas ein."
+            : "Deine Beratungen, Tattoo-Termine und Blocker – mit „+ Termin“ oder einem Klick auf eine freie Stelle trägst du etwas ein."
         }
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
+        {canCreate && (
+          <AddEntryButton date={date < today ? today : date} className="order-last sm:order-none" />
+        )}
         <div className="flex gap-1">
           <ButtonLink
             href={href({ date: addDays(date, -step) })}
@@ -335,23 +414,43 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
               <ul className="space-y-2">
                 {dayItems.map((i) => (
                   <li key={i.id}>
-                    <Link
-                      href={`/leads/${i.leadId}`}
-                      className={cn("block rounded-lg border-l-4 px-3 py-2", i.tone)}
-                      style={i.kind === "TATTOO" ? TATTOO_TEXTURE : undefined}
-                    >
-                      <span className="block text-sm font-medium">
-                        {i.kind === "TATTOO" && <TattooTag n={i.sessionNumber} />}
-                        {i.leadName}
-                      </span>
-                      <span className="block text-xs text-ink-soft tabular-nums">
-                        {i.kind === "TATTOO" && i.endMin === 0
-                          ? "ganztägig / ohne Uhrzeit"
-                          : `${formatTimeOfDay(i.startMin)}–${formatTimeOfDay(i.endMin % 1440)}`}
-                        {i.mode && ` · ${CONSULTATION_MODE_LABELS[i.mode]}`}
-                        {isAdmin && ` · ${i.tattooerName}`}
-                      </span>
-                    </Link>
+                    {i.kind === "BLOCKER" ? (
+                      <BlockerChip
+                        id={i.blockId!}
+                        canDelete={canDeleteBlock(i.tattooerId)}
+                        className={cn("block w-full rounded-lg border-l-4 px-3 py-2", i.tone)}
+                        style={BLOCK_TEXTURE}
+                      >
+                        <span className="block text-sm font-medium">
+                          <BlockTag />
+                          {i.note || "Blocker"}
+                        </span>
+                        <span className="block text-xs text-ink-soft tabular-nums">
+                          {i.endMin === 0
+                            ? "ganztägig"
+                            : `${formatTimeOfDay(i.startMin)}–${formatTimeOfDay(i.endMin % 1440)}`}
+                          {isAdmin && ` · ${i.tattooerName}`}
+                        </span>
+                      </BlockerChip>
+                    ) : (
+                      <Link
+                        href={`/leads/${i.leadId}`}
+                        className={cn("block rounded-lg border-l-4 px-3 py-2", i.tone)}
+                        style={i.kind === "TATTOO" ? TATTOO_TEXTURE : undefined}
+                      >
+                        <span className="block text-sm font-medium">
+                          {i.kind === "TATTOO" && <TattooTag n={i.sessionNumber} />}
+                          {i.leadName}
+                        </span>
+                        <span className="block text-xs text-ink-soft tabular-nums">
+                          {i.kind === "TATTOO" && i.endMin === 0
+                            ? "ganztägig / ohne Uhrzeit"
+                            : `${formatTimeOfDay(i.startMin)}–${formatTimeOfDay(i.endMin % 1440)}`}
+                          {i.mode && ` · ${CONSULTATION_MODE_LABELS[i.mode]}`}
+                          {isAdmin && ` · ${i.tattooerName}`}
+                        </span>
+                      </Link>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -390,21 +489,38 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
               <div key={d} className="space-y-1 border-l border-line p-1">
                 {allDay
                   .filter((i) => i.day === d)
-                  .map((i) => (
-                    <Link
-                      key={i.id}
-                      href={`/leads/${i.leadId}`}
-                      title={`Tattoo-Termin ${i.sessionNumber} · ${i.leadName} · ${i.tattooerName} (ohne Uhrzeit)`}
-                      className={cn(
-                        "block truncate rounded-md border-l-4 px-1.5 py-0.5 text-xs",
-                        i.tone,
-                      )}
-                      style={TATTOO_TEXTURE}
-                    >
-                      <TattooTag n={i.sessionNumber} />
-                      {i.leadName}
-                    </Link>
-                  ))}
+                  .map((i) =>
+                    i.kind === "BLOCKER" ? (
+                      <BlockerChip
+                        key={i.id}
+                        id={i.blockId!}
+                        canDelete={canDeleteBlock(i.tattooerId)}
+                        className={cn(
+                          "block w-full truncate rounded-md border-l-4 px-1.5 py-0.5 text-xs",
+                          i.tone,
+                        )}
+                        style={BLOCK_TEXTURE}
+                      >
+                        <BlockTag />
+                        {i.note || "Blocker"}
+                        {isAdmin && ` · ${i.tattooerName}`}
+                      </BlockerChip>
+                    ) : (
+                      <Link
+                        key={i.id}
+                        href={`/leads/${i.leadId}`}
+                        title={`Tattoo-Termin ${i.sessionNumber} · ${i.leadName} · ${i.tattooerName} (ohne Uhrzeit)`}
+                        className={cn(
+                          "block truncate rounded-md border-l-4 px-1.5 py-0.5 text-xs",
+                          i.tone,
+                        )}
+                        style={TATTOO_TEXTURE}
+                      >
+                        <TattooTag n={i.sessionNumber} />
+                        {i.leadName}
+                      </Link>
+                    ),
+                  )}
               </div>
             ))}
           </div>
@@ -438,40 +554,72 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
                   style={{ height: 60 * PX_PER_MIN }}
                 />
               ))}
+              {canCreate && <ClickLayer day={d} startHour={startHour} pxPerMin={PX_PER_MIN} />}
               {items
                 .filter((i) => i.day === d)
-                .map((i) => (
-                  <Link
-                    key={i.id}
-                    href={`/leads/${i.leadId}`}
-                    title={`${i.kind === "TATTOO" ? `Tattoo-Termin ${i.sessionNumber}` : "Beratung"} · ${i.leadName} · ${i.tattooerName}`}
-                    className={cn(
-                      "absolute overflow-hidden rounded-md border-l-4 px-1.5 py-1 text-xs leading-tight shadow-sm hover:z-10 hover:shadow",
-                      i.tone,
-                    )}
-                    style={{
-                      ...(i.kind === "TATTOO" ? TATTOO_TEXTURE : {}),
-                      top: (i.startMin - startHour * 60) * PX_PER_MIN,
-                      height: Math.max(22, (i.endMin - i.startMin) * PX_PER_MIN - 2),
-                      left: `calc(${(i.lane / i.lanes) * 100}% + 2px)`,
-                      width: `calc(${100 / i.lanes}% - 4px)`,
-                    }}
-                  >
-                    <span className="block truncate font-medium">
-                      {i.kind === "TATTOO" && <TattooTag n={i.sessionNumber} />}
-                      {i.mode === "PHONE" && "☎ "}
-                      {i.leadName}
-                    </span>
-                    <span className="block truncate text-ink-soft tabular-nums">
-                      {formatTimeOfDay(i.startMin)}
-                      {isAdmin && ` · ${i.tattooerName}`}
-                    </span>
-                  </Link>
-                ))}
+                .map((i) => {
+                  const box = {
+                    top: (i.startMin - startHour * 60) * PX_PER_MIN,
+                    height: Math.max(22, (i.endMin - i.startMin) * PX_PER_MIN - 2),
+                    left: `calc(${(i.lane / i.lanes) * 100}% + 2px)`,
+                    width: `calc(${100 / i.lanes}% - 4px)`,
+                  };
+                  if (i.kind === "BLOCKER") {
+                    return (
+                      <BlockerChip
+                        key={i.id}
+                        id={i.blockId!}
+                        canDelete={canDeleteBlock(i.tattooerId)}
+                        className={cn(
+                          "absolute z-[1] overflow-hidden rounded-md border-l-4 px-1.5 py-1 text-xs leading-tight",
+                          i.tone,
+                        )}
+                        style={{ ...BLOCK_TEXTURE, ...box }}
+                      >
+                        <span className="block truncate font-medium">
+                          <BlockTag />
+                          {i.note || "Blocker"}
+                        </span>
+                        <span className="block truncate text-ink-soft tabular-nums">
+                          {formatTimeOfDay(i.startMin)}–{formatTimeOfDay(i.endMin % 1440)}
+                          {isAdmin && ` · ${i.tattooerName}`}
+                        </span>
+                      </BlockerChip>
+                    );
+                  }
+                  return (
+                    <Link
+                      key={i.id}
+                      href={`/leads/${i.leadId}`}
+                      title={`${i.kind === "TATTOO" ? `Tattoo-Termin ${i.sessionNumber}` : "Beratung"} · ${i.leadName} · ${i.tattooerName}`}
+                      className={cn(
+                        "absolute z-[1] overflow-hidden rounded-md border-l-4 px-1.5 py-1 text-xs leading-tight shadow-sm hover:z-10 hover:shadow",
+                        i.tone,
+                      )}
+                      style={{
+                        ...(i.kind === "TATTOO" ? TATTOO_TEXTURE : {}),
+                        top: (i.startMin - startHour * 60) * PX_PER_MIN,
+                        height: Math.max(22, (i.endMin - i.startMin) * PX_PER_MIN - 2),
+                        left: `calc(${(i.lane / i.lanes) * 100}% + 2px)`,
+                        width: `calc(${100 / i.lanes}% - 4px)`,
+                      }}
+                    >
+                      <span className="block truncate font-medium">
+                        {i.kind === "TATTOO" && <TattooTag n={i.sessionNumber} />}
+                        {i.mode === "PHONE" && "☎ "}
+                        {i.leadName}
+                      </span>
+                      <span className="block truncate text-ink-soft tabular-nums">
+                        {formatTimeOfDay(i.startMin)}
+                        {isAdmin && ` · ${i.tattooerName}`}
+                      </span>
+                    </Link>
+                  );
+                })}
             </div>
           ))}
         </div>
       </div>
-    </>
+    </NewEntryProvider>
   );
 }
