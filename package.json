@@ -22,7 +22,8 @@
     "predev": "prisma generate",
     "prebuild": "prisma generate",
     "db:update": "prisma migrate deploy && prisma generate",
-    "dev:open-consultations": "tsx scripts/dev-open-consultations.ts"
+    "dev:open-consultations": "tsx scripts/dev-open-consultations.ts",
+    "teamup:check": "tsx scripts/teamup-check.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.1",
