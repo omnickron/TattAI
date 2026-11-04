@@ -16,7 +16,8 @@ import { requireAdmin } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { APP_TIMEZONE, formatDate } from "@/lib/format";
 import { formatEuro } from "@/lib/outcomes/money";
-import { buildReport, rate, type Metrics, type ReportLead } from "@/lib/reports/report";
+import { loadReport } from "@/lib/reports/load";
+import { rate, type Metrics } from "@/lib/reports/report";
 import { addDays, isLocalDate, localDateOf, startOfLocalDay } from "@/lib/time";
 
 export const metadata: Metadata = { title: "Auswertung" };
@@ -128,37 +129,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin/
   const campaign = str("campaign") || null;
   const tattooerId = str("tattooer") || null;
 
-  const [rows, campaigns, tattooers] = await Promise.all([
-    prisma.lead.findMany({
-      where: {
-        createdAt: {
-          gte: startOfLocalDay(from, APP_TIMEZONE),
-          lt: startOfLocalDay(addDays(to, 1), APP_TIMEZONE),
-        },
-        ...(campaign
-          ? campaign === "none"
-            ? { metaCampaignId: null }
-            : { metaCampaignId: campaign }
-          : {}),
-      },
-      select: {
-        id: true,
-        createdAt: true,
-        source: true,
-        metaCampaignId: true,
-        metaCampaignName: true,
-        consultations: {
-          select: {
-            tattooerId: true,
-            status: true,
-            startsAt: true,
-            tattooBooked: true,
-            walkIn: true,
-            tattooBookings: { select: { date: true, amountCents: true, cancelled: true } },
-          },
-        },
-      },
-    }),
+  const [report, campaigns, tattooers] = await Promise.all([
+    loadReport(prisma, { from, to, campaign, tattooerId, now, timeZone: APP_TIMEZONE }),
     prisma.lead.groupBy({
       by: ["metaCampaignId", "metaCampaignName"],
       where: { metaCampaignId: { not: null } },
@@ -170,15 +142,6 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin/
   ]);
   const tattooerName = new Map(tattooers.map((t) => [t.id, t.user.name]));
 
-  const leads: ReportLead[] = rows.map((l) => ({
-    id: l.id,
-    createdAt: l.createdAt,
-    source: l.source,
-    campaignId: l.metaCampaignId,
-    campaignName: l.metaCampaignName,
-    consultations: l.consultations.map((c) => ({ ...c, sessions: c.tattooBookings })),
-  }));
-  const report = buildReport(leads, { now, from, to, tattooerId, timeZone: APP_TIMEZONE });
   const t = report.totals;
   const qs = (over: Record<string, string>) =>
     `/admin/dashboard?${new URLSearchParams({
@@ -245,8 +208,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin/
 
       {tattooerId && (
         <p className="mb-4 text-sm text-ink-soft">
-          Gefiltert nach {tattooerName.get(tattooerId)}: Es zählen nur Leads, deren Beratung bei
-          dieser Person lag.
+          Gefiltert nach {tattooerName.get(tattooerId)}: Es zählen nur Leads mit Beratung oder
+          Tattoo bei dieser Person – und davon nur ihr eigener Teil (Termine, Abschlüsse, Umsatz).
         </p>
       )}
 
