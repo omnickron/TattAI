@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 # One-time setup of a fresh Ubuntu 24.04 server (e.g. IONOS VPS), run as root:
-#   curl -fsSL https://raw.githubusercontent.com/... | bash   (or copy this file over)
+#   scp deploy/setup-server.sh root@<IP>:   then   ssh root@<IP>   and   bash setup-server.sh
 # Installs Docker, firewall, swap and automatic security updates, then clones the app.
 set -euo pipefail
+
+if ! { : < /dev/tty; } 2>/dev/null; then
+  echo "Bitte interaktiv starten: erst 'ssh root@<IP>', dann 'bash setup-server.sh'." >&2
+  exit 1
+fi
 
 REPO="${REPO:-git@github.com:omnickron/TattAI.git}"
 BRANCH="${BRANCH:-claude/new-session-ti5a92}"
@@ -54,7 +59,11 @@ if [ ! -d "$DIR/.git" ]; then
   cat /root/.ssh/needl_deploy.pub
   echo
   read -rp "Enter drücken, sobald der Schlüssel eingetragen ist … " _ < /dev/tty
-  git clone --branch "$BRANCH" "$REPO" "$DIR"
+  until git clone --branch "$BRANCH" "$REPO" "$DIR"; do
+    echo
+    echo "GitHub lehnt den Zugriff noch ab. Ist der Deploy-Key oben genau so eingetragen?"
+    read -rp "Enter für einen neuen Versuch (Strg+C zum Abbrechen) … " _ < /dev/tty
+  done
 fi
 
 echo "==> Tägliches Datenbank-Backup (03:15 Uhr, 14 Tage)"
