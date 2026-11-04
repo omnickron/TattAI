@@ -8,7 +8,7 @@ if [ -f .env ]; then
 fi
 
 ask() { local v; read -rp "$1: " v < /dev/tty; printf '%s' "$v"; }
-domain=$(ask "Adresse der App (z. B. studio.inkable.de)")
+domain=$(ask "Adresse der App (z. B. studio.needl-booker.de)")
 admin_email=$(ask "Google-Adresse des Admins")
 admin_name=$(ask "Name des Admins")
 google_id=$(ask "Google Client-ID")

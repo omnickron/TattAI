@@ -218,7 +218,7 @@ letzten fünf automatischen WhatsApp-Kontakte mit Vorschau der letzten Chatnachr
 1. **Server anlegen:** VPS mit Ubuntu 24.04, mindestens 2 vCores und 4 GB RAM, Rechenzentrum in
    Deutschland. Bei IONOS zusätzlich in der Firewall-Richtlinie des Servers die Ports 80 und 443
    freigeben (sonst kein HTTPS-Zertifikat).
-2. **DNS:** A-Record der App-Adresse (z. B. `studio.inkable.de`) auf die IPv4 des Servers.
+2. **DNS:** A-Record der App-Adresse (z. B. `studio.needl-booker.de`) auf die IPv4 des Servers.
 3. **Einrichten** (als root auf dem Server): `deploy/setup-server.sh` installiert Docker, Firewall,
    Swap, automatische Sicherheitsupdates und das tägliche Backup; es erzeugt einen Deploy-Key für
    GitHub und holt den Code nach `/opt/needl`.
