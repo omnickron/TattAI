@@ -5,13 +5,13 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-tattai}
+      POSTGRES_USER: ${POSTGRES_USER:-needl}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB:-tattai}
+      POSTGRES_DB: ${POSTGRES_DB:-needl}
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tattai}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-needl}"]
       interval: 5s
       retries: 10
 

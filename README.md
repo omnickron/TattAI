@@ -1,4 +1,4 @@
-# TattAI – Leads & Beratungstermine
+# NEEDL – Leads & Beratungstermine
 
 Interne Web-App (PWA) für das Tattoo-Studio: Leads aus Meta-Lead-Formularen, WhatsApp-Erstansprache,
 faire Verteilung von Beratungsterminen auf die Tätowierer, Google-Kalender, Umsatz-Auswertung.
@@ -160,7 +160,7 @@ Variablen `WHATSAPP_*` aus `.env.example` setzen.
 
 ## Chatbot
 
-Der Chatbot selbst ist nicht Teil des Projekts; TattAI bietet ihm eine API (`/api/bot/v1`, API-Schlüssel) und
+Der Chatbot selbst ist nicht Teil des Projekts; NEEDL bietet ihm eine API (`/api/bot/v1`, API-Schlüssel) und
 schickt ihm Kundennachrichten als signierte Ereignisse. Details: [`docs/bot-api.md`](docs/bot-api.md).
 
 - **Übernahme**: Antwortet ein Mensch (Tätowierer/Admin) im Chat, schaltet sich der Bot dort dauerhaft ab.

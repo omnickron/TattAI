@@ -1,18 +1,18 @@
 # Bot-Schnittstelle (API v1)
 
-Schnittstelle zwischen TattAI und dem WhatsApp-Chatbot. Der Bot selbst ist nicht Teil dieses Projekts.
-TattAI bleibt die Quelle der Wahrheit für Leads und Termine; der Bot liest und schreibt nur über diese API.
+Schnittstelle zwischen NEEDL und dem WhatsApp-Chatbot. Der Bot selbst ist nicht Teil dieses Projekts.
+NEEDL bleibt die Quelle der Wahrheit für Leads und Termine; der Bot liest und schreibt nur über diese API.
 
 ## Überblick
 
 ```
-Kunde ──WhatsApp──► Meta ──Webhook──► TattAI ──signiertes Ereignis──► Bot
+Kunde ──WhatsApp──► Meta ──Webhook──► NEEDL ──signiertes Ereignis──► Bot
                                         ▲                              │
                                         └──────── Bot-API (REST) ◄─────┘
 ```
 
-1. Eine Kundennachricht kommt bei TattAI an und wird im Chatverlauf gespeichert.
-2. Ist der Bot in diesem Chat aktiv, schickt TattAI das Ereignis `message.received` an `BOT_WEBHOOK_URL`.
+1. Eine Kundennachricht kommt bei NEEDL an und wird im Chatverlauf gespeichert.
+2. Ist der Bot in diesem Chat aktiv, schickt NEEDL das Ereignis `message.received` an `BOT_WEBHOOK_URL`.
 3. Der Bot antwortet über `POST /leads/{id}/messages`, fragt freie Zeiten ab, bucht usw.
 
 ## Wann der Bot nicht handeln darf
@@ -26,7 +26,7 @@ Der Bot ist in einem Chat **aus**, wenn
 
 Dann gilt:
 
-- TattAI schickt **keine** `message.received`-Ereignisse mehr für diesen Chat (auch bereits geplante werden verworfen).
+- NEEDL schickt **keine** `message.received`-Ereignisse mehr für diesen Chat (auch bereits geplante werden verworfen).
 - Alle schreibenden Aufrufe für diesen Chat antworten mit **409 `BOT_DISABLED`**.
 - `GET /leads/{id}` zeigt `botActive: false` und `botDisabledReason`.
 
@@ -41,7 +41,7 @@ Jeder Aufruf braucht den Header
 Authorization: Bearer <BOT_API_KEY>
 ```
 
-`BOT_API_KEY` wird in TattAI als Umgebungsvariable gesetzt (mindestens 32 Zeichen, z. B. `openssl rand -hex 32`).
+`BOT_API_KEY` wird in NEEDL als Umgebungsvariable gesetzt (mindestens 32 Zeichen, z. B. `openssl rand -hex 32`).
 Ohne gültigen Schlüssel: `401`; ist die API nicht eingerichtet: `503`.
 
 Basis-URL: `https://<app-domain>/api/bot/v1`
@@ -69,7 +69,7 @@ Zeitangaben sind ISO-8601 in UTC (z. B. `2026-11-09T09:00:00.000Z`); Darstellung
 ### `GET /slots?from=&to=`
 
 Freie Beratungs-Startzeiten über alle Tätowierer. Standard: ab jetzt 14 Tage, höchstens 28 Tage im Voraus,
-frühestens 2 Stunden ab jetzt. Welcher Tätowierer den Termin bekommt, entscheidet TattAI beim Buchen (fair).
+frühestens 2 Stunden ab jetzt. Welcher Tätowierer den Termin bekommt, entscheidet NEEDL beim Buchen (fair).
 
 ```json
 { "data": { "from": "…", "to": "…", "slots": [
@@ -107,7 +107,7 @@ Freie Antwort an den Kunden – nur innerhalb von 24 Stunden nach seiner letzten
 
 ### `POST /leads/{id}/consultations`
 
-Bucht einen Beratungstermin. TattAI wählt fair unter allen, die zu dieser Zeit frei sind, legt den
+Bucht einen Beratungstermin. NEEDL wählt fair unter allen, die zu dieser Zeit frei sind, legt den
 Kalendereintrag an und setzt den Lead auf „Beratung gebucht“.
 
 ```json
@@ -152,18 +152,18 @@ Strukturierte Zusammenfassung der Tattoo-Idee. Erscheint am Lead in der App und 
 
 ## Ereignisse an den Bot (Webhook)
 
-TattAI sendet `POST` an `BOT_WEBHOOK_URL`:
+NEEDL sendet `POST` an `BOT_WEBHOOK_URL`:
 
 ```
 Content-Type: application/json
-X-TattAI-Event: message.received
-X-TattAI-Delivery: <id>          # gleich bei Wiederholungen → zum Entdoppeln verwenden
-X-TattAI-Timestamp: 1793701234   # Unix-Sekunden
-X-TattAI-Signature: sha256=<hex HMAC-SHA256(BOT_WEBHOOK_SECRET, "<timestamp>.<body>")>
+X-NEEDL-Event: message.received
+X-NEEDL-Delivery: <id>          # gleich bei Wiederholungen → zum Entdoppeln verwenden
+X-NEEDL-Timestamp: 1793701234   # Unix-Sekunden
+X-NEEDL-Signature: sha256=<hex HMAC-SHA256(BOT_WEBHOOK_SECRET, "<timestamp>.<body>")>
 ```
 
 Der Bot muss die Signatur prüfen (zeitkonstant vergleichen) und Ereignisse älter als einige Minuten
-verwerfen. Antwortet er nicht mit `2xx`, wiederholt TattAI die Zustellung mit wachsendem Abstand
+verwerfen. Antwortet er nicht mit `2xx`, wiederholt NEEDL die Zustellung mit wachsendem Abstand
 (1, 2, 4 … bis 60 Minuten, höchstens 10 Versuche).
 
 ```json
@@ -179,4 +179,4 @@ verwerfen. Antwortet er nicht mit `2xx`, wiederholt TattAI die Zustellung mit wa
 | `chat.bot_enabled` | Bot in diesem Chat wieder an |
 
 Bilder und Dokumente des Kunden kommen als `type: "image"`/`"document"` mit `attachmentIds`. Die Dateien
-selbst liegen privat in TattAI und sind nur für Admin und zuständigen Tätowierer abrufbar.
+selbst liegen privat in NEEDL und sind nur für Admin und zuständigen Tätowierer abrufbar.

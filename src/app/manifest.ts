@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "TattAI – Leads & Beratungen",
-    short_name: "TattAI",
+    name: "NEEDL – Leads & Beratungen",
+    short_name: "NEEDL",
     description: "Leads und Beratungstermine für das Tattoo-Studio",
     start_url: "/",
     display: "standalone",

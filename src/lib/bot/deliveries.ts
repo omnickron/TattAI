@@ -1,7 +1,7 @@
 /**
  * Delivers queued bot events (BotDelivery) to BOT_WEBHOOK_URL with retries.
- * Headers: X-TattAI-Event, X-TattAI-Delivery (idempotency key for the bot),
- * X-TattAI-Timestamp and X-TattAI-Signature (HMAC over "<timestamp>.<body>").
+ * Headers: X-NEEDL-Event, X-NEEDL-Delivery (idempotency key for the bot),
+ * X-NEEDL-Timestamp and X-NEEDL-Signature (HMAC over "<timestamp>.<body>").
  */
 import type { PrismaClient } from "@/generated/prisma/client";
 import { signBotEvent } from "./auth";
@@ -69,10 +69,10 @@ export async function deliverBotEvents(prisma: PrismaClient, cfg: DeliveryConfig
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "x-tattai-event": d.event,
-          "x-tattai-delivery": d.id,
-          "x-tattai-timestamp": timestamp,
-          "x-tattai-signature": signBotEvent(cfg.secret, timestamp, body),
+          "x-needl-event": d.event,
+          "x-needl-delivery": d.id,
+          "x-needl-timestamp": timestamp,
+          "x-needl-signature": signBotEvent(cfg.secret, timestamp, body),
         },
         body,
         signal: AbortSignal.timeout(10_000),

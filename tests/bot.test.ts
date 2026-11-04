@@ -330,9 +330,9 @@ describe("bot event delivery", () => {
     ).toMatchObject({ delivered: 1 });
 
     const { headers, body } = calls[1];
-    expect(headers["x-tattai-event"]).toBe("message.received");
-    expect(headers["x-tattai-signature"]).toBe(
-      signBotEvent("s3cret", headers["x-tattai-timestamp"], body),
+    expect(headers["x-needl-event"]).toBe("message.received");
+    expect(headers["x-needl-signature"]).toBe(
+      signBotEvent("s3cret", headers["x-needl-timestamp"], body),
     );
     expect(JSON.parse(body)).toMatchObject({ event: "message.received", data: { leadId: l.id } });
 
@@ -354,7 +354,7 @@ describe("bot event delivery", () => {
 
 describe("reference images", () => {
   it("downloads images privately, serves only inside storage and deletes them with the lead", async () => {
-    const dir = await mkdtemp(path.join(tmpdir(), "tattai-media-"));
+    const dir = await mkdtemp(path.join(tmpdir(), "needl-media-"));
     try {
       const l = await lead();
       await processWhatsAppWebhook(

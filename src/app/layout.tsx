@@ -3,10 +3,10 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: { default: "TattAI", template: "%s · TattAI" },
+  title: { default: "NEEDL", template: "%s · NEEDL" },
   description: "Leads und Beratungstermine für das Tattoo-Studio",
-  applicationName: "TattAI",
-  appleWebApp: { capable: true, title: "TattAI", statusBarStyle: "default" },
+  applicationName: "NEEDL",
+  appleWebApp: { capable: true, title: "NEEDL", statusBarStyle: "default" },
   robots: { index: false, follow: false },
 };
 

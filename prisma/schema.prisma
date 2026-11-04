@@ -1,4 +1,4 @@
-// Data model for the TattAI lead & consultation app.
+// Data model for the NEEDL lead & consultation app.
 // All timestamps are stored in UTC; the UI renders them in Europe/Berlin.
 
 generator client {
