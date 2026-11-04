@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { RoutingCalendarClient } from "@/lib/calendar/routing";
-import type { CalendarClient, CalendarConnection, CalendarEventInput } from "@/lib/google/calendar";
+import type { CalendarClient, CalendarConnection } from "@/lib/google/calendar";
 import { bookConsultation, getAvailableSlots, type SchedulingDeps } from "@/lib/scheduling/booking";
 import { connectTeamup, disconnectTeamup, switchToGoogle } from "@/lib/scheduling/calendar-switch";
 import type { Interval } from "@/lib/scheduling/slots";
@@ -31,7 +31,7 @@ class Recorder implements CalendarClient {
   async ensureConsultationCalendar(conn: CalendarConnection) {
     return conn.calendarId ?? this.appCalendar(conn);
   }
-  async createEvent(conn: CalendarConnection, calendarId: string, _event: CalendarEventInput) {
+  async createEvent(conn: CalendarConnection, calendarId: string) {
     const id = `${this.name}-evt-${this.created.length + 1}`;
     this.created.push({ calendarId, artist: conn.teamupArtist, id });
     return id;
