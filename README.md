@@ -213,10 +213,11 @@ letzten fünf automatischen WhatsApp-Kontakte mit Vorschau der letzten Chatnachr
   später stattfinden). Ein Lead zählt für den Tätowierer, bei dem die Beratung stattfand (sonst der letzten
   Beratung) – Umbuchungen zählen nicht doppelt.
 
-## Produktion (Hetzner Cloud)
+## Produktion (IONOS VPS oder anderer Ubuntu-Server)
 
-1. **Server anlegen:** Hetzner Cloud, Standort Nürnberg oder Falkenstein, Ubuntu 24.04, kleinster
-   Shared-vCPU-Typ mit 4 GB RAM, eigenen SSH-Schlüssel hinterlegen, Backups einschalten.
+1. **Server anlegen:** VPS mit Ubuntu 24.04, mindestens 2 vCores und 4 GB RAM, Rechenzentrum in
+   Deutschland. Bei IONOS zusätzlich in der Firewall-Richtlinie des Servers die Ports 80 und 443
+   freigeben (sonst kein HTTPS-Zertifikat).
 2. **DNS:** A-Record der App-Adresse (z. B. `studio.inkable.de`) auf die IPv4 des Servers.
 3. **Einrichten** (als root auf dem Server): `deploy/setup-server.sh` installiert Docker, Firewall,
    Swap, automatische Sicherheitsupdates und das tägliche Backup; es erzeugt einen Deploy-Key für

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-time setup of a fresh Hetzner Cloud server (Ubuntu 24.04), run as root:
+# One-time setup of a fresh Ubuntu 24.04 server (e.g. IONOS VPS), run as root:
 #   curl -fsSL https://raw.githubusercontent.com/... | bash   (or copy this file over)
 # Installs Docker, firewall, swap and automatic security updates, then clones the app.
 set -euo pipefail

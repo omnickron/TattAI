@@ -1,4 +1,4 @@
-# Production stack for a single EU server (e.g. Hetzner Cloud CX22).
+# Production stack for a single EU server (e.g. IONOS VPS, 4 GB RAM).
 # Usage (in repo root): docker compose -f deploy/docker-compose.prod.yml --env-file .env up -d --build
 services:
   db:
