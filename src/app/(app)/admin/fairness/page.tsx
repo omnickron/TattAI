@@ -4,7 +4,7 @@ import { Badge, Button, Card, Field, Input, PageHeader } from "@/components/ui";
 import { requireAdmin } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/format";
-import { loadFairnessMembers } from "@/lib/scheduling/booking";
+import { isCalendarConnected, loadFairnessMembers } from "@/lib/scheduling/booking";
 import { scoreMembers } from "@/lib/scheduling/fairness";
 import { updateFairness } from "./actions";
 
@@ -18,7 +18,13 @@ export default async function FairnessPage() {
   const { members, windowDays, since } = await loadFairnessMembers(prisma, new Date());
   const profiles = await prisma.tattooerProfile.findMany({
     where: { id: { in: members.map((m) => m.tattooerId) } },
-    select: { id: true, googleConnectedAt: true, user: { select: { name: true, role: true } } },
+    select: {
+      id: true,
+      googleConnectedAt: true,
+      teamupConnectedAt: true,
+      calendarProvider: true,
+      user: { select: { name: true, role: true } },
+    },
   });
   const byId = new Map(profiles.map((p) => [p.id, p]));
   const scores = scoreMembers(members).sort((a, b) =>
@@ -53,7 +59,7 @@ export default async function FairnessPage() {
                       <td className="px-4 py-2 sm:pl-0">
                         <span className="font-medium">{p.user.name}</span>{" "}
                         {p.user.role === "ADMIN" && <Badge>Inhaber</Badge>}{" "}
-                        {!p.googleConnectedAt && <Badge tone="amber">ohne Kalender</Badge>}
+                        {!isCalendarConnected(p) && <Badge tone="amber">ohne Kalender</Badge>}
                       </td>
                       <td className="px-2 py-2">
                         <div className="flex items-center gap-1">

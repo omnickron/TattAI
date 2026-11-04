@@ -25,7 +25,7 @@ async function main() {
     "calendar:",
     await syncPendingSessions({
       prisma,
-      calendar: createCalendarClient(),
+      calendar: createCalendarClient(prisma),
       appUrl: process.env.APP_URL,
     }),
   );

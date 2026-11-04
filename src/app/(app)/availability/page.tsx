@@ -3,7 +3,6 @@ import { ActionForm } from "@/components/action-form";
 import {
   Badge,
   Button,
-  ButtonLink,
   Card,
   CardTitle,
   Field,
@@ -14,8 +13,7 @@ import {
 } from "@/components/ui";
 import { requireTattooer } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
-import { formatDateTime, formatRange } from "@/lib/format";
-import { isCalendarMock } from "@/lib/google/mock-calendar";
+import { formatRange } from "@/lib/format";
 import { WEEKDAY_LABELS } from "@/lib/labels-time";
 import { formatTimeOfDay } from "@/lib/time";
 import {
@@ -23,28 +21,11 @@ import {
   addAvailabilityRule,
   deleteAvailabilityException,
   deleteAvailabilityRule,
-  disconnectGoogleCalendar,
   updateConsultationSettings,
 } from "./actions";
+import { CalendarCard } from "./calendar-card";
 
 export const metadata: Metadata = { title: "Verfügbarkeit" };
-
-const GOOGLE_MESSAGES: Record<string, { ok: boolean; text: string }> = {
-  connected: { ok: true, text: "Google-Kalender verbunden." },
-  denied: { ok: false, text: "Verbindung abgebrochen. Ohne Kalender bekommst du keine Termine." },
-  scopes: {
-    ok: false,
-    text: "Es wurden nicht alle Berechtigungen erteilt. Bitte erneut verbinden und alle Häkchen setzen.",
-  },
-  account: {
-    ok: false,
-    text: "Bitte mit demselben Google-Konto verbinden, mit dem du dich anmeldest.",
-  },
-  error: {
-    ok: false,
-    text: "Die Verbindung mit Google ist fehlgeschlagen. Bitte erneut versuchen.",
-  },
-};
 
 const DURATIONS = [15, 20, 30, 45, 60, 75, 90, 120];
 const BUFFERS = [0, 5, 10, 15, 20, 30, 45, 60];
@@ -52,7 +33,6 @@ const BUFFERS = [0, 5, 10, 15, 20, 30, 45, 60];
 export default async function AvailabilityPage({ searchParams }: PageProps<"/availability">) {
   const user = await requireTattooer();
   const params = await searchParams;
-  const googleMessage = typeof params.google === "string" ? GOOGLE_MESSAGES[params.google] : null;
 
   const profile = await prisma.tattooerProfile.findUniqueOrThrow({
     where: { id: user.tattooerProfile.id },
@@ -64,82 +44,22 @@ export default async function AvailabilityPage({ searchParams }: PageProps<"/ava
       },
     },
   });
-  const connected = Boolean(profile.googleConnectedAt);
-  const mock = isCalendarMock();
 
   return (
     <>
       <PageHeader
         title="Meine Verfügbarkeit"
-        description="In diesen Zeiten können Beratungen für dich gebucht werden – abzüglich belegter Zeiten in deinem Google-Kalender."
+        description="In diesen Zeiten können Beratungen für dich gebucht werden – abzüglich belegter Zeiten in deinem Kalender (Google oder TeamUp)."
       />
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardTitle
-            action={
-              connected ? (
-                <Badge tone="green">verbunden</Badge>
-              ) : (
-                <Badge tone="amber">nicht verbunden</Badge>
-              )
-            }
-          >
-            Google-Kalender
-          </CardTitle>
-          {googleMessage && (
-            <p
-              role="status"
-              className={
-                googleMessage.ok
-                  ? "mb-3 text-sm text-emerald-700 dark:text-emerald-400"
-                  : "mb-3 text-sm text-red-600"
-              }
-            >
-              {googleMessage.text}
-            </p>
-          )}
-          {connected ? (
-            <div className="space-y-3 text-sm">
-              <p className="text-ink-soft">
-                Verbunden
-                {profile.googleAccountEmail && (
-                  <>
-                    {" "}
-                    als <span className="text-ink">{profile.googleAccountEmail}</span>
-                  </>
-                )}{" "}
-                seit {formatDateTime(profile.googleConnectedAt)}. Belegte Zeiten aus allen deinen
-                Kalendern werden berücksichtigt. Beratungen und Tattoo-Termine landen im Kalender
-                „Studio-Termine“, den die App beim Verbinden anlegt.
-              </p>
-              <ActionForm
-                action={disconnectGoogleCalendar}
-                confirm="Kalender wirklich trennen? Du bekommst dann keine neuen Termine."
-              >
-                <Button type="submit" variant="secondary">
-                  Verbindung trennen
-                </Button>
-              </ActionForm>
-            </div>
-          ) : (
-            <div className="space-y-3 text-sm">
-              <p className="text-ink-soft">
-                Ohne verbundenen Kalender werden dir keine Termine zugeteilt. Die App sieht nur,
-                wann du belegt bist – nicht, was in deinen Terminen steht.
-              </p>
-              <ButtonLink href="/api/google/connect" prefetch={false}>
-                Google-Kalender verbinden
-              </ButtonLink>
-            </div>
-          )}
-          {mock && (
-            <p className="mt-3 text-xs text-ink-soft">
-              Beispiel-Modus: Es wird kein echter Google-Kalender verwendet (Mittagspause und
-              einzelne private Termine werden simuliert).
-            </p>
-          )}
-        </Card>
+        <CalendarCard
+          profile={profile}
+          userName={user.name}
+          isAdmin={user.role === "ADMIN"}
+          tab={typeof params.kalender === "string" ? params.kalender : undefined}
+          googleResult={typeof params.google === "string" ? params.google : undefined}
+        />
 
         <Card>
           <CardTitle>Beratung</CardTitle>

@@ -35,6 +35,11 @@ model User {
   botDisabledLeads Lead[]           @relation("BotDisabledBy")
 }
 
+enum CalendarProvider {
+  GOOGLE
+  TEAMUP
+}
+
 model TattooerProfile {
   id                  String @id @default(cuid())
   userId              String @unique
@@ -49,6 +54,16 @@ model TattooerProfile {
   // Name last applied to that calendar (renamed automatically when it changes)
   consultationCalendarName String?
   googleConnectedAt        DateTime?
+  // Google app calendar kept while TeamUp is used (so switching back reuses it)
+  googleCalendarId         String?
+
+  // Which calendar this tattooer uses. consultationCalendarId is the current app calendar:
+  // a Google calendar id, or "teamup:<subcalendar id>" for the shared TeamUp calendar.
+  calendarProvider  CalendarProvider @default(GOOGLE)
+  // TeamUp: value of the studio's "Artist" field that marks this tattooer's entries
+  teamupArtist      String?
+  teamupArtistLabel String?
+  teamupConnectedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -359,6 +374,12 @@ model AppSettings {
   studioName         String?
   // Address used as location of on-site consultations in calendar events
   studioAddress      String?
+  // TeamUp (shared studio calendar): sub-calendar the app writes to and the "Artist" field
+  // ("who" = TeamUp's built-in "Wer" field, otherwise the id of a custom field)
+  teamupSubcalendarId   String?
+  teamupSubcalendarName String?
+  teamupArtistFieldId   String?
+  teamupArtistFieldName String?
   updatedAt          DateTime @updatedAt
 }
 

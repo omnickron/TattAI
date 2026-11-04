@@ -5,6 +5,10 @@ import { z } from "zod";
 import type { ActionState } from "@/lib/action-state";
 import { requireAdmin } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
+import { TEAMUP_PREFIX } from "@/lib/google/calendar";
+import { createTeamupClient } from "@/lib/google/client";
+import { moveUpcomingEntries } from "@/lib/scheduling/calendar-switch";
+import { schedulingDeps } from "@/lib/scheduling/deps";
 
 const schema = z.object({
   consentCheckboxKey: z.string().trim().max(200),
@@ -48,4 +52,74 @@ export async function updateStudioSettings(
   });
   revalidatePath("/admin/settings");
   return { ok: true, message: "Gespeichert. Gilt für neue Kalendereinträge und Nachrichten." };
+}
+
+/** TeamUp: sub-calendar for the app's entries and the "Artist" field. */
+export async function updateTeamupSettings(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireAdmin();
+  const subcalendarId = String(formData.get("teamupSubcalendarId") ?? "").trim();
+  const fieldId = String(formData.get("teamupArtistFieldId") ?? "").trim();
+  if (!subcalendarId || !fieldId)
+    return { ok: false, message: "Bitte Unterkalender und Artist-Feld auswählen." };
+
+  const client = createTeamupClient();
+  let subcalendarName: string;
+  let fieldName: string;
+  try {
+    const [subcalendars, fields] = await Promise.all([
+      client.listSubcalendars(),
+      client.listFields(),
+    ]);
+    const sub = subcalendars.find((s) => s.id === subcalendarId);
+    const field = fields.find((f) => f.id === fieldId);
+    if (!sub || !field) return { ok: false, message: "Auswahl nicht (mehr) in TeamUp vorhanden." };
+    subcalendarName = sub.name;
+    fieldName = field.name;
+  } catch (err) {
+    return {
+      ok: false,
+      message: `TeamUp ist nicht erreichbar: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  const before = await prisma.appSettings.findUnique({ where: { id: 1 } });
+  const data = {
+    teamupSubcalendarId: subcalendarId,
+    teamupSubcalendarName: subcalendarName,
+    teamupArtistFieldId: fieldId,
+    teamupArtistFieldName: fieldName,
+  };
+  await prisma.appSettings.upsert({ where: { id: 1 }, update: data, create: { id: 1, ...data } });
+
+  let note = "";
+  const teamupProfiles = await prisma.tattooerProfile.findMany({
+    where: { calendarProvider: "TEAMUP", teamupConnectedAt: { not: null } },
+    select: { id: true },
+  });
+  if (
+    before?.teamupArtistFieldId &&
+    before.teamupArtistFieldId !== fieldId &&
+    teamupProfiles.length
+  ) {
+    // Artist values of another field no longer match: everyone picks their artist again
+    await prisma.tattooerProfile.updateMany({
+      where: { id: { in: teamupProfiles.map((p) => p.id) } },
+      data: { teamupConnectedAt: null, teamupArtist: null, teamupArtistLabel: null },
+    });
+    note = ` Das Artist-Feld wurde geändert: ${teamupProfiles.length} Tätowierer müssen ihren Artist unter „Verfügbarkeit“ neu wählen.`;
+  } else if (before?.teamupSubcalendarId && before.teamupSubcalendarId !== subcalendarId) {
+    const deps = schedulingDeps();
+    await prisma.tattooerProfile.updateMany({
+      where: { calendarProvider: "TEAMUP" },
+      data: { consultationCalendarId: `${TEAMUP_PREFIX}${subcalendarId}` },
+    });
+    for (const p of teamupProfiles) await moveUpcomingEntries(deps, p.id);
+    note = " Anstehende Termine wurden in den neuen Unterkalender verschoben.";
+  }
+  revalidatePath("/admin/settings");
+  revalidatePath("/availability");
+  return { ok: true, message: `TeamUp gespeichert.${note}` };
 }

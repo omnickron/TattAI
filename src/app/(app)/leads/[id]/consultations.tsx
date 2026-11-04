@@ -14,7 +14,7 @@ import {
 import type { CurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { APP_TIMEZONE } from "@/lib/format";
-import { getAvailableSlots } from "@/lib/scheduling/booking";
+import { CALENDAR_CONNECTED_WHERE, getAvailableSlots } from "@/lib/scheduling/booking";
 import { schedulingDeps } from "@/lib/scheduling/deps";
 import { CONSULTATION_MODE_LABELS } from "@/lib/scheduling/event-content";
 import {
@@ -88,7 +88,7 @@ export async function ConsultationsSection({
   const hasUpcoming = consultations.some((c) => c.status === "SCHEDULED" && c.endsAt > now);
   const tattooers = isAdmin
     ? await prisma.tattooerProfile.findMany({
-        where: { user: { active: true }, googleConnectedAt: { not: null } },
+        where: { user: { active: true }, ...CALENDAR_CONNECTED_WHERE },
         select: { id: true, user: { select: { name: true } } },
         orderBy: { createdAt: "asc" },
       })

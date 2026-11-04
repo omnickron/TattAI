@@ -122,6 +122,24 @@ private Termine, Einträge werden nur protokolliert). Für den echten Betrieb:
 Die App fragt nur diese Berechtigungen an: Free/Busy (keine Termininhalte), Kalenderliste lesen und
 Verwaltung der *von der App angelegten* Kalender („Studio-Termine“, wird beim Verbinden automatisch angelegt). Einträge sind als privat markiert.
 
+### TeamUp (Alternative zu Google)
+
+Jeder Tätowierer wählt unter **Verfügbarkeit → Kalender**, ob seine Termine über Google oder TeamUp
+laufen. Der Login bleibt Google.
+
+- **Aufbau:** Das Studio teilt sich *einen* TeamUp-Kalender. Das Pflichtfeld **„Artist“** (Auswahlfeld
+  oder das eingebaute Feld „Wer“) hält fest, wem ein Termin gehört.
+- **Einrichtung (Admin):** `TEAMUP_API_KEY` und `TEAMUP_CALENDAR_KEY` als Umgebungsvariablen setzen,
+  dann unter **Einstellungen → TeamUp-Kalender** den Unterkalender für App-Termine und das Artist-Feld
+  wählen. Danach wählt jeder Tätowierer seinen Artist-Wert.
+- **Belegt** ist eine Person, wenn im TeamUp-Kalender ein Eintrag mit ihrem Artist steht (Einträge
+  der App selbst zählen nicht, erkennbar an `remote_id` mit `needl:`).
+- **Beratungen und Tattoo-Termine** schreibt die App in den gewählten Unterkalender, mit dem Artist
+  der Person und der Zusammenfassung als Notiz.
+- **Wechsel Google ↔ TeamUp:** anstehende Termine ziehen automatisch um, die alten Einträge werden
+  gelöscht. Der Google-Kalender „Studio-Termine“ wird beim Zurückwechseln wiederverwendet.
+- Lokal läuft TeamUp im Beispiel-Modus (`TEAMUP_MOCK=true`).
+
 ## WhatsApp (automatischer Versand)
 
 Alles wird im Admin unter **WhatsApp** gepflegt:

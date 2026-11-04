@@ -6,7 +6,12 @@
  */
 import type { PrismaClient } from "@/generated/prisma/client";
 import { addDays, DEFAULT_TIME_ZONE, localDateOf } from "../time";
-import { connectionOf, createInAppCalendar, type SchedulingDeps } from "./booking";
+import {
+  connectionOf,
+  createInAppCalendar,
+  isCalendarConnected,
+  type SchedulingDeps,
+} from "./booking";
 import { buildTattooEvent } from "./event-content";
 
 type Tx = Pick<PrismaClient, "calendarEventDeletion" | "tattooBooking" | "consultation">;
@@ -21,8 +26,21 @@ export function retryDelayMs(attempts: number): number {
 /** Turns a technical calendar error into a short German explanation. */
 export function describeCalendarError(message: string | null | undefined): string {
   const m = (message ?? "").toLowerCase();
+  if (m.includes("teamup")) {
+    if (m.includes("nicht eingerichtet") || m.includes("unterkalender"))
+      return "TeamUp ist nicht vollständig eingerichtet (Admin: „Einstellungen“ → TeamUp).";
+    if (m.includes("artist"))
+      return "Diese Person hat in TeamUp noch keinen Artist gewählt (unter „Verfügbarkeit“).";
+    if (m.includes(" 401") || m.includes(" 403"))
+      return "TeamUp verweigert den Zugriff. Bitte API-Schlüssel und Kalender-Schlüssel prüfen.";
+    if (m.includes(" 404") || m.includes(" 410"))
+      return "Der Eintrag wurde in TeamUp nicht gefunden – er wird neu angelegt.";
+    if (m.includes("timeout") || m.includes("fetch failed") || /\b5\d\d\b/.test(m))
+      return "TeamUp war nicht erreichbar. Bitte später erneut versuchen.";
+    return "Die Übertragung zu TeamUp ist fehlgeschlagen.";
+  }
   if (m.includes("nicht verbunden")) {
-    return "Diese Person hat ihren Google-Kalender noch nicht verbunden (unter „Verfügbarkeit“).";
+    return "Diese Person hat ihren Kalender noch nicht verbunden (unter „Verfügbarkeit“).";
   }
   if (m.includes("invalid_grant") || m.includes(" 401") || m.includes("token")) {
     return "Die Verbindung zu Google ist abgelaufen. Bitte den Google-Kalender unter „Verfügbarkeit“ neu verbinden.";
@@ -123,7 +141,7 @@ export async function syncSessionEvent(deps: SchedulingDeps, sessionId: string):
       });
       s.calendarEventId = null;
     }
-    if (!wanted || !profile.googleConnectedAt) {
+    if (!wanted || !isCalendarConnected(profile)) {
       await prisma.tattooBooking.update({
         where: { id: s.id },
         data: {

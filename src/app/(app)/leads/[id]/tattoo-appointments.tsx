@@ -13,7 +13,7 @@ type Project = {
   walkIn: boolean;
   sessionPlan: "SINGLE" | "MULTIPLE" | null;
   furtherSessionsScheduled: boolean | null;
-  tattooer: { user: { name: string } };
+  tattooer: { calendarProvider?: "GOOGLE" | "TEAMUP"; user: { name: string } };
   tattooBookings: TattooSession[];
 };
 
@@ -77,6 +77,7 @@ export function TattooAppointments({
                 sessions={p.tattooBookings}
                 now={now}
                 canEdit={canEdit}
+                calendarName={p.tattooer.calendarProvider === "TEAMUP" ? "TeamUp" : "Google"}
               />
             </section>
           );

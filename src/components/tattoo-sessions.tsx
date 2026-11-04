@@ -74,11 +74,14 @@ export function TattooSessions({
   sessions: unsorted,
   now,
   canEdit,
+  calendarName,
 }: {
   consultationId: string;
   sessions: TattooSession[];
   now: Date;
   canEdit: boolean;
+  /** "Google" or "TeamUp" (calendar of the responsible tattooer). */
+  calendarName?: string;
 }) {
   const sessions = [...unsorted].sort((a, b) => a.sessionNumber - b.sessionNumber);
   const active = sessions.filter((s) => !s.cancelled);
@@ -188,6 +191,10 @@ export function TattooSessions({
                     action={retrySessionSyncAction.bind(null, s.id)}
                     reason={s.calendarSyncError ? describeCalendarError(s.calendarSyncError) : null}
                     canRetry={canEdit}
+                    target={
+                      calendarName ??
+                      (s.calendarSyncError?.toLowerCase().includes("teamup") ? "TeamUp" : "Google")
+                    }
                   />
                 )}
               </li>

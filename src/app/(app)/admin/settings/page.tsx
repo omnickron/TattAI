@@ -14,6 +14,7 @@ import { requireAdmin } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { formatDateTime } from "@/lib/format";
 import { updateConsentSettings, updateStudioSettings } from "./actions";
+import { TeamupCard } from "./teamup-card";
 
 export const metadata: Metadata = { title: "Einstellungen" };
 
@@ -91,6 +92,8 @@ export default async function SettingsPage() {
             <Button type="submit">Speichern</Button>
           </ActionForm>
         </Card>
+
+        <TeamupCard />
 
         <Card>
           <CardTitle>Meta-Anbindung</CardTitle>

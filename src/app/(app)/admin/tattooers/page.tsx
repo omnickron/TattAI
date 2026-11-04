@@ -12,6 +12,7 @@ import {
 } from "@/components/ui";
 import { requireAdmin } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
+import { calendarLabel, isCalendarConnected } from "@/lib/scheduling/booking";
 import { formatDateTime } from "@/lib/format";
 import { createTattooer, setTattooerActive, updateTattooer } from "./actions";
 
@@ -27,6 +28,8 @@ export default async function TattooersPage() {
         select: {
           consultationMinutes: true,
           googleConnectedAt: true,
+          teamupConnectedAt: true,
+          calendarProvider: true,
           _count: { select: { consultations: { where: { walkIn: false } } } },
         },
       },
@@ -49,8 +52,8 @@ export default async function TattooersPage() {
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 <h2 className="font-semibold">{t.name}</h2>
                 {t.active ? <Badge tone="green">aktiv</Badge> : <Badge>deaktiviert</Badge>}
-                {t.tattooerProfile?.googleConnectedAt ? (
-                  <Badge tone="blue">Kalender verbunden</Badge>
+                {t.tattooerProfile && isCalendarConnected(t.tattooerProfile) ? (
+                  <Badge tone="blue">{calendarLabel(t.tattooerProfile)} verbunden</Badge>
                 ) : (
                   <Badge tone="amber">Kalender nicht verbunden</Badge>
                 )}

@@ -19,7 +19,7 @@ const prisma = createPrismaClient();
 const whatsapp = createWhatsAppClient();
 const calendarDeps = {
   prisma,
-  calendar: createCalendarClient(),
+  calendar: createCalendarClient(prisma),
   timeZone: process.env.APP_TIMEZONE || "Europe/Berlin",
   appUrl: process.env.APP_URL,
 };

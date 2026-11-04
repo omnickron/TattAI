@@ -9,6 +9,7 @@ import {
   type CalendarClient,
   type CalendarConnection,
   type CalendarEventInput,
+  type CalendarProviderName,
 } from "../google/calendar";
 import { DEFAULT_TIME_ZONE } from "../time";
 import { buildConsultationEvent } from "./event-content";
@@ -77,7 +78,7 @@ async function loadBookableTattooers(prisma: PrismaClient, ids?: string[]) {
   return prisma.tattooerProfile.findMany({
     where: {
       user: { active: true },
-      googleConnectedAt: { not: null },
+      ...CALENDAR_CONNECTED_WHERE,
       ...(ids ? { id: { in: ids } } : {}),
     },
     include: tattooerInclude,
@@ -85,13 +86,44 @@ async function loadBookableTattooers(prisma: PrismaClient, ids?: string[]) {
   });
 }
 
-export function connectionOf(t: {
+/** Calendar fields of a tattooer profile (Google or TeamUp). */
+export type CalendarProfileFields = {
   id: string;
   googleRefreshTokenEnc: string | null;
+  googleConnectedAt: Date | null;
   consultationCalendarId: string | null;
-}): CalendarConnection {
+  calendarProvider: CalendarProviderName;
+  teamupArtist: string | null;
+  teamupConnectedAt: Date | null;
+};
+
+/** Prisma filter: tattooers whose chosen calendar is connected. */
+export const CALENDAR_CONNECTED_WHERE = {
+  OR: [
+    { calendarProvider: "GOOGLE" as const, googleConnectedAt: { not: null } },
+    { calendarProvider: "TEAMUP" as const, teamupConnectedAt: { not: null } },
+  ],
+};
+
+/** Is the tattooer's chosen calendar (Google or TeamUp) connected? */
+export function isCalendarConnected(
+  t: Pick<CalendarProfileFields, "calendarProvider" | "googleConnectedAt" | "teamupConnectedAt">,
+): boolean {
+  return t.calendarProvider === "TEAMUP"
+    ? Boolean(t.teamupConnectedAt)
+    : Boolean(t.googleConnectedAt);
+}
+
+/** "Google-Kalender" or "TeamUp-Kalender" for messages. */
+export function calendarLabel(t: Pick<CalendarProfileFields, "calendarProvider">): string {
+  return t.calendarProvider === "TEAMUP" ? "TeamUp-Kalender" : "Google-Kalender";
+}
+
+export function connectionOf(t: CalendarProfileFields): CalendarConnection {
   return {
     tattooerId: t.id,
+    provider: t.calendarProvider,
+    teamupArtist: t.teamupArtist,
     refreshTokenEnc: t.googleRefreshTokenEnc,
     calendarId: t.consultationCalendarId,
   };
@@ -107,7 +139,7 @@ function nowOf(deps: SchedulingDeps) {
 
 /**
  * Builds the slot input per tattooer: rules, exceptions, booked consultations
- * and Google busy times. Tattooers whose calendar cannot be read are skipped
+ * and calendar busy times (Google or TeamUp). Tattooers whose calendar cannot be read are skipped
  * (we cannot know whether they are free).
  */
 async function buildSlotInputs(
@@ -270,11 +302,7 @@ async function eventFor(deps: SchedulingDeps, consultationId: string) {
 }
 
 /** Writes the calendar event for a consultation; returns calendar and event id. */
-type CalendarProfile = {
-  id: string;
-  googleRefreshTokenEnc: string | null;
-  consultationCalendarId: string | null;
-};
+type CalendarProfile = CalendarProfileFields;
 
 /**
  * Creates an event in the tattooer's app calendar ("Studio-Termine"), creating
@@ -325,6 +353,7 @@ export async function ensureCalendarNames(deps: SchedulingDeps) {
   if (!deps.calendar.renameCalendar) return { renamed: 0 };
   const profiles = await deps.prisma.tattooerProfile.findMany({
     where: {
+      calendarProvider: "GOOGLE",
       googleConnectedAt: { not: null },
       consultationCalendarId: { not: null },
       OR: [
@@ -890,17 +919,11 @@ const timeFmt = new Intl.DateTimeFormat("de-DE", {
 /**
  * Describes why the tattooer is not free in [start, end) – or null if free.
  * Checks consultations (with buffer), timed tattoo sessions, blockers/absences
- * and, if connected, Google busy times (the app calendar itself is excluded).
+ * and, if connected, calendar busy times (Google or TeamUp; app entries excluded).
  */
 export async function findConflict(
   deps: SchedulingDeps,
-  profile: {
-    id: string;
-    googleConnectedAt: Date | null;
-    googleRefreshTokenEnc: string | null;
-    consultationCalendarId: string | null;
-    user: { name: string };
-  },
+  profile: CalendarProfileFields & { user: { name: string } },
   start: Date,
   end: Date,
   opts: { excludeConsultationId?: string; bufferMinutes?: number } = {},
@@ -941,18 +964,18 @@ export async function findConflict(
     },
   });
   if (block) return `${name} ist in dieser Zeit geblockt${block.note ? ` („${block.note}“)` : ""}.`;
-  if (profile.googleConnectedAt) {
+  if (isCalendarConnected(profile)) {
     let busy: Interval[];
     try {
       busy = await deps.calendar.getBusy(connectionOf(profile), start, end);
     } catch {
       throw new BookingError(
         "CALENDAR_FAILED",
-        "Der Google-Kalender ist gerade nicht erreichbar. Bitte später erneut versuchen.",
+        `Der ${calendarLabel(profile)} ist gerade nicht erreichbar. Bitte später erneut versuchen.`,
       );
     }
     if (busy.some((b) => b.start < end && b.end > start))
-      return `${name} hat zu dieser Zeit einen Termin im Google-Kalender.`;
+      return `${name} hat zu dieser Zeit einen Termin im ${calendarLabel(profile)}.`;
   }
   return null;
 }
@@ -1048,7 +1071,7 @@ export async function createManualConsultation(
     throw err;
   }
 
-  if (profile.googleConnectedAt) {
+  if (isCalendarConnected(profile)) {
     try {
       const { calendarId, eventId } = await writeEvent(deps, created.id, profile.id);
       await prisma.consultation.update({

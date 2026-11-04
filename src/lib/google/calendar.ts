@@ -3,9 +3,22 @@ import type { Interval } from "../scheduling/slots";
 /** Name of the app calendar in each tattooer's Google account. */
 export const APP_CALENDAR_NAME = "Studio-Termine";
 
-/** Connection data of one tattooer's Google account. */
+export type CalendarProviderName = "GOOGLE" | "TEAMUP";
+
+/** Prefix of app calendar ids that live in the shared TeamUp calendar. */
+export const TEAMUP_PREFIX = "teamup:";
+
+export function isTeamupCalendarId(calendarId: string | null | undefined): boolean {
+  return Boolean(calendarId?.startsWith(TEAMUP_PREFIX));
+}
+
+/** Connection data of one tattooer's calendar (Google account or TeamUp artist). */
 export interface CalendarConnection {
   tattooerId: string;
+  /** Calendar the tattooer currently uses (default: Google). */
+  provider?: CalendarProviderName;
+  /** TeamUp: value of the "Artist" field that marks this tattooer's entries. */
+  teamupArtist?: string | null;
   /** Encrypted refresh token (null in mock mode). */
   refreshTokenEnc: string | null;
   /** The tattooer's app calendar ("Studio-Termine"): consultations and tattoo sessions. */
@@ -25,7 +38,7 @@ export interface CalendarEventInput {
 
 export interface CalendarClient {
   readonly mock: boolean;
-  /** Busy intervals over ALL calendars of the person. */
+  /** Busy intervals of the person (Google: all calendars; TeamUp: entries with their artist). */
   getBusy(conn: CalendarConnection, from: Date, to: Date): Promise<Interval[]>;
   /** Returns the id of the app-created "Studio-Termine" calendar, creating it if needed. */
   ensureConsultationCalendar(conn: CalendarConnection): Promise<string>;

@@ -7,7 +7,13 @@ import { requireTattooer } from "@/lib/auth/session";
 import { decryptSecret } from "@/lib/crypto";
 import { prisma } from "@/lib/db";
 import { APP_TIMEZONE } from "@/lib/format";
+import { CalendarError } from "@/lib/google/calendar";
+import { createTeamupClient } from "@/lib/google/client";
+import { loadTeamupConfig } from "@/lib/teamup/config";
 import { revokeToken } from "@/lib/google/oauth";
+import { BookingError } from "@/lib/scheduling/booking";
+import { connectTeamup, disconnectTeamup, switchToGoogle } from "@/lib/scheduling/calendar-switch";
+import { schedulingDeps } from "@/lib/scheduling/deps";
 import { addDays, isLocalDate, isQuarterHour, parseTimeOfDay, zonedTimeToUtc } from "@/lib/time";
 
 const done = (message: string): ActionState => {
@@ -154,4 +160,62 @@ export async function disconnectGoogleCalendar(): Promise<ActionState> {
   return done(
     "Google-Kalender getrennt. Du bekommst keine neuen Termine, bis du ihn wieder verbindest.",
   );
+}
+
+function moveSummary(res: { moved: number; failed: number }): string {
+  if (res.failed)
+    return ` ${res.failed} Termin(e) konnten noch nicht übertragen werden – das wird automatisch wiederholt.`;
+  if (res.moved) return ` ${res.moved} anstehende Termin(e) wurden übertragen.`;
+  return "";
+}
+
+/** Uses the studio's TeamUp calendar with the chosen "Artist" value. */
+export async function connectTeamupAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const user = await requireTattooer();
+  const value = String(formData.get("artist") ?? "").trim();
+  let label = value;
+  try {
+    // Choice fields: show the choice's name instead of its id
+    const fields = await createTeamupClient().listFields();
+    const cfg = await loadTeamupConfig(prisma);
+    const choice = fields
+      .find((f) => f.id === cfg?.artistFieldId)
+      ?.choices?.find((c) => c.id === value);
+    if (choice) label = choice.name;
+  } catch {
+    // label stays the raw value
+  }
+  try {
+    const res = await connectTeamup(schedulingDeps(), user.tattooerProfile.id, {
+      value,
+      label: label.slice(0, 100),
+    });
+    return done(`TeamUp verbunden – deine Termine laufen jetzt über TeamUp.${moveSummary(res)}`);
+  } catch (err) {
+    if (err instanceof BookingError || err instanceof CalendarError)
+      return { ok: false, message: err.message };
+    console.error("[teamup] connect failed:", err);
+    return { ok: false, message: "TeamUp konnte nicht verbunden werden." };
+  }
+}
+
+/** Switches back to the connected Google calendar. */
+export async function switchToGoogleAction(): Promise<ActionState> {
+  const user = await requireTattooer();
+  try {
+    const res = await switchToGoogle(schedulingDeps(), user.tattooerProfile.id);
+    return done(`Deine Termine laufen jetzt über Google.${moveSummary(res)}`);
+  } catch (err) {
+    if (err instanceof BookingError) return { ok: false, message: err.message };
+    throw err;
+  }
+}
+
+export async function disconnectTeamupAction(): Promise<ActionState> {
+  const user = await requireTattooer();
+  const res = await disconnectTeamup(schedulingDeps(), user.tattooerProfile.id);
+  return done(`TeamUp getrennt.${moveSummary(res)}`);
 }

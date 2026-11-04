@@ -5,15 +5,18 @@ import { useActionState, useEffect } from "react";
 import type { ActionState } from "@/lib/action-state";
 import { cn } from "./ui";
 
-/** "Nicht mit Google synchronisiert" – click to retry the calendar sync right away. */
+/** "Nicht mit Google/TeamUp synchronisiert" – click to retry the calendar sync right away. */
 export function SyncRetry({
   action,
   reason,
   canRetry,
+  target = "Google",
 }: {
   action: (prev: ActionState, formData: FormData) => Promise<ActionState>;
   reason: string | null;
   canRetry: boolean;
+  /** Calendar name shown in the label. */
+  target?: string;
 }) {
   const [state, formAction, pending] = useActionState(action, null);
   const router = useRouter();
@@ -39,17 +42,17 @@ export function SyncRetry({
               ? "text-emerald-700 no-underline disabled:opacity-100 dark:text-emerald-400"
               : "text-amber-700 dark:text-amber-400",
           )}
-          title="Erneut mit Google synchronisieren"
+          title={`Erneut mit ${target} synchronisieren`}
         >
           {pending
             ? "Wird synchronisiert …"
             : state?.ok
-              ? "✓ Mit Google synchronisiert"
-              : "Nicht mit Google synchronisiert – erneut versuchen"}
+              ? `✓ Mit ${target} synchronisiert`
+              : `Nicht mit ${target} synchronisiert – erneut versuchen`}
         </button>
       ) : (
         <span className="font-medium text-amber-700 dark:text-amber-400">
-          Nicht mit Google synchronisiert
+          Nicht mit {target} synchronisiert
         </span>
       )}
       {message && !pending && !state?.ok && (
