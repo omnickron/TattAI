@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
+import { appUrl } from "@/lib/app-url";
 import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
@@ -13,8 +14,8 @@ import { STATE_COOKIE } from "@/lib/google/oauth";
 /** Starts the Google Calendar connection for the signed-in tattooer. */
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
-  if (!user) return NextResponse.redirect(new URL("/login", request.url));
-  if (!user.tattooerProfile) return NextResponse.redirect(new URL("/leads", request.url));
+  if (!user) return NextResponse.redirect(appUrl("/login", request));
+  if (!user.tattooerProfile) return NextResponse.redirect(appUrl("/leads", request));
 
   if (isCalendarMock()) {
     await prisma.tattooerProfile.update({
@@ -29,7 +30,7 @@ export async function GET(request: NextRequest) {
       { prisma, calendar: createCalendarClient(), appUrl: process.env.APP_URL },
       user.tattooerProfile.id,
     ).catch((err) => console.error("[google] resync after connect failed:", err));
-    return NextResponse.redirect(new URL("/availability?google=connected", request.url));
+    return NextResponse.redirect(appUrl("/availability?google=connected", request));
   }
 
   const state = randomBytes(24).toString("base64url");

@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
+import { appUrl } from "@/lib/app-url";
 import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { encryptSecret } from "@/lib/crypto";
@@ -11,7 +12,7 @@ import { resyncTattooerSessions } from "@/lib/scheduling/session-calendar";
 import { CALENDAR_SCOPES, exchangeCalendarCode, STATE_COOKIE } from "@/lib/google/oauth";
 
 function back(request: NextRequest, result: string) {
-  return NextResponse.redirect(new URL(`/availability?google=${result}`, request.url));
+  return NextResponse.redirect(appUrl(`/availability?google=${result}`, request));
 }
 
 function safeEqual(a: string, b: string) {
@@ -23,7 +24,7 @@ function safeEqual(a: string, b: string) {
 /** OAuth callback: stores the encrypted refresh token and creates the "Beratungen" calendar. */
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
-  if (!user?.tattooerProfile) return NextResponse.redirect(new URL("/login", request.url));
+  if (!user?.tattooerProfile) return NextResponse.redirect(appUrl("/login", request));
 
   const jar = await cookies();
   const stored = jar.get(STATE_COOKIE)?.value ?? "";

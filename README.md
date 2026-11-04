@@ -213,15 +213,20 @@ letzten fünf automatischen WhatsApp-Kontakte mit Vorschau der letzten Chatnachr
   später stattfinden). Ein Lead zählt für den Tätowierer, bei dem die Beratung stattfand (sonst der letzten
   Beratung) – Umbuchungen zählen nicht doppelt.
 
-## Produktion (Vorschlag: Hetzner Cloud)
+## Produktion (Hetzner Cloud)
 
-1. Server anlegen (z. B. CX22, Standort Nürnberg/Falkenstein, Ubuntu), Docker installieren,
-   DNS-Eintrag (A-Record) für die App-Domain auf den Server setzen.
-2. Repository auf den Server holen, `.env` aus `.env.example` erstellen und den Abschnitt
-   „Production only“ ausfüllen (u. a. `POSTGRES_PASSWORD`, `APP_DOMAIN`, `DEV_LOGIN_ENABLED=false`).
-3. Starten: `docker compose -f deploy/docker-compose.prod.yml --env-file .env up -d --build`
-   (Migrationen laufen automatisch, Caddy holt das HTTPS-Zertifikat).
-4. Backups: Hetzner-Snapshots aktivieren und `deploy/backup.sh` per Cron täglich ausführen.
+1. **Server anlegen:** Hetzner Cloud, Standort Nürnberg oder Falkenstein, Ubuntu 24.04, kleinster
+   Shared-vCPU-Typ mit 4 GB RAM, eigenen SSH-Schlüssel hinterlegen, Backups einschalten.
+2. **DNS:** A-Record der App-Adresse (z. B. `studio.inkable.de`) auf die IPv4 des Servers.
+3. **Einrichten** (als root auf dem Server): `deploy/setup-server.sh` installiert Docker, Firewall,
+   Swap, automatische Sicherheitsupdates und das tägliche Backup; es erzeugt einen Deploy-Key für
+   GitHub und holt den Code nach `/opt/needl`.
+4. **Konfiguration:** `bash deploy/make-env.sh` fragt Adresse, Admin und Google-Zugang ab und legt
+   die `.env` mit neuen Zufallswerten an (u. a. `AUTH_URL`, ohne die Google den Login ablehnt).
+5. **Starten / Aktualisieren:** `bash deploy/update.sh` (Code holen, bauen, Migrationen, Neustart;
+   Caddy holt das HTTPS-Zertifikat automatisch).
+6. **Google:** In der Cloud Console beim OAuth-Client zusätzlich die Weiterleitungs-URIs
+   `https://<adresse>/api/auth/callback/google` und `https://<adresse>/api/google/callback` eintragen.
 
 Google-Login (sobald der Workspace existiert): In der Google Cloud Console ein OAuth-Projekt mit
 Zustimmungsbildschirm „Intern“ anlegen, Redirect-URI `https://<domain>/api/auth/callback/google`,
