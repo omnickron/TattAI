@@ -1,7 +1,10 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { NavLinks } from "@/components/nav-links";
+import { cn } from "@/components/ui";
 import { requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
+import { logoFont } from "../fonts";
 import { signOutAction } from "./actions";
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
@@ -36,12 +39,9 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     <div className="min-h-dvh">
       <header className="sticky top-0 z-10 border-b border-line bg-paper/90 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
-          <div className="flex items-center gap-2">
-            <span className="flex h-7 w-7 items-center justify-center rounded-md bg-ink text-xs font-bold text-paper">
-              N
-            </span>
-            <span className="font-semibold tracking-tight">NEEDL</span>
-          </div>
+          <Link href="/" className={cn(logoFont.className, "text-xl leading-none tracking-wide")}>
+            NEEDL
+          </Link>
           <div className="order-3 w-full sm:order-none sm:w-auto sm:flex-1">
             <NavLinks items={items} />
           </div>
