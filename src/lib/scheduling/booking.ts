@@ -787,7 +787,7 @@ export async function rescheduleConsultation(
   // 2. Someone else: book the new time fairly, then drop the old consultation.
   await prisma.consultation.update({
     where: { id: c.id },
-    data: { status: "CANCELLED", cancelledAt: now },
+    data: { status: "CANCELLED", cancelledAt: now, rescheduled: true },
   });
   try {
     const booked = await bookConsultation(deps, {
@@ -801,7 +801,7 @@ export async function rescheduleConsultation(
   } catch (err) {
     await prisma.consultation.update({
       where: { id: c.id },
-      data: { status: "SCHEDULED", cancelledAt: null },
+      data: { status: "SCHEDULED", cancelledAt: null, rescheduled: false },
     });
     await prisma.lead.updateMany({
       where: { id: c.leadId },

@@ -16,7 +16,9 @@ import { requireAdmin } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { APP_TIMEZONE, formatDate } from "@/lib/format";
 import { formatEuro } from "@/lib/outcomes/money";
+import { loadConsultationStats } from "@/lib/reports/consultations";
 import { loadReport } from "@/lib/reports/load";
+import { ConsultationAnalysis } from "./consultation-analysis";
 import { rate, type Metrics } from "@/lib/reports/report";
 import { addDays, isLocalDate, localDateOf, startOfLocalDay } from "@/lib/time";
 
@@ -129,8 +131,9 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin/
   const campaign = str("campaign") || null;
   const tattooerId = str("tattooer") || null;
 
-  const [report, campaigns, tattooers] = await Promise.all([
+  const [report, consultationStats, campaigns, tattooers] = await Promise.all([
     loadReport(prisma, { from, to, campaign, tattooerId, now, timeZone: APP_TIMEZONE }),
+    loadConsultationStats(prisma, { from, to, campaign, tattooerId, now, timeZone: APP_TIMEZONE }),
     prisma.lead.groupBy({
       by: ["metaCampaignId", "metaCampaignName"],
       where: { metaCampaignId: { not: null } },
@@ -301,6 +304,18 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin/
             format={(v) => formatEuro(v, true)}
           />
         </Card>
+
+        <ConsultationAnalysis
+          totals={consultationStats.totals}
+          byTattooer={consultationStats.byTattooer.map((r) => ({
+            ...r,
+            label: tattooerName.get(r.key) ?? "Unbekannt",
+          }))}
+          byMode={consultationStats.byMode.map((r) => ({
+            ...r,
+            label: r.key === "PHONE" ? "Telefon" : "Vor Ort",
+          }))}
+        />
 
         <Card className="lg:col-span-2">
           <CardTitle>Nach Kampagne</CardTitle>

@@ -10,12 +10,14 @@ import {
   setSessionCancelled,
   updateSession,
 } from "@/lib/outcomes/outcome";
+import { loadConsultationStats } from "@/lib/reports/consultations";
 import { loadReport } from "@/lib/reports/load";
 import {
   bookConsultation,
   cancelConsultation,
   createWalkInProject,
   reassignConsultation,
+  rescheduleConsultation,
   type SchedulingDeps,
 } from "@/lib/scheduling/booking";
 import { zonedTimeToUtc } from "@/lib/time";
@@ -279,5 +281,108 @@ describe("report follows the workflow", () => {
       leads: 1,
       revenueCents: 25000,
     });
+  });
+});
+
+describe("consultation analysis", () => {
+  const stats = (opts: { tattooerId?: string } = {}) =>
+    loadConsultationStats(prisma, {
+      from: "2026-11-01",
+      to: "2026-11-30",
+      now,
+      timeZone: TZ,
+      ...opts,
+    });
+
+  it("counts held, no-shows, cancellations (short notice) and open ones by consultation date", async () => {
+    const held = await bookConsultation(deps, {
+      leadId: await lead("A"),
+      startsAt: at("2026-11-04", "10:00"),
+      tattooerId: alex,
+    });
+    const noShow = await bookConsultation(deps, {
+      leadId: await lead("B"),
+      startsAt: at("2026-11-04", "11:00"),
+      tattooerId: alex,
+    });
+    const early = await bookConsultation(deps, {
+      leadId: await lead("C"),
+      startsAt: at("2026-11-06", "10:00"),
+      tattooerId: kim,
+    });
+    const late = await bookConsultation(deps, {
+      leadId: await lead("D"),
+      startsAt: at("2026-11-04", "14:00"),
+      tattooerId: kim,
+    });
+    await bookConsultation(deps, {
+      leadId: await lead("E"),
+      startsAt: at("2026-11-04", "15:00"),
+      tattooerId: kim,
+    }); // stays open
+    await bookConsultation(deps, {
+      leadId: await lead("F"),
+      startsAt: at("2026-11-12", "10:00"),
+      tattooerId: kim,
+    }); // upcoming
+
+    await cancelConsultation(deps, early.id); // days before
+    now = at("2026-11-04", "09:00");
+    await cancelConsultation(deps, late.id); // 5 hours before
+    now = at("2026-11-04", "16:00");
+    await recordOutcome(prisma, {
+      consultationId: held.id,
+      userId: adminId,
+      now,
+      timeZone: TZ,
+      outcome: { outcome: "HELD", tattoo: "NO" },
+    });
+    await recordOutcome(prisma, {
+      consultationId: noShow.id,
+      userId: adminId,
+      now,
+      timeZone: TZ,
+      outcome: { outcome: "NO_SHOW" },
+    });
+
+    const s = await stats();
+    expect(s.totals).toMatchObject({
+      total: 6,
+      held: 1,
+      noShow: 1,
+      cancelled: 2,
+      cancelledShortNotice: 1,
+      open: 1,
+      upcoming: 1,
+    });
+    expect(s.totals.noShowRate).toBeCloseTo(0.25);
+    const kimStats = s.byTattooer.find((t) => t.key === kim)!.stats;
+    expect(kimStats).toMatchObject({ total: 4, cancelled: 2, held: 0 });
+    expect((await stats({ tattooerId: alex })).totals).toMatchObject({
+      total: 2,
+      held: 1,
+      noShow: 1,
+    });
+  });
+
+  it("does not count a move to another tattooer as a cancellation", async () => {
+    const c = await bookConsultation(deps, {
+      leadId: await lead("G"),
+      startsAt: at("2026-11-04", "10:00"),
+      tattooerId: alex,
+    });
+    // Alex is busy at the new time → the bot's reschedule books Kim and cancels the old one
+    await bookConsultation(deps, {
+      leadId: await lead("H"),
+      startsAt: at("2026-11-05", "10:00"),
+      tattooerId: alex,
+    });
+    const moved = await rescheduleConsultation(deps, c.id, at("2026-11-05", "10:00"));
+    expect(moved.id).not.toBe(c.id);
+    expect((await prisma.consultation.findUniqueOrThrow({ where: { id: c.id } })).rescheduled).toBe(
+      true,
+    );
+    const s = await stats();
+    expect(s.totals).toMatchObject({ total: 2, cancelled: 0, upcoming: 2 });
   });
 });

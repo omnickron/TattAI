@@ -286,6 +286,8 @@ model Consultation {
   // Calendar id the event was written to (the tattooer's "Beratungen" calendar)
   calendarId               String?
   cancelledAt              DateTime?
+  // Cancelled only because it was moved to a new appointment (not a real cancellation)
+  rescheduled              Boolean            @default(false)
   createdById              String?
   // Walk-in customer: tattoo project without a consultation. Holds the tattoo sessions only and
   // is excluded from every consultation list, count, fairness and reminder.

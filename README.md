@@ -213,6 +213,14 @@ letzten fünf automatischen WhatsApp-Kontakte mit Vorschau der letzten Chatnachr
   später stattfinden). Ein Lead zählt für den Tätowierer, bei dem die Beratung stattfand (sonst der letzten
   Beratung) – Umbuchungen zählen nicht doppelt.
 
+### Beratungsanalyse
+
+Auf der Auswertung zeigt „Beratungen: stattgefunden, abgesagt, No-Show“ alle Beratungen mit Termin
+im gewählten Zeitraum (nach Beratungsdatum, mit Kampagnen- und Tätowierer-Filter): stattgefunden,
+No-Show, abgesagt (davon kurzfristig < 24 h), ohne Ergebnis und anstehend, mit Quoten pro Tätowierer
+und pro Beratungsform. Umbuchungen auf eine andere Person zählen nicht als Absage, Laufkunden nicht
+als Beratung.
+
 ## Content
 
 Unter **Content** laden alle Fotos und Videos ihrer Arbeiten hoch (Fotos bis 30 MB, Videos bis 500 MB),
