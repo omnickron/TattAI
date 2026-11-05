@@ -24,8 +24,8 @@ export default async function ConsultationsPage({ searchParams }: PageProps<"/co
   const now = new Date();
   const isAdmin = user.role === "ADMIN";
   const scope: Prisma.ConsultationWhereInput = isAdmin
-    ? {}
-    : { tattooerId: user.tattooerProfile?.id ?? "__none__" };
+    ? { lead: { isTest: false } }
+    : { lead: { isTest: false }, tattooerId: user.tattooerProfile?.id ?? "__none__" };
 
   const where: Record<Tab, Prisma.ConsultationWhereInput> = {
     // Ended consultations still waiting for their outcome

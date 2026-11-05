@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { spreadSlots } from "./brain";
-import { checkReply, forbiddenWordList } from "./filters";
+import { checkReply, forbiddenWordList, sentenceCount } from "./filters";
 import { buildSystemPrompt } from "./prompt";
 import { emptyKnowledge } from "./knowledge";
 import { zonedTimeToUtc } from "../time";
@@ -67,5 +67,28 @@ describe("slot spreading", () => {
     expect(picked).toHaveLength(4);
     expect(picked[0]).toEqual(zonedTimeToUtc("2026-11-09", 600));
     expect(spreadSlots(starts, "Europe/Berlin", 3)).toHaveLength(3);
+  });
+});
+
+describe("natural replies", () => {
+  it("counts sentences without tripping over abbreviations, times and emojis", () => {
+    expect(sentenceCount("Passt gut. Eher fein oder kräftiger?")).toBe(2);
+    expect(
+      sentenceCount("Z. B. ca. 10 cm am Unterarm, Termin am 12.11. um 14.30 Uhr. Passt das?"),
+    ).toBe(2);
+    expect(sentenceCount("Mega 🙌 Wo soll es hin?")).toBe(1);
+    expect(checkReply("Eins. Zwei. Drei. Vier?", { ...ctx }).join(" ")).toMatch(/4 Sätze/);
+  });
+
+  it("tells the bot about forms and free consultation from the settings", () => {
+    const k = emptyKnowledge();
+    const both = buildSystemPrompt(k, { modes: ["ON_SITE", "PHONE"], free: true });
+    expect(both).toContain("vor Ort im Studio; telefonisch");
+    expect(both).toContain("Die Beratung ist kostenlos");
+    const onSite = buildSystemPrompt(k, { modes: ["ON_SITE"], free: false });
+    expect(onSite).not.toContain("telefonisch");
+    expect(onSite).not.toMatch(/kostenlos/i);
+    expect(onSite).toContain("Sag nichts dazu, ob die Beratung etwas kostet.");
+    expect(onSite).toContain("Wiederhole oder fasse NICHT zusammen");
   });
 });

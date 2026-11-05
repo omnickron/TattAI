@@ -52,10 +52,11 @@ export async function requireOperator(): Promise<CurrentUser> {
 
 /** Restricts lead queries: tattooers only see leads with a consultation of theirs. */
 export function leadScope(user: CurrentUser): Prisma.LeadWhereInput {
-  if (user.role === "ADMIN") return {};
+  // Test customers of the bot test are never shown
+  if (user.role === "ADMIN") return { isTest: false };
   const tattooerId = user.tattooerProfile?.id;
   if (!tattooerId) return { id: "__none__" };
-  return { consultations: { some: { tattooerId } } };
+  return { isTest: false, consultations: { some: { tattooerId } } };
 }
 
 /** The signed-in user's tattooer profile id (admin included, as the owner also tattoos). */

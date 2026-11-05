@@ -192,6 +192,9 @@ model Lead {
   botHandoverNote String?
   botHandoverAt   DateTime?
 
+  // Created by the bot test (AI test customers); hidden everywhere, deleted after the run
+  isTest Boolean @default(false)
+
   // Original lead payload from Meta, for traceability
   rawPayload Json?
 
@@ -391,6 +394,10 @@ model AppSettings {
   teamupSubcalendarName String?
   teamupArtistFieldId   String?
   teamupArtistFieldName String?
+  // Consultation forms offered (manual booking and bot) and whether it is free
+  consultationOnSite    Boolean  @default(true)
+  consultationPhone     Boolean  @default(true)
+  consultationFree      Boolean  @default(true)
   updatedAt             DateTime @updatedAt
 }
 

@@ -558,3 +558,21 @@ describe("safety nets", () => {
     expect(await prisma.pushSubscription.count({ where: { userId: alex.id } })).toBe(1);
   });
 });
+
+describe("consultation forms from the settings", () => {
+  it("does not book a phone consultation when the studio only offers on-site", async () => {
+    await prisma.appSettings.create({ data: { id: 1, consultationPhone: false } });
+    const brain = new ScriptedBrain([
+      () => reply([tool("freie_termine", { von: null, bis: null })]),
+      (p) => reply([tool("termin_buchen", { start: firstSlotId(p), form: "telefon" })]),
+      (p) => {
+        expect(lastToolResults(p)).toMatch(/bietet das Studio nicht an/);
+        return reply([answer("Telefonisch geht es leider nicht – magst du vorbeikommen?")]);
+      },
+    ]);
+    await runBotTurn({ ...base, brain }, leadId);
+    expect(await prisma.consultation.count()).toBe(0);
+    const system = JSON.stringify(brain.calls[0].system);
+    expect(system).not.toContain("telefonisch (für Kunden");
+  });
+});

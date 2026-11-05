@@ -12,8 +12,8 @@ const DAY = 24 * 3600_000;
 export async function loadDashboard(user: CurrentUser, now = new Date()) {
   const isAdmin = user.role === "ADMIN";
   const own: Prisma.ConsultationWhereInput = isAdmin
-    ? {}
-    : { tattooerId: user.tattooerProfile?.id ?? "__none__" };
+    ? { lead: { isTest: false } }
+    : { lead: { isTest: false }, tattooerId: user.tattooerProfile?.id ?? "__none__" };
   const today = localDateOf(now, APP_TIMEZONE);
   const dayStart = startOfLocalDay(today, APP_TIMEZONE);
   const dayEnd = startOfLocalDay(addDays(today, 1), APP_TIMEZONE);

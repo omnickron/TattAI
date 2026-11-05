@@ -13,7 +13,9 @@ import {
   type ReactNode,
 } from "react";
 import { Button, cn, Input, Select, Textarea, TimeSelect } from "@/components/ui";
+import type { ConsultationMode } from "@/generated/prisma/client";
 import type { ActionState } from "@/lib/action-state";
+import { MODE_OPTION_LABELS } from "@/lib/consultation-options";
 import {
   createCalendarEntryAction,
   deleteBlockerAction,
@@ -37,11 +39,14 @@ export function NewEntryProvider({
   isAdmin,
   tattooers,
   defaultTattooerId,
+  modes,
 }: {
   children: ReactNode;
   isAdmin: boolean;
   tattooers: Tattooer[];
   defaultTattooerId: string | null;
+  /** Consultation forms offered (Einstellungen) */
+  modes: ConsultationMode[];
 }) {
   const [defaults, setDefaults] = useState<Defaults | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -60,6 +65,7 @@ export function NewEntryProvider({
           isAdmin={isAdmin}
           tattooers={tattooers}
           defaultTattooerId={defaultTattooerId}
+          modes={modes}
           onClose={() => setDefaults(null)}
           onDone={(m) => {
             setDefaults(null);
@@ -308,6 +314,7 @@ function EntryDialog({
   isAdmin,
   tattooers,
   defaultTattooerId,
+  modes,
   onClose,
   onDone,
 }: {
@@ -315,6 +322,7 @@ function EntryDialog({
   isAdmin: boolean;
   tattooers: Tattooer[];
   defaultTattooerId: string | null;
+  modes: ConsultationMode[];
   onClose: () => void;
   onDone: (message: string) => void;
 }) {
@@ -481,9 +489,12 @@ function EntryDialog({
               </div>
               <label className="block space-y-1.5 text-sm font-medium">
                 <span>Beratungsform</span>
-                <Select name="mode" defaultValue="ON_SITE">
-                  <option value="ON_SITE">Vor Ort</option>
-                  <option value="PHONE">Telefon (kann nicht anreisen)</option>
+                <Select name="mode" defaultValue={modes[0]}>
+                  {modes.map((m) => (
+                    <option key={m} value={m}>
+                      {MODE_OPTION_LABELS[m]}
+                    </option>
+                  ))}
                 </Select>
               </label>
             </>
