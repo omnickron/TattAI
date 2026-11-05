@@ -159,9 +159,12 @@ export async function syncSessionEvent(deps: SchedulingDeps, sessionId: string):
 
     const settings = await prisma.appSettings.findUnique({ where: { id: 1 } });
     const localDate = localDateOf(s.date, tz);
-    const count = await prisma.tattooBooking.count({
+    const siblings = await prisma.tattooBooking.findMany({
       where: { consultationId: c.id, cancelled: false },
+      select: { amountCents: true },
     });
+    const count = siblings.length;
+    const totalCents = siblings.reduce((sum, x) => sum + (x.amountCents ?? 0), 0);
     const event = buildTattooEvent({
       lead: c.lead,
       sessionNumber: s.sessionNumber,
@@ -171,6 +174,8 @@ export async function syncSessionEvent(deps: SchedulingDeps, sessionId: string):
       nextLocalDate: addDays(localDate, 1),
       studioAddress: settings?.studioAddress ?? null,
       note: s.note,
+      amountCents: s.amountCents,
+      totalCents,
       appUrl: deps.appUrl ?? process.env.APP_URL ?? "http://localhost:3000",
       timeZone: tz,
     });

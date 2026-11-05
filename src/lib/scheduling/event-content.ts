@@ -1,4 +1,5 @@
 import type { CalendarEventInput } from "../google/calendar";
+import { formatEuro } from "../outcomes/money";
 
 export type ConsultationModeValue = "ON_SITE" | "PHONE";
 
@@ -41,6 +42,11 @@ function formatSummaryValue(key: keyof TattooSummary, value: unknown): string | 
   return String(value);
 }
 
+function motifOf(summary: unknown): string | null {
+  const motif = (summary as TattooSummary | null)?.motif;
+  return typeof motif === "string" && motif.trim() ? motif.trim() : null;
+}
+
 export function summaryLines(summary: unknown): string[] {
   if (!summary || typeof summary !== "object") return [];
   const s = summary as TattooSummary;
@@ -70,6 +76,7 @@ export interface EventContentInput {
 export function buildConsultationEvent(input: EventContentInput): CalendarEventInput {
   const { lead, mode } = input;
   const lines = [
+    `Motiv: ${motifOf(lead.tattooSummary) ?? "noch offen"}`,
     `Beratungsform: ${mode === "PHONE" ? "Telefon – bitte Kunden anrufen" : "Vor Ort im Studio"}`,
     `Telefon: ${lead.phoneE164 ?? "–"}`,
     ...(lead.email ? [`E-Mail: ${lead.email}`] : []),
@@ -104,14 +111,31 @@ export interface TattooEventInput {
   nextLocalDate: string;
   studioAddress: string | null;
   note: string | null;
+  /** Price of this session and of the whole tattoo (all non-cancelled sessions), in cents */
+  amountCents?: number | null;
+  totalCents?: number | null;
   appUrl: string;
   timeZone: string;
+}
+
+function priceLine(
+  input: Pick<TattooEventInput, "amountCents" | "totalCents" | "multipleSessions">,
+) {
+  const price =
+    input.amountCents != null ? formatEuro(input.amountCents) : "noch nicht eingetragen";
+  if (input.multipleSessions && input.totalCents) {
+    return `Preis: ${price} (gesamt ${formatEuro(input.totalCents)})`;
+  }
+  return `Preis: ${price}`;
 }
 
 /** Calendar event for a tattoo session (same calendar as the consultations). */
 export function buildTattooEvent(input: TattooEventInput): CalendarEventInput {
   const { lead } = input;
   const lines = [
+    `Motiv: ${motifOf(lead.tattooSummary) ?? "–"}`,
+    priceLine(input),
+    "",
     `Telefon: ${lead.phoneE164 ?? "–"}`,
     ...(lead.email ? [`E-Mail: ${lead.email}`] : []),
   ];
