@@ -721,3 +721,30 @@ model Invoice {
 
   @@index([period])
 }
+
+// ---------------------------------------------------------------------------
+// WhatsApp bot: studio knowledge the bot answers from (maintained by the admin)
+// ---------------------------------------------------------------------------
+
+model BotKnowledge {
+  id               Int      @id @default(1)
+  // Name the bot signs with, e.g. "Mia vom Black Rose Team" (optional)
+  assistantName    String?
+  about            String?
+  team             String?
+  location         String?
+  openingHours     String?
+  services         String?
+  process          String?
+  customerConcerns String?
+  toneExamples     String?
+  forbiddenWords   String?
+  noGos            String?
+  // { website, instagram, impressum, datenschutz }
+  links            Json?
+  // [{ q, a }]
+  faq              Json?
+  objections       Json?
+  updatedById      String?
+  updatedAt        DateTime @updatedAt
+}

@@ -176,6 +176,15 @@ Für den echten Betrieb: WhatsApp-Business-Konto und Nummer in Meta anlegen, Sys
 (Felder: `messages`, `message_template_status_update`, `phone_number_quality_update`, `account_update`) und die
 Variablen `WHATSAPP_*` aus `.env.example` setzen.
 
+## Bot-Wissen
+
+Unter **Bot** (Admin) steht das Wissen, aus dem der WhatsApp-Bot antwortet, in zehn Bereichen:
+Studio & Team, Standort, Leistungen & Stile, Ablauf, häufige Fragen, Einwände, typische Anliegen,
+Ton, No-Gos und Links. Jeder Bereich wird einzeln gespeichert; die Seite zeigt, was noch fehlt.
+Der Bot nennt nie Preise – Preisangaben im Wissen werden beim Speichern erkannt und markiert.
+Feste Regeln (keine Preise, KI-Hinweis nur auf Nachfrage, keine Gesundheitsdaten, kein Alter, nur
+echte Buchungen) stehen daneben und sind nicht änderbar.
+
 ## Chatbot
 
 Der Chatbot selbst ist nicht Teil des Projekts; NEEDL bietet ihm eine API (`/api/bot/v1`, API-Schlüssel) und

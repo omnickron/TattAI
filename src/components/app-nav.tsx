@@ -17,6 +17,7 @@ export type NavIcon =
   | "tattooers"
   | "fairness"
   | "whatsapp"
+  | "bot"
   | "settings";
 
 export type NavItem = { href: string; label: string; icon: NavIcon; badge?: number };
@@ -71,6 +72,13 @@ const ICONS: Record<NavIcon, ReactNode> = {
     </>
   ),
   fairness: <path d="M12 3v18M7 21h10M5 7h14M5 7l-3 7a3 3 0 0 0 6 0zM19 7l-3 7a3 3 0 0 0 6 0z" />,
+  bot: (
+    <>
+      <rect x="4" y="8" width="16" height="12" rx="3" />
+      <path d="M12 8V4M9 14h.01M15 14h.01M9.5 17h5" />
+      <circle cx="12" cy="3.5" r="1" />
+    </>
+  ),
   whatsapp: <path d="M21 12a8.5 8.5 0 0 1-12.6 7.4L3 21l1.6-5.2A8.5 8.5 0 1 1 21 12z" />,
   settings: (
     <>
