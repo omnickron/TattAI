@@ -42,7 +42,12 @@ export interface Metrics {
   booked: number;
   held: number;
   noShow: number;
+  /** Leads with a booked tattoo (incl. walk-ins) */
   won: number;
+  /** …of which via a consultation (basis of all conversion rates) */
+  wonFromConsultation: number;
+  /** …of which only as walk-in (no consultation won the tattoo) */
+  walkIns: number;
   open: number;
   sessions: number;
   revenueCents: number;
@@ -64,6 +69,8 @@ const empty = (): Metrics => ({
   held: 0,
   noShow: 0,
   won: 0,
+  wonFromConsultation: 0,
+  walkIns: 0,
   open: 0,
   sessions: 0,
   revenueCents: 0,
@@ -105,7 +112,11 @@ function addLead(m: Metrics, lead: ReportLead, now: Date) {
   const held = cs.some((c) => c.status === "HELD");
   if (held) m.held++;
   else if (cs.some((c) => c.status === "NO_SHOW")) m.noShow++;
-  if (all.some((c) => c.status === "HELD" && c.tattooBooked === true)) m.won++;
+  const viaConsultation = cs.some((c) => c.status === "HELD" && c.tattooBooked === true);
+  const viaWalkIn = all.some((c) => c.walkIn && c.tattooBooked === true);
+  if (viaConsultation || viaWalkIn) m.won++;
+  if (viaConsultation) m.wonFromConsultation++;
+  else if (viaWalkIn) m.walkIns++;
   m.open += cs.filter((c) => c.status === "SCHEDULED" && (c.endsAt ?? c.startsAt) <= now).length;
   for (const c of all) {
     if (!(c.status === "HELD" && c.tattooBooked)) continue;

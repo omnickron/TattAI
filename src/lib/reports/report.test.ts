@@ -63,6 +63,8 @@ describe("buildReport", () => {
       booked: 0,
       held: 0,
       won: 1,
+      wonFromConsultation: 0,
+      walkIns: 1,
       sessions: 1,
       revenueCents: 30000,
     });
@@ -98,6 +100,8 @@ describe("buildReport", () => {
       held: 2,
       noShow: 1,
       won: 1,
+      wonFromConsultation: 1,
+      walkIns: 0,
       open: 1,
       sessions: 3,
       revenueCents: 120000,
@@ -174,6 +178,38 @@ describe("rate", () => {
   it("returns null for an empty base", () => {
     expect(rate(1, 0)).toBeNull();
     expect(rate(1, 4)).toBe(0.25);
+  });
+});
+
+describe("conversion rates never exceed 100 %", () => {
+  it("bases them on tattoos won through consultations only", () => {
+    const report = buildReport(
+      [
+        // walk-in only (no consultation)
+        lead("2026-11-02T10:00:00Z", [c({ walkIn: true, tattooBooked: true })]),
+        // no-show, then a walk-in tattoo
+        lead("2026-11-03T10:00:00Z", [
+          c({ status: "NO_SHOW" }),
+          c({ walkIn: true, tattooBooked: true }),
+        ]),
+        // consultation held with tattoo, later another walk-in tattoo
+        lead("2026-11-04T10:00:00Z", [
+          c({ tattooBooked: true }),
+          c({ walkIn: true, tattooBooked: true }),
+        ]),
+        // held, no tattoo
+        lead("2026-11-05T10:00:00Z", [c({ tattooBooked: false })]),
+      ],
+      opts,
+    );
+    expect(report.totals).toMatchObject({
+      booked: 3,
+      held: 2,
+      won: 3,
+      wonFromConsultation: 1,
+      walkIns: 2,
+    });
+    expect(report.totals.wonFromConsultation / report.totals.held).toBeLessThanOrEqual(1);
   });
 });
 

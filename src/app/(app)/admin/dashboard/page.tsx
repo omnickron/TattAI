@@ -94,7 +94,7 @@ function MetricsTable({
             <th className="px-2 py-2 text-right font-medium">Abschlüsse</th>
             <th
               className="px-2 py-2 text-right font-medium"
-              title="Abschlüsse je stattgefundene Beratung"
+              title="Abschlüsse aus Beratungen je stattgefundene Beratung (ohne Laufkunden)"
             >
               Abschlussquote
             </th>
@@ -117,11 +117,18 @@ function MetricsTable({
               <td className="px-2 py-2 text-right tabular-nums">{m.booked}</td>
               <td className="px-2 py-2 text-right tabular-nums">{m.held}</td>
               <td className="px-2 py-2 text-right tabular-nums">{m.noShow}</td>
-              <td className="px-2 py-2 text-right tabular-nums">{m.won}</td>
-              <td className="px-2 py-2 text-right tabular-nums">{pct(rate(m.won, m.held))}</td>
+              <td className="px-2 py-2 text-right tabular-nums">
+                {m.won}
+                {m.walkIns > 0 && (
+                  <span className="block text-xs text-ink-soft">davon {m.walkIns} Laufk.</span>
+                )}
+              </td>
+              <td className="px-2 py-2 text-right tabular-nums">
+                {pct(rate(m.wonFromConsultation, m.held))}
+              </td>
               {showConversion && (
                 <td className="px-2 py-2 text-right font-medium tabular-nums">
-                  {pct(rate(m.won, m.booked))}
+                  {pct(rate(m.wonFromConsultation, m.booked))}
                 </td>
               )}
               <td className="px-4 py-2 text-right font-medium tabular-nums sm:pr-0">
@@ -246,7 +253,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin/
         <Tile
           label="Tattoo-Abschlüsse"
           value={t.won}
-          sub={`${pct(rate(t.won, t.held))} der stattgefundenen Beratungen`}
+          sub={`${pct(rate(t.wonFromConsultation, t.held))} der stattgefundenen Beratungen${t.walkIns ? ` · ${t.walkIns} Laufkunden` : ""}`}
         />
         <Tile
           label="Umsatz"
@@ -290,7 +297,11 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin/
               { label: "Leads", value: t.leads },
               { label: "Beratung gebucht", value: t.booked, note: pct(rate(t.booked, t.leads)) },
               { label: "Beratung stattgefunden", value: t.held, note: pct(rate(t.held, t.booked)) },
-              { label: "Tattoo gebucht", value: t.won, note: pct(rate(t.won, t.held)) },
+              {
+                label: "Tattoo gebucht",
+                value: t.wonFromConsultation,
+                note: pct(rate(t.wonFromConsultation, t.held)),
+              },
             ]}
           />
           <p className="mt-3 text-xs text-ink-soft">
