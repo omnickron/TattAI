@@ -47,3 +47,13 @@ body {
   color: var(--ink);
   -webkit-tap-highlight-color: transparent;
 }
+
+/* Headings use the logo typeface (one medium cut: no faux bold, slightly open spacing) */
+h1,
+h2,
+h3 {
+  font-family: var(--font-logo), ui-sans-serif, system-ui, sans-serif;
+  font-weight: 500;
+  font-synthesis-weight: none;
+  letter-spacing: 0.01em;
+}
