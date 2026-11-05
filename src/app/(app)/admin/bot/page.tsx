@@ -161,7 +161,8 @@ export default async function BotPage() {
                     <Input
                       id={`l-${l.key}`}
                       name={l.key}
-                      type="url"
+                      inputMode="url"
+                      autoComplete="url"
                       defaultValue={k.links[l.key] ?? ""}
                       placeholder={l.placeholder}
                     />

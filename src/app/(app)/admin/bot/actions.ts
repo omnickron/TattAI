@@ -30,12 +30,16 @@ export async function saveKnowledgeSection(
       warnings.push(...priceMentions(raw));
     }
   } else if (section.links) {
-    const links = parseLinks(
-      Object.fromEntries(LINK_FIELDS.map(({ key }) => [key, String(formData.get(key) ?? "")])),
+    const raw = Object.fromEntries(
+      LINK_FIELDS.map(({ key }) => [key, normalizeLink(String(formData.get(key) ?? ""))]),
     );
-    const given = LINK_FIELDS.filter(({ key }) => String(formData.get(key) ?? "").trim());
-    if (given.length > Object.keys(links).length)
-      return { ok: false, message: "Links müssen mit https:// beginnen." };
+    const links = parseLinks(raw);
+    const bad = LINK_FIELDS.find(({ key }) => raw[key] && !links[key]);
+    if (bad)
+      return {
+        ok: false,
+        message: `${bad.label}: bitte eine vollständige Adresse mit https:// angeben (z. B. https://www.euer-studio.de).`,
+      };
     data.links = links as Prisma.InputJsonValue;
   } else if (section.list) {
     let items: unknown = [];
@@ -44,6 +48,16 @@ export async function saveKnowledgeSection(
     } catch {
       return { ok: false, message: "Die Liste konnte nicht gelesen werden." };
     }
+    const incomplete = Array.isArray(items)
+      ? items.filter(
+          (x: { q?: string; a?: string }) => Boolean(x?.q?.trim()) !== Boolean(x?.a?.trim()),
+        )
+      : [];
+    if (incomplete.length)
+      return {
+        ok: false,
+        message: `${incomplete.length} Eintrag${incomplete.length === 1 ? "" : "e"} unvollständig – bitte Frage und Antwort ausfüllen oder den Eintrag entfernen.`,
+      };
     const list = parseQAList(items);
     data[section.list] = list as unknown as Prisma.InputJsonValue;
     for (const qa of list) warnings.push(...priceMentions(qa.a));
@@ -57,8 +71,18 @@ export async function saveKnowledgeSection(
   revalidatePath("/admin/bot");
   return warnings.length
     ? {
-        ok: false,
-        message: `Gespeichert – aber hier steht eine Preisangabe: „${warnings[0]}“. Der Bot nennt nie Preise, bitte entfernen.`,
+        ok: true,
+        warning: true,
+        message: `Gespeichert – Hinweis: Hier steht eine Preisangabe („${warnings[0]}“). Der Bot nennt nie Preise, bitte entfernen.`,
       }
     : { ok: true, message: `„${section.title}“ gespeichert.` };
+}
+
+/** "www.studio.de" → "https://www.studio.de"; http is upgraded, everything else kept as typed. */
+function normalizeLink(value: string): string {
+  const v = value.trim();
+  if (!v) return "";
+  if (/^http:\/\//i.test(v)) return v.replace(/^http:/i, "https:");
+  if (!/^[a-z]+:/i.test(v) && /^[\w-]+(\.[\w-]+)+/.test(v)) return `https://${v}`;
+  return v;
 }

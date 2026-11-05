@@ -27,7 +27,7 @@ export function QAEditor({
       <input
         type="hidden"
         name="items"
-        value={JSON.stringify(items.filter((x) => x.q.trim() && x.a.trim()))}
+        value={JSON.stringify(items.filter((x) => x.q.trim() || x.a.trim()))}
       />
       <ol className="space-y-3">
         {items.map((it, i) => (
