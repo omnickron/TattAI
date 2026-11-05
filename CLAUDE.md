@@ -12,7 +12,7 @@ Sprache der Oberfläche und aller Texte für Nutzer: Deutsch. Code, Variablen un
 - Erwartet werden ca. 100 bis 150 Leads pro Woche.
 - Es gibt keine Empfangskraft: Jeder Tätowierer führt seine Beratungen selbst durch und bucht sie für sich.
 - Kapazität ist vorerst kein Thema der App. Die von den Tätowierern freigegebenen Zeiten werden einfach gefüllt.
-- Der WhatsApp-Chatbot wird direkt in NEEDL gebaut (Entscheidung vom 05.11.2026, vorher außerhalb geplant): Claude (Anthropic API) als Gehirn im Hintergrunddienst, Gedächtnis und Regeln aus NEEDL, kein Make. Ziel: Tattoo-Idee klären und Beratungstermin buchen. Anrede „du“. Übergabe an Menschen mit Meldung in der App und per Push-Benachrichtigung. Die Bot-Schnittstelle (API) bleibt für andere Anbindungen bestehen.
+- Der WhatsApp-Chatbot wird direkt in NEEDL gebaut (Entscheidung vom 05.11.2026, vorher außerhalb geplant): Claude (Anthropic API) als Gehirn im Hintergrunddienst, Gedächtnis und Regeln aus NEEDL, kein Make. Ziel: Tattoo-Idee klären und Beratungstermin buchen. Anrede „du“. Übergabe an Menschen mit Meldung in der App und per Push-Benachrichtigung. Die Bot-Schnittstelle (API) bleibt für andere Anbindungen bestehen. Der Bot nennt NIE Preise, Schätzungen oder Preisrahmen (Preis klärt die Beratung). Kein aktiver KI-Hinweis; nur auf Nachfrage: „Manche Nachrichten werden durch eine KI automatisiert.“ Er gibt sich nie als Mensch aus. (Transparenzpflicht nach EU-KI-Verordnung Art. 50 vor Livegang rechtlich prüfen lassen.)
 
 ## Entscheidungen (verbindlich)
 
@@ -116,6 +116,7 @@ User (Rolle), TattooerProfile (Google-Verbindung, Beratungsdauer, Puffer), Avail
 Nach jeder Phase lauffähigen Stand liefern, bevor die nächste beginnt.
 
 ## Spätere Ideen (nicht jetzt umsetzen)
+- Dritte Rolle „Betreiber“ (Superadmin) für den Anbieter von NEEDL: Bot-Kern, Modell, Limits, Kosten, Provision/Rechnungen, Integrationen; Studio-Admin behält Inhalte, Team und Abläufe.
 - Ad-Budget bei Meta automatisch drosseln, wenn alle Slots belegt sind.
 - Verteilung nach Stil und Spezialisierung.
 - Meta-Kosten importieren (ROI) und Conversions API.
