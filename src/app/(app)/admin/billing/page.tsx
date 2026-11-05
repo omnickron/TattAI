@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Badge, Card, CardTitle, PageHeader } from "@/components/ui";
+import { isOperator } from "@/lib/auth/operator";
 import { requireAdmin } from "@/lib/auth/session";
 import {
   loadBillingConfig,
@@ -32,7 +33,7 @@ const dayFmt = new Intl.DateTimeFormat("de-DE", {
 });
 
 export default async function BillingPage({ searchParams }: PageProps<"/admin/billing">) {
-  await requireAdmin();
+  const operator = isOperator(await requireAdmin());
   const params = await searchParams;
   const now = new Date();
   const current = monthOf(now, APP_TIMEZONE);
@@ -217,10 +218,14 @@ export default async function BillingPage({ searchParams }: PageProps<"/admin/bi
             <p className="text-sm text-ink-soft">
               Die Rechnung kann erstellt werden, sobald der Monat vorbei ist.
             </p>
+          ) : !operator ? (
+            <p className="text-sm text-ink-soft">
+              Die Rechnung für diesen Monat erstellt der Betreiber von NEEDL. Sie erscheint dann
+              hier.
+            </p>
           ) : !issuerComplete(cfg) ? (
             <p className="text-sm text-ink-soft">
-              Für Rechnungen fehlen noch die Rechnungsdaten des Betreibers (Einstellungen →
-              Rechnungsdaten).
+              Für Rechnungen fehlen noch die Rechnungsdaten (Betreiber → Bot &amp; Abrechnung).
             </p>
           ) : (
             <div className="space-y-3 text-sm">
@@ -281,7 +286,7 @@ export default async function BillingPage({ searchParams }: PageProps<"/admin/bi
                       </Badge>
                     </td>
                     <td className="px-4 py-2 text-right sm:pr-0">
-                      {inv.status === "OPEN" && (
+                      {operator && inv.status === "OPEN" && (
                         <span className="inline-flex gap-1">
                           <ActionButton action={setPaidAction.bind(null, inv.id, true)}>
                             Bezahlt
@@ -295,7 +300,7 @@ export default async function BillingPage({ searchParams }: PageProps<"/admin/bi
                           </ActionButton>
                         </span>
                       )}
-                      {inv.status === "PAID" && (
+                      {operator && inv.status === "PAID" && (
                         <ActionButton action={setPaidAction.bind(null, inv.id, false)}>
                           Wieder offen
                         </ActionButton>

@@ -1,17 +1,15 @@
 import { ActionForm } from "@/components/action-form";
 import { Badge, Button, Card, CardTitle, Field, Input, Textarea } from "@/components/ui";
-import { isOperator } from "@/lib/auth/operator";
-import type { CurrentUser } from "@/lib/auth/session";
 import { issuerComplete, loadBillingConfig } from "@/lib/billing/billing";
 import { prisma } from "@/lib/db";
 import { updateBillingSettings } from "./actions";
 
 const pct = (bps: number) => (bps / 100).toLocaleString("de-DE");
 
-/** Commission, VAT and issuer details of the invoices – editable by the operator only. */
-export async function BillingCard({ user }: { user: CurrentUser }) {
+/** Commission, VAT and issuer details of the invoices (operator page). */
+export async function BillingCard() {
   const cfg = await loadBillingConfig(prisma);
-  const operator = isOperator(user);
+  const operator = true;
   const complete = issuerComplete(cfg);
 
   return (

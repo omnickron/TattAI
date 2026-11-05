@@ -6,6 +6,7 @@ import { requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { logoFont } from "../fonts";
 import { PushToggle } from "@/components/push-toggle";
+import { isOperator } from "@/lib/auth/operator";
 import { vapidPublicKey } from "@/lib/push";
 import { signOutAction } from "./actions";
 
@@ -56,6 +57,14 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
               { href: "/admin/bot", label: "Bot", icon: "bot" as const },
               { href: "/admin/settings", label: "Einstellungen", icon: "settings" as const },
             ],
+          },
+        ]
+      : []),
+    ...(isOperator(user)
+      ? [
+          {
+            label: "Betreiber",
+            items: [{ href: "/operator", label: "Bot & Abrechnung", icon: "operator" as const }],
           },
         ]
       : []),

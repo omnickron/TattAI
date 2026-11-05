@@ -185,8 +185,8 @@ export async function OperationsCard() {
             </Field>
           </div>
           <p className="text-xs text-ink-soft">
-            Nach {ERROR_PAUSE_COUNT} Fehlern in 30 Minuten pausiert der Bot von selbst; der Admin
-            bekommt eine Push-Nachricht.
+            Nach {ERROR_PAUSE_COUNT} Fehlern in 30 Minuten pausiert der Bot von selbst; du bekommst
+            eine Push-Nachricht.
           </p>
           <Button type="submit">Grenzen speichern</Button>
         </ActionForm>

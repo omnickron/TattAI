@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import type { ActionState } from "@/lib/action-state";
+import { isOperator } from "@/lib/auth/operator";
 import { requireAdmin } from "@/lib/auth/session";
 import {
   loadBillingConfig,
@@ -14,6 +15,11 @@ import {
 import { prisma } from "@/lib/db";
 import { APP_TIMEZONE } from "@/lib/format";
 
+const ONLY_OPERATOR: ActionState = {
+  ok: false,
+  message: "Rechnungen erstellt und verwaltet nur der Betreiber von NEEDL.",
+};
+
 const fail = (err: unknown): ActionState => {
   if (err instanceof BillingError) return { ok: false, message: err.message };
   throw err;
@@ -21,6 +27,7 @@ const fail = (err: unknown): ActionState => {
 
 export async function createInvoiceAction(month: string): Promise<ActionState> {
   const user = await requireAdmin();
+  if (!isOperator(user)) return ONLY_OPERATOR;
   try {
     const inv = await createInvoice(prisma, {
       month,
@@ -36,7 +43,7 @@ export async function createInvoiceAction(month: string): Promise<ActionState> {
 }
 
 export async function setPaidAction(id: string, paid: boolean): Promise<ActionState> {
-  await requireAdmin();
+  if (!isOperator(await requireAdmin())) return ONLY_OPERATOR;
   try {
     await setInvoicePaid(prisma, id, paid);
     revalidatePath("/admin/billing");
@@ -48,7 +55,7 @@ export async function setPaidAction(id: string, paid: boolean): Promise<ActionSt
 }
 
 export async function cancelInvoiceAction(id: string): Promise<ActionState> {
-  await requireAdmin();
+  if (!isOperator(await requireAdmin())) return ONLY_OPERATOR;
   try {
     await cancelInvoice(prisma, id);
     revalidatePath("/admin/billing");

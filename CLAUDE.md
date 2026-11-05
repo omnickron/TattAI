@@ -33,6 +33,11 @@ Sprache der Oberfläche und aller Texte für Nutzer: Deutsch. Code, Variablen un
 - Legt Tätowierer an, deaktiviert sie, setzt Soll-Anteile (Fairness).
 - Kann Termine umverteilen und Leads manuell bearbeiten.
 
+**Betreiber** (Anbieter von NEEDL, Entscheidung vom 05.11.2026)
+- Vorerst keine eigene Rolle, sondern ein Admin mit der E-Mail aus `OPERATOR_EMAIL` (Server-Umgebung).
+- Eigener Menüpunkt „Betreiber“: Bot-Betrieb (Kosten, Kostenlimits, Antwort-Grenzen, Fehler, Pause), Rechnungsdaten (Provision, Steuer, Absender), Rechnungen erstellen und verwalten.
+- Der Studio-Admin pflegt das Bot-Wissen, sieht den Bot-Status ohne Kosten, schaltet den Bot über die WhatsApp-Einstellungen bzw. pro Chat und sieht seine Rechnungen.
+
 **Tätowierer**
 - Pflegt eigene Verfügbarkeiten für Beratungen (wiederkehrend und Ausnahmen wie Urlaub).
 - Stellt die Beratungsdauer und optional einen Puffer zwischen Terminen selbst ein.
@@ -116,7 +121,7 @@ User (Rolle), TattooerProfile (Google-Verbindung, Beratungsdauer, Puffer), Avail
 Nach jeder Phase lauffähigen Stand liefern, bevor die nächste beginnt.
 
 ## Spätere Ideen (nicht jetzt umsetzen)
-- Dritte Rolle „Betreiber“ (Superadmin) für den Anbieter von NEEDL: Bot-Kern, Modell, Limits, Kosten, Provision/Rechnungen, Integrationen; Studio-Admin behält Inhalte, Team und Abläufe.
+- Echte dritte Rolle „Betreiber“ über mehrere Studios hinweg (erst bei Umbau auf mehrere Studios pro Installation).
 - Ad-Budget bei Meta automatisch drosseln, wenn alle Slots belegt sind.
 - Verteilung nach Stil und Spezialisierung.
 - Meta-Kosten importieren (ROI) und Conversions API.

@@ -3,7 +3,7 @@
  * per customer and across all chats, and the automatic pause after repeated errors.
  */
 import type { PrismaClient } from "@/generated/prisma/client";
-import { activeAdminIds, pushToUsers, type PushSender } from "../push";
+import { operatorUserIds, pushToUsers, type PushSender } from "../push";
 import { DEFAULT_TIME_ZONE, localDateOf, startOfLocalDay } from "../time";
 import { formatEuro, microsToCents } from "./costs";
 
@@ -129,7 +129,7 @@ export async function checkGuard(
   return { ok: true };
 }
 
-/** Pushes an alert to the admins once per key (e.g. once per day for the daily budget). */
+/** Pushes an alert to the operator once per key (e.g. once per day for the daily budget). */
 export async function alertAdminsOnce(
   prisma: Db,
   push: PushSender | undefined,
@@ -144,10 +144,10 @@ export async function alertAdminsOnce(
     create: { id: 1, lastAlertKey: key },
   });
   if (push)
-    await pushToUsers(prisma, push, await activeAdminIds(prisma), {
+    await pushToUsers(prisma, push, await operatorUserIds(prisma), {
       title: "NEEDL-Bot",
       body: body.slice(0, 160),
-      url: "/admin/bot",
+      url: "/operator",
       tag: "bot-alert",
     });
   return true;

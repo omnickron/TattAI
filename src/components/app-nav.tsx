@@ -18,7 +18,8 @@ export type NavIcon =
   | "fairness"
   | "whatsapp"
   | "bot"
-  | "settings";
+  | "settings"
+  | "operator";
 
 export type NavItem = { href: string; label: string; icon: NavIcon; badge?: number };
 export type NavGroup = { label?: string; items: NavItem[] };
@@ -78,6 +79,9 @@ const ICONS: Record<NavIcon, ReactNode> = {
       <path d="M12 8V4M9 14h.01M15 14h.01M9.5 17h5" />
       <circle cx="12" cy="3.5" r="1" />
     </>
+  ),
+  operator: (
+    <path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6zM9 12l2 2 4-4" />
   ),
   whatsapp: <path d="M21 12a8.5 8.5 0 0 1-12.6 7.4L3 21l1.6-5.2A8.5 8.5 0 1 1 21 12z" />,
   settings: (

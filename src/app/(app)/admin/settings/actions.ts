@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { ActionState } from "@/lib/action-state";
-import { isOperator } from "@/lib/auth/operator";
 import { requireAdmin } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { TEAMUP_PREFIX } from "@/lib/google/calendar";
@@ -123,68 +122,4 @@ export async function updateTeamupSettings(
   revalidatePath("/admin/settings");
   revalidatePath("/availability");
   return { ok: true, message: `TeamUp gespeichert.${note}` };
-}
-
-const percent = (v: FormDataEntryValue | null) => {
-  const s = String(v ?? "")
-    .trim()
-    .replace(",", ".");
-  if (!s) return null;
-  const n = Number(s);
-  return Number.isFinite(n) && n >= 0 && n <= 100 ? Math.round(n * 100) : NaN;
-};
-
-/** Operator only: commission, VAT and the issuer details printed on the invoices. */
-export async function updateBillingSettings(
-  _prev: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  const user = await requireAdmin();
-  if (!isOperator(user))
-    return { ok: false, message: "Nur der Betreiber von NEEDL kann die Rechnungsdaten ändern." };
-  const commissionBps = percent(formData.get("commission"));
-  const vatBps = percent(formData.get("vat"));
-  if (Number.isNaN(commissionBps) || Number.isNaN(vatBps))
-    return { ok: false, message: "Provision und Steuersatz bitte als Prozent zwischen 0 und 100." };
-  const daysRaw = String(formData.get("paymentDays") ?? "").trim();
-  const paymentDays = daysRaw ? Number(daysRaw) : null;
-  if (
-    paymentDays !== null &&
-    (!Number.isInteger(paymentDays) || paymentDays < 0 || paymentDays > 90)
-  )
-    return { ok: false, message: "Zahlungsziel bitte in Tagen (0–90)." };
-  const text = (k: string, max: number) =>
-    String(formData.get(k) ?? "")
-      .replace(/\r\n/g, "\n")
-      .trim()
-      .slice(0, max) || null;
-  const iban = text("issuerIban", 42)?.toUpperCase() ?? null;
-  if (iban && !/^[A-Z]{2}\d{2}[A-Z0-9 ]{11,32}$/.test(iban))
-    return {
-      ok: false,
-      message: "Die IBAN sieht nicht gültig aus (z. B. DE12 3456 7890 1234 5678 90).",
-    };
-  const email = text("issuerEmail", 200);
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-    return { ok: false, message: "Die E-Mail-Adresse sieht nicht gültig aus." };
-
-  const data = {
-    commissionBps,
-    vatBps,
-    paymentDays,
-    issuerName: text("issuerName", 200),
-    issuerAddress: text("issuerAddress", 500),
-    issuerTaxId: text("issuerTaxId", 50),
-    issuerIban: iban,
-    issuerEmail: email,
-    updatedById: user.id,
-  };
-  await prisma.billingSettings.upsert({
-    where: { id: 1 },
-    update: data,
-    create: { id: 1, ...data },
-  });
-  revalidatePath("/admin/settings");
-  revalidatePath("/admin/billing");
-  return { ok: true, message: "Rechnungsdaten gespeichert. Gilt für neue Rechnungen." };
 }

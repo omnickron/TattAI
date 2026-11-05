@@ -6,7 +6,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { runBotTurn, type BrainClient, type BrainDeps, HANDOVER_TEXT } from "@/lib/bot/brain";
 import { costMicros } from "@/lib/bot/costs";
 import { processBotInbox } from "@/lib/bot/inbox";
-import type { PushPayload, PushSender } from "@/lib/push";
+import { operatorUserIds, type PushPayload, type PushSender } from "@/lib/push";
 import type { CalendarClient, CalendarConnection, CalendarEventInput } from "@/lib/google/calendar";
 import { zonedTimeToUtc } from "@/lib/time";
 import type { WhatsAppClient } from "@/lib/whatsapp/client";
@@ -398,6 +398,21 @@ describe("safety nets", () => {
     await prisma.pushSubscription.create({
       data: { userId: admin.id, endpoint: "https://push.test/admin", p256dh: "p", auth: "a" },
     });
+  });
+
+  it("sends bot alerts to the operator, else to the admins", async () => {
+    const admins = await operatorUserIds(prisma);
+    expect(admins).toHaveLength(1);
+    const op = await prisma.user.create({
+      data: { name: "Betreiber", email: "Op@Needl.de", role: "ADMIN" },
+    });
+    const before = process.env.OPERATOR_EMAIL;
+    process.env.OPERATOR_EMAIL = "op@needl.de";
+    try {
+      expect(await operatorUserIds(prisma)).toEqual([op.id]);
+    } finally {
+      process.env.OPERATOR_EMAIL = before;
+    }
   });
 
   it("prices runs by model, including cache reads and writes", () => {

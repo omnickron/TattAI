@@ -88,3 +88,16 @@ export async function activeAdminIds(prisma: Pick<PrismaClient, "user">) {
   });
   return admins.map((a) => a.id);
 }
+
+/** The operator's user (OPERATOR_EMAIL); falls back to the admins when there is none. */
+export async function operatorUserIds(prisma: Pick<PrismaClient, "user">) {
+  const email = process.env.OPERATOR_EMAIL?.trim().toLowerCase();
+  if (email) {
+    const op = await prisma.user.findFirst({
+      where: { email: { equals: email, mode: "insensitive" }, active: true },
+      select: { id: true },
+    });
+    if (op) return [op.id];
+  }
+  return activeAdminIds(prisma);
+}

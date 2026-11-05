@@ -22,7 +22,7 @@ import {
 import { prisma } from "@/lib/db";
 import { formatDateTime } from "@/lib/format";
 import { saveKnowledgeSection } from "./actions";
-import { OperationsCard } from "./operations-card";
+import { BotStatusLine } from "./status-line";
 import { QAEditor } from "./qa-editor";
 
 export const metadata: Metadata = { title: "Bot" };
@@ -58,7 +58,7 @@ export default async function BotPage() {
         description="Das Wissen, aus dem der WhatsApp-Bot antwortet. Er sagt nur, was hier steht – was fehlt, erfindet er nicht."
       />
 
-      <OperationsCard />
+      <BotStatusLine />
 
       <div className="mb-4 grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">

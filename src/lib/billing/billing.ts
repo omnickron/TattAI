@@ -184,7 +184,7 @@ export async function createInvoice(
     throw new BillingError("Rechnungen gibt es erst, wenn der Monat vorbei ist.");
   if (!issuerComplete(cfg))
     throw new BillingError(
-      "Die Rechnungsdaten des Betreibers fehlen (Name, Anschrift, Steuernummer – Einstellungen → Rechnungsdaten).",
+      "Die Rechnungsdaten des Betreibers fehlen (Name, Anschrift, Steuernummer – Betreiber → Rechnungsdaten).",
     );
 
   const revenue = await loadMonthRevenue(prisma, input.month, tz);

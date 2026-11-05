@@ -1,3 +1,4 @@
+import { isOperator } from "./operator";
 import "server-only";
 import { cache } from "react";
 import { redirect } from "next/navigation";
@@ -39,6 +40,13 @@ export async function requireUser(): Promise<CurrentUser> {
 export async function requireAdmin(): Promise<CurrentUser> {
   const user = await requireUser();
   if (user.role !== "ADMIN") redirect("/leads");
+  return user;
+}
+
+/** The NEEDL operator (OPERATOR_EMAIL): bot operation, costs and billing details. */
+export async function requireOperator(): Promise<CurrentUser> {
+  const user = await requireUser();
+  if (!isOperator(user)) redirect("/");
   return user;
 }
 
