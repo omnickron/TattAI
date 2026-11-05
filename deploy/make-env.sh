@@ -66,6 +66,11 @@ ANTHROPIC_API_KEY=""
 # Optional: model and effort (low | medium | high)
 BOT_MODEL="claude-opus-5-5"
 BOT_EFFORT="low"
+# Push notifications (e.g. "Lena braucht euch"). Generate with: npm run push:keys
+VAPID_PUBLIC_KEY=""
+VAPID_PRIVATE_KEY=""
+# Contact for the push services, e.g. mailto:admin@example.de
+VAPID_SUBJECT=""
 
 # Commission invoices: details are maintained in the app (Einstellungen) by the operator
 OPERATOR_EMAIL="$operator_email"

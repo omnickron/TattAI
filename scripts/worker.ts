@@ -14,6 +14,7 @@ import { runMessagingWorker } from "../src/lib/whatsapp/messaging";
 import { deliverBotEvents, deliveryConfigFromEnv } from "../src/lib/bot/deliveries";
 import { brainConfigFromEnv, createBrainClient } from "../src/lib/bot/brain";
 import { BOT_EVENT, processBotInbox } from "../src/lib/bot/inbox";
+import { createPushSender } from "../src/lib/push";
 import { createMediaDownloader, downloadPendingAttachments } from "../src/lib/whatsapp/media";
 
 const INTERVAL_MS = 30_000;
@@ -27,6 +28,7 @@ const calendarDeps = {
 };
 // Built-in bot: on when an Anthropic API key is set
 const brain = createBrainClient();
+const push = createPushSender();
 let stopping = false;
 let lastLeadRetry = 0;
 
@@ -49,6 +51,7 @@ async function tick() {
         ...calendarDeps,
         whatsapp,
         brain,
+        push,
         config: brainConfigFromEnv(),
       });
       if (inbox.answered || inbox.handedOver || inbox.failed) console.info("[worker] bot:", inbox);

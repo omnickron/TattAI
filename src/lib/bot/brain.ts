@@ -27,8 +27,11 @@ import {
   toBotApiError,
   type BotDeps,
 } from "./service";
-import { botActiveFor, isBotGloballyEnabled, setBotEnabled } from "./state";
+import { botActiveFor, isBotGloballyEnabled } from "./state";
 import { sendBotReply } from "../whatsapp/replies";
+import type { PushSender } from "../push";
+import { costMicros } from "./costs";
+import { handOverChat } from "./handover";
 
 export const FALLBACK_BETA = "server-side-fallback-2026-07-01";
 const MAX_ROUNDS = 8;
@@ -63,6 +66,7 @@ export function createBrainClient(env: NodeJS.ProcessEnv = process.env): BrainCl
 export interface BrainDeps extends BotDeps {
   brain: BrainClient;
   config?: BrainConfig;
+  push?: PushSender;
 }
 
 // ---------------------------------------------------------------------------
@@ -325,6 +329,8 @@ export async function runBotTurn(deps: BrainDeps, leadId: string): Promise<TurnR
   const forbiddenWords = forbiddenWordList(knowledge.forbiddenWords);
 
   const usage: Usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
+  let cost = 0;
+  let servedModel = cfg.model;
   const log: Array<Record<string, unknown>> = [];
   let hasUpcoming = chat.consultations.length > 0;
   let consultationId: string | null = chat.consultations[0]?.id ?? null;
@@ -459,7 +465,11 @@ export async function runBotTurn(deps: BrainDeps, leadId: string): Promise<TurnR
       betas: [FALLBACK_BETA],
       fallbacks: "default",
     });
-    addUsage(usage, res);
+    const u = usageOf(res);
+    addUsage(usage, u);
+    // A server-side fallback may have answered with another model
+    servedModel = res.model || cfg.model;
+    cost += costMicros(servedModel, u);
     if (res.stop_reason === "refusal") {
       handoverReason = "Das Modell hat die Antwort verweigert.";
       break;
@@ -557,20 +567,15 @@ export async function runBotTurn(deps: BrainDeps, leadId: string): Promise<TurnR
       where: { id: leadId },
       data: { botMemory: answer.akte.trim().slice(0, MAX_MEMORY_LENGTH) || null },
     });
-  if (handover) {
-    await setBotEnabled(prisma, leadId, false, { reason: "BOT_HANDOVER", now });
-    await prisma.lead.update({
-      where: { id: leadId },
-      data: { botHandoverNote: (reason ?? "").slice(0, 500) },
-    });
-  }
+  if (handover) await handOverChat(deps, leadId, reason ?? "Übergabe durch den Bot", now);
 
   const outcome: TurnOutcome = handover ? "handover" : text ? "sent" : "silent";
   await prisma.botTurn.create({
     data: {
       leadId,
-      model: cfg.model,
+      model: servedModel,
       ...usage,
+      costMicros: cost,
       outcome: sendError ? "error" : outcome,
       mode: answer?.modus ?? null,
       reply: text || null,
@@ -581,11 +586,20 @@ export async function runBotTurn(deps: BrainDeps, leadId: string): Promise<TurnR
   return { outcome, reply: text || undefined, mode: answer?.modus };
 }
 
-function addUsage(u: Usage, res: BetaMessage) {
-  u.inputTokens += res.usage?.input_tokens ?? 0;
-  u.outputTokens += res.usage?.output_tokens ?? 0;
-  u.cacheReadTokens += res.usage?.cache_read_input_tokens ?? 0;
-  u.cacheWriteTokens += res.usage?.cache_creation_input_tokens ?? 0;
+function usageOf(res: BetaMessage): Usage {
+  return {
+    inputTokens: res.usage?.input_tokens ?? 0,
+    outputTokens: res.usage?.output_tokens ?? 0,
+    cacheReadTokens: res.usage?.cache_read_input_tokens ?? 0,
+    cacheWriteTokens: res.usage?.cache_creation_input_tokens ?? 0,
+  };
+}
+
+function addUsage(total: Usage, u: Usage) {
+  total.inputTokens += u.inputTokens;
+  total.outputTokens += u.outputTokens;
+  total.cacheReadTokens += u.cacheReadTokens;
+  total.cacheWriteTokens += u.cacheWriteTokens;
 }
 
 /** Up to `max` start times, spread over the days (at most 2 per day, morning and later). */

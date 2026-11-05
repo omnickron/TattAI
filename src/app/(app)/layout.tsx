@@ -5,6 +5,8 @@ import { cn } from "@/components/ui";
 import { requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { logoFont } from "../fonts";
+import { PushToggle } from "@/components/push-toggle";
+import { vapidPublicKey } from "@/lib/push";
 import { signOutAction } from "./actions";
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
@@ -18,10 +20,20 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       ...(isAdmin ? {} : { tattooerId: user.tattooerProfile?.id ?? "__none__" }),
     },
   });
+  // Chats the bot handed over that nobody has picked up yet
+  const handovers = await prisma.lead.count({
+    where: {
+      botEnabled: false,
+      botDisabledReason: "BOT_HANDOVER",
+      ...(isAdmin
+        ? {}
+        : { consultations: { some: { tattooerId: user.tattooerProfile?.id ?? "__none__" } } }),
+    },
+  });
   const groups: NavGroup[] = [
     {
       items: [
-        { href: "/", label: "Übersicht", icon: "home" },
+        { href: "/", label: "Übersicht", icon: "home", badge: handovers },
         { href: "/leads", label: "Leads", icon: "leads" },
         { href: "/calendar", label: "Kalender", icon: "calendar" },
         { href: "/consultations", label: "Beratungen", icon: "consultations", badge: openOutcomes },
@@ -61,27 +73,30 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         userName={user.name}
         userRole={isAdmin ? "Admin" : "Tätowierer"}
         signOut={
-          <form action={signOutAction}>
-            <button
-              type="submit"
-              title="Abmelden"
-              aria-label="Abmelden"
-              className="rounded-lg p-2 text-ink-soft hover:bg-muted hover:text-ink"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                className="size-[18px]"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={1.6}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
+          <div className="flex items-center">
+            <PushToggle publicKey={vapidPublicKey()} />
+            <form action={signOutAction}>
+              <button
+                type="submit"
+                title="Abmelden"
+                aria-label="Abmelden"
+                className="rounded-lg p-2 text-ink-soft hover:bg-muted hover:text-ink"
               >
-                <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H4" />
-              </svg>
-            </button>
-          </form>
+                <svg
+                  viewBox="0 0 24 24"
+                  className="size-[18px]"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.6}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H4" />
+                </svg>
+              </button>
+            </form>
+          </div>
         }
       />
       <div className="lg:pl-60 print:pl-0">

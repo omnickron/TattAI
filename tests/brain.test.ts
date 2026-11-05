@@ -4,7 +4,9 @@ import type {
 } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { runBotTurn, type BrainClient, type BrainDeps, HANDOVER_TEXT } from "@/lib/bot/brain";
+import { costMicros } from "@/lib/bot/costs";
 import { processBotInbox } from "@/lib/bot/inbox";
+import type { PushPayload, PushSender } from "@/lib/push";
 import type { CalendarClient, CalendarConnection, CalendarEventInput } from "@/lib/google/calendar";
 import { zonedTimeToUtc } from "@/lib/time";
 import type { WhatsAppClient } from "@/lib/whatsapp/client";
@@ -362,5 +364,182 @@ describe("bot inbox (worker)", () => {
     expect(wa.texts).toEqual(["Schöne Idee! Wo soll die Rose hin?"]);
     const done = await prisma.botDelivery.findMany({ where: { event: "message.received" } });
     expect(done.every((d) => d.status === "PROCESSED")).toBe(true);
+  });
+});
+
+class FakePush implements PushSender {
+  readonly configured = true;
+  sent: Array<{ endpoint: string; payload: PushPayload }> = [];
+  gone = new Set<string>();
+  async send(sub: { endpoint: string }, payload: PushPayload) {
+    if (this.gone.has(sub.endpoint)) return { gone: true };
+    this.sent.push({ endpoint: sub.endpoint, payload });
+    return { gone: false };
+  }
+}
+
+describe("safety nets", () => {
+  let push: FakePush;
+  const later = new Date(NOW.getTime() + 60_000);
+
+  /** A customer message waiting for the bot */
+  async function queued() {
+    await prisma.lead.update({ where: { id: leadId }, data: { lastInboundAt: NOW } });
+    await prisma.botDelivery.create({
+      data: { event: "message.received", leadId, payload: {}, nextAttemptAt: NOW },
+    });
+  }
+
+  beforeEach(async () => {
+    push = new FakePush();
+    const admin = await prisma.user.create({
+      data: { name: "Nick", email: "nick@example.com", role: "ADMIN" },
+    });
+    await prisma.pushSubscription.create({
+      data: { userId: admin.id, endpoint: "https://push.test/admin", p256dh: "p", auth: "a" },
+    });
+  });
+
+  it("prices runs by model, including cache reads and writes", () => {
+    const u = { inputTokens: 1_000_000, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
+    expect(costMicros("claude-opus-5-5", u)).toBe(4_000_000);
+    expect(costMicros("claude-opus-5-5", { ...u, inputTokens: 0, outputTokens: 1_000_000 })).toBe(
+      20_000_000,
+    );
+    expect(costMicros("claude-sonnet-5-5", { ...u, inputTokens: 0, cacheWriteTokens: 1000 })).toBe(
+      2500,
+    );
+    // Unknown models count expensive
+    expect(costMicros("something-new", u)).toBe(10_000_000);
+  });
+
+  it("records the cost of every run", async () => {
+    const brain = new ScriptedBrain([() => reply([answer("Hey! Wo soll die Rose hin?")])]);
+    await runBotTurn({ ...base, brain }, leadId);
+    const turn = await prisma.botTurn.findFirstOrThrow({ where: { leadId } });
+    // 100 input × 4 + 20 output × 20 + 900 cache reads × 0.2
+    expect(turn.costMicros).toBe(980);
+  });
+
+  it("hands a chat over when one customer gets too many replies", async () => {
+    await prisma.botSettings.create({ data: { id: 1, maxPerHourPerLead: 2 } });
+    for (const minutes of [10, 20])
+      await prisma.message.create({
+        data: {
+          leadId,
+          direction: "OUTBOUND",
+          sentByBot: true,
+          body: "x",
+          sentAt: new Date(NOW.getTime() - minutes * 60_000),
+        },
+      });
+    await queued();
+    const brain = new ScriptedBrain([]);
+    expect(await processBotInbox({ ...base, brain, push, now: () => later })).toMatchObject({
+      limited: 1,
+    });
+    expect(brain.calls).toHaveLength(0);
+    const lead = await prisma.lead.findUniqueOrThrow({ where: { id: leadId } });
+    expect(lead).toMatchObject({ botEnabled: false, botDisabledReason: "BOT_HANDOVER" });
+    expect(lead.botHandoverNote).toMatch(/in einer Stunde/);
+    // Handover push to the admin (no consultation yet), no bot-wide alert
+    expect(push.sent.map((p) => p.payload.title)).toEqual(["Lena Müller braucht euch"]);
+  });
+
+  it("stops at the daily cost limit and alerts the admin once", async () => {
+    await prisma.botTurn.create({
+      data: { leadId, outcome: "sent", costMicros: 5_000_000, createdAt: NOW },
+    });
+    await queued();
+    const brain = new ScriptedBrain([]);
+    await processBotInbox({ ...base, brain, push, now: () => later });
+    expect(brain.calls).toHaveLength(0);
+    // Handover push for the chat (reason = limit) plus one alert for the admins
+    expect(push.sent.map((p) => [p.payload.tag, p.payload.body])).toEqual([
+      [`handover-${leadId}`, expect.stringMatching(/Tageslimit/)],
+      ["bot-alert", expect.stringMatching(/Tageslimit.*Neue Nachrichten gehen an euch/)],
+    ]);
+
+    // Another chat the same day: handover push, but no second alert
+    const other = await prisma.lead.create({
+      data: {
+        source: "META_LEAD_AD",
+        name: "Tom",
+        phoneE164: "+4915199999999",
+        phoneValid: true,
+        lastInboundAt: NOW,
+      },
+    });
+    await prisma.botDelivery.create({
+      data: { event: "message.received", leadId: other.id, payload: {}, nextAttemptAt: NOW },
+    });
+    await processBotInbox({ ...base, brain, push, now: () => later });
+    expect(push.sent.filter((p) => p.payload.tag === "bot-alert")).toHaveLength(1);
+  });
+
+  it("pauses for all chats after repeated errors and can be resumed", async () => {
+    for (let i = 0; i < 4; i++)
+      await prisma.botTurn.create({ data: { leadId, outcome: "error", createdAt: NOW } });
+    await queued();
+    const failing = new ScriptedBrain([
+      () => {
+        throw new Error("401 invalid x-api-key");
+      },
+    ]);
+    expect(
+      await processBotInbox({ ...base, brain: failing, push, now: () => later }),
+    ).toMatchObject({ failed: 1 });
+    const s = await prisma.botSettings.findUniqueOrThrow({ where: { id: 1 } });
+    expect(s.pausedAt).not.toBeNull();
+    expect(s.pausedReason).toMatch(/5 Fehler/);
+    expect(push.sent.some((p) => /Bot pausiert/.test(p.payload.body))).toBe(true);
+
+    // While paused, the waiting message goes to a person on its retry
+    await prisma.botDelivery.updateMany({ data: { nextAttemptAt: later } });
+    const brain = new ScriptedBrain([]);
+    await processBotInbox({ ...base, brain, push, now: () => later });
+    expect(brain.calls).toHaveLength(0);
+    expect(
+      (await prisma.lead.findUniqueOrThrow({ where: { id: leadId } })).botHandoverNote,
+    ).toMatch(/Bot pausiert/);
+  });
+
+  it("pushes a handover to the tattooer of the booked consultation and drops dead devices", async () => {
+    const alex = await prisma.user.findFirstOrThrow({
+      where: { name: "Alex" },
+      include: { tattooerProfile: true },
+    });
+    await prisma.consultation.create({
+      data: {
+        leadId,
+        tattooerId: alex.tattooerProfile!.id,
+        startsAt: new Date(NOW.getTime() + 86_400_000),
+        endsAt: new Date(NOW.getTime() + 86_400_000 + 1_800_000),
+      },
+    });
+    await prisma.pushSubscription.createMany({
+      data: [
+        { userId: alex.id, endpoint: "https://push.test/alex-phone", p256dh: "p", auth: "a" },
+        { userId: alex.id, endpoint: "https://push.test/alex-old", p256dh: "p", auth: "a" },
+      ],
+    });
+    push.gone.add("https://push.test/alex-old");
+    const brain = new ScriptedBrain([
+      () =>
+        reply([
+          answer("Ich gebe das an Alex weiter, er meldet sich.", {
+            uebergabe: true,
+            uebergabe_grund: "Frage zur Anzahlung",
+          }),
+        ]),
+    ]);
+    await runBotTurn({ ...base, brain, push }, leadId);
+    expect(push.sent).toEqual([
+      {
+        endpoint: "https://push.test/alex-phone",
+        payload: expect.objectContaining({ body: "Frage zur Anzahlung", url: `/leads/${leadId}` }),
+      },
+    ]);
+    expect(await prisma.pushSubscription.count({ where: { userId: alex.id } })).toBe(1);
   });
 });

@@ -29,11 +29,12 @@ model User {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  tattooerProfile  TattooerProfile?
-  leadNotes        LeadNote[]
-  sentMessages     Message[]
-  botDisabledLeads Lead[]           @relation("BotDisabledBy")
-  contentItems     ContentItem[]
+  tattooerProfile   TattooerProfile?
+  leadNotes         LeadNote[]
+  sentMessages      Message[]
+  botDisabledLeads  Lead[]             @relation("BotDisabledBy")
+  contentItems      ContentItem[]
+  pushSubscriptions PushSubscription[]
 }
 
 enum CalendarProvider {
@@ -189,6 +190,7 @@ model Lead {
   botMemory       String?
   // Why the bot handed the chat over to a person (shown in the app)
   botHandoverNote String?
+  botHandoverAt   DateTime?
 
   // Original lead payload from Meta, for traceability
   rawPayload Json?
@@ -781,6 +783,8 @@ model BotTurn {
   outputTokens     Int      @default(0)
   cacheReadTokens  Int      @default(0)
   cacheWriteTokens Int      @default(0)
+  // Cost in millionths of a US dollar (list prices of the model)
+  costMicros       Int      @default(0)
   // sent | handover | silent | error
   outcome          String
   mode             String?
@@ -792,4 +796,37 @@ model BotTurn {
 
   @@index([leadId, createdAt])
   @@index([createdAt])
+}
+
+// Safety limits of the built-in bot (single row, id = 1)
+model BotSettings {
+  id                 Int       @id @default(1)
+  // Bot replies per customer
+  maxPerHourPerLead  Int       @default(30)
+  maxPerDayPerLead   Int       @default(80)
+  // Bot replies across all chats per day
+  maxPerDayTotal     Int       @default(1500)
+  // Cost brake in euro cents (1 $ counted as 1 €, on the safe side)
+  dailyBudgetCents   Int       @default(500)
+  monthlyBudgetCents Int       @default(10000)
+  // Paused automatically after repeated errors (or by hand); null = running
+  pausedAt           DateTime?
+  pausedReason       String?
+  // Last alert sent (e.g. "budget-day:2026-11-05"), so each alert goes out once
+  lastAlertKey       String?
+  updatedAt          DateTime  @updatedAt
+}
+
+// Browser push subscriptions (installed PWA / browser) per user
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
