@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { Button, Card, Select } from "@/components/ui";
+import { Button, Card, cn, Select } from "@/components/ui";
 import { isDevLoginEnabled } from "@/lib/auth/dev-login";
 import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
+import { logoFont } from "../fonts";
 import { signInAsDevUser, signInWithGoogle } from "./actions";
 
 export const metadata: Metadata = { title: "Anmelden" };
@@ -33,11 +34,8 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
     <main className="flex min-h-dvh items-center justify-center px-4 py-10">
       <div className="w-full max-w-sm space-y-6">
         <div className="text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-ink text-lg font-bold text-paper">
-            N
-          </div>
-          <h1 className="text-2xl font-semibold tracking-tight">NEEDL</h1>
-          <p className="mt-1 text-sm text-ink-soft">Leads und Beratungstermine</p>
+          <h1 className={cn(logoFont.className, "text-4xl leading-none tracking-wide")}>NEEDL</h1>
+          <p className="mt-2 text-sm text-ink-soft">Leads und Beratungstermine</p>
         </div>
 
         <Card className="space-y-4">
