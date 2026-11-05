@@ -546,7 +546,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
           {days.map((d) => (
             <div
               key={d}
-              className={cn("relative border-l border-line", d === today && "bg-accent/[0.03]")}
+              className={cn("relative border-l border-line", d === today && "bg-muted/40")}
             >
               {hours.map((h) => (
                 <div

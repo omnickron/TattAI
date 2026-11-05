@@ -7,8 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Leads und Beratungstermine für das Tattoo-Studio",
     start_url: "/",
     display: "standalone",
-    background_color: "#f7f6f3",
-    theme_color: "#1c1b19",
+    background_color: "#f6f7f9",
+    theme_color: "#18181b",
     lang: "de",
     icons: [
       { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
