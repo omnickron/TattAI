@@ -1,7 +1,8 @@
 /**
- * Monthly commission billing: the tattoo revenue booked through the app in a month
- * (non-cancelled tattoo sessions with their date in that month) × commission rate,
- * plus VAT. Invoices freeze the numbers at creation.
+ * Monthly commission billing: the tattoo revenue of customers won through Meta ads in a month
+ * (non-cancelled tattoo sessions with their date in that month, lead source = Meta lead ad)
+ * × commission rate, plus VAT. Other customers (manual, walk-ins without ad) are shown but
+ * not billed. Invoices freeze the numbers at creation.
  */
 import type { PrismaClient } from "@/generated/prisma/client";
 import { DEFAULT_TIME_ZONE, localDateOf, startOfLocalDay } from "../time";
@@ -115,13 +116,16 @@ export async function loadMonthRevenue(
       consultation: {
         select: {
           walkIn: true,
-          lead: { select: { name: true } },
+          lead: { select: { name: true, source: true } },
           tattooer: { select: { id: true, user: { select: { name: true } } } },
         },
       },
     },
   });
-  const lines: BillingLine[] = sessions.map((s) => ({
+  // Only customers from Meta ads are billed
+  const billable = sessions.filter((s) => s.consultation.lead.source === "META_LEAD_AD");
+  const other = sessions.filter((s) => s.consultation.lead.source !== "META_LEAD_AD");
+  const lines: BillingLine[] = billable.map((s) => ({
     sessionId: s.id,
     date: localDateOf(s.date, timeZone),
     leadName: s.consultation.lead.name,
@@ -130,7 +134,7 @@ export async function loadMonthRevenue(
     walkIn: s.consultation.walkIn,
   }));
   const byTattooer = new Map<string, { name: string; revenueCents: number; sessions: number }>();
-  for (const s of sessions) {
+  for (const s of billable) {
     const t = s.consultation.tattooer;
     const row = byTattooer.get(t.id) ?? { name: t.user.name, revenueCents: 0, sessions: 0 };
     row.revenueCents += s.amountCents ?? 0;
@@ -144,6 +148,11 @@ export async function loadMonthRevenue(
     sessionCount: lines.length,
     missingAmounts: lines.filter((l) => l.amountCents === null).length,
     byTattooer: [...byTattooer.values()].sort((a, b) => b.revenueCents - a.revenueCents),
+    /** Not billed: customers that did not come from Meta ads */
+    other: {
+      revenueCents: other.reduce((sum, s) => sum + (s.amountCents ?? 0), 0),
+      sessionCount: other.length,
+    },
   };
 }
 
@@ -180,7 +189,9 @@ export async function createInvoice(
 
   const revenue = await loadMonthRevenue(prisma, input.month, tz);
   if (revenue.revenueCents <= 0)
-    throw new BillingError(`Im ${monthLabel(input.month)} gab es keinen Tattoo-Umsatz – keine Rechnung nötig.`);
+    throw new BillingError(
+      `Im ${monthLabel(input.month)} gab es keinen Tattoo-Umsatz – keine Rechnung nötig.`,
+    );
   const settings = await prisma.appSettings.findUnique({ where: { id: 1 } });
   const amounts = computeAmounts(revenue.revenueCents, cfg);
   const year = input.month.slice(0, 4);

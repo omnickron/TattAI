@@ -121,8 +121,8 @@ export default async function InvoicePage({ params }: PageProps<"/admin/billing/
           <tbody>
             <tr className="border-b border-zinc-200 align-top">
               <td className="py-3 pr-4">
-                Provision {pct(inv.commissionBps)} auf den über NEEDL gebuchten Tattoo-Umsatz im{" "}
-                {monthLabel(inv.period)}
+                Provision {pct(inv.commissionBps)} auf den Tattoo-Umsatz mit über Meta-Anzeigen
+                gewonnenen Kunden im {monthLabel(inv.period)}
                 <span className="block text-zinc-500">
                   Bemessungsgrundlage {formatEuro(inv.revenueCents)} aus {inv.sessionCount}{" "}
                   Tattoo-Terminen (siehe Anlage)

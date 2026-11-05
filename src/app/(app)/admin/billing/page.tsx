@@ -51,7 +51,7 @@ export default async function BillingPage({ searchParams }: PageProps<"/admin/bi
     <>
       <PageHeader
         title="Abrechnung"
-        description={`Über NEEDL umgesetzter Tattoo-Umsatz pro Monat und die Provisionsrechnungen (${pct(cfg.commissionBps)}).`}
+        description={`Tattoo-Umsatz mit Kunden aus Meta-Anzeigen pro Monat und die Provisionsrechnungen (${pct(cfg.commissionBps)}).`}
       />
 
       <div className="mb-4 flex items-center gap-2">
@@ -92,7 +92,7 @@ export default async function BillingPage({ searchParams }: PageProps<"/admin/bi
           </CardTitle>
           <dl className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-lg bg-muted/60 p-3">
-              <dt className="text-xs text-ink-soft">Tattoo-Umsatz</dt>
+              <dt className="text-xs text-ink-soft">Tattoo-Umsatz aus Meta-Leads</dt>
               <dd className="text-2xl font-semibold tabular-nums">
                 {formatEuro(revenue.revenueCents)}
               </dd>
@@ -117,6 +117,13 @@ export default async function BillingPage({ searchParams }: PageProps<"/admin/bi
               </dd>
             </div>
           </dl>
+          {revenue.other.sessionCount > 0 && (
+            <p className="mt-3 text-sm text-ink-soft">
+              Nicht provisionspflichtig (Kunden ohne Meta-Anzeige, z. B. manuell angelegt oder
+              Laufkunden): {formatEuro(revenue.other.revenueCents)} aus {revenue.other.sessionCount}{" "}
+              Tattoo-Termin(en).
+            </p>
+          )}
           {revenue.missingAmounts > 0 && (
             <p className="mt-3 rounded-lg bg-amber-50 p-2 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-300">
               Bei {revenue.missingAmounts} Tattoo-Termin(en) fehlt noch der Betrag – sie zählen

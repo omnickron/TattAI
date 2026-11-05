@@ -88,6 +88,29 @@ describe("monthly revenue", () => {
     expect(r.byTattooer).toEqual([{ name: "Kim", revenueCents: 90000, sessions: 4 }]);
   });
 
+  it("bills only customers from Meta ads and shows the rest separately", async () => {
+    await session("2026-10-05", 40000);
+    const manual = await prisma.lead.create({ data: { source: "MANUAL", name: "Walk-in" } });
+    const c2 = await prisma.consultation.create({
+      data: {
+        leadId: manual.id,
+        tattooerId,
+        walkIn: true,
+        startsAt: new Date("2026-10-06T08:00:00Z"),
+        endsAt: new Date("2026-10-06T08:00:00Z"),
+        status: "HELD",
+        tattooBooked: true,
+      },
+    });
+    await prisma.tattooBooking.create({
+      data: { consultationId: c2.id, date: sessionDate("2026-10-06", TZ), amountCents: 25000 },
+    });
+    const r = await loadMonthRevenue(prisma, "2026-10", TZ);
+    expect(r).toMatchObject({ revenueCents: 40000, sessionCount: 1 });
+    expect(r.other).toEqual({ revenueCents: 25000, sessionCount: 1 });
+    expect(r.lines.map((l) => l.leadName)).toEqual(["Mia"]);
+  });
+
   it("ignores sessions of tattoos that were revised to 'no tattoo'", async () => {
     await session("2026-10-10", 30000);
     await prisma.consultation.update({

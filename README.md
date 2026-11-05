@@ -222,8 +222,9 @@ und lädt die Dateien herunter.
 
 ## Abrechnung (Provision)
 
-Unter **Abrechnung** (Admin) steht pro Monat der über NEEDL gebuchte Tattoo-Umsatz: alle nicht
-abgesagten Tattoo-Termine mit Datum im Monat und eingetragenem Betrag. Daraus ergibt sich die
+Unter **Abrechnung** (Admin) steht pro Monat der Tattoo-Umsatz mit **Kunden aus Meta-Anzeigen**: alle
+nicht abgesagten Tattoo-Termine mit Datum im Monat und eingetragenem Betrag. Manuell angelegte Kunden
+und Laufkunden ohne Anzeige werden separat angezeigt, aber nicht berechnet. Daraus ergibt sich die
 Provision (Standard 15 %) zzgl. Umsatzsteuer. Für abgeschlossene Monate wird die Rechnung mit
 fortlaufender Nummer (`2026-001`) erstellt; die Zahlen werden dabei eingefroren. Die Rechnung ist als
 Druckansicht bzw. PDF abrufbar (Kunden nur mit Initialen in der Anlage), Status offen / bezahlt /
