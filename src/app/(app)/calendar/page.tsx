@@ -4,7 +4,9 @@ import { ButtonLink, cn, EmptyState, PageHeader, Select, Button } from "@/compon
 import { requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { APP_TIMEZONE } from "@/lib/format";
-import { CONSULTATION_MODE_LABELS } from "@/lib/scheduling/event-content";
+import { formatEuro } from "@/lib/outcomes/money";
+import { CONSULTATION_MODE_LABELS, summaryLines } from "@/lib/scheduling/event-content";
+import { EntryChip, type EntryDetail } from "./entry-detail";
 import { AddEntryButton, BlockerChip, ClickLayer, NewEntryProvider } from "./new-entry";
 import {
   addDays,
@@ -97,7 +99,30 @@ type Item = {
   endMin: number;
   lane: number;
   lanes: number;
+  detail?: EntryDetail;
 };
+
+const whenFmt = new Intl.DateTimeFormat("de-DE", {
+  timeZone: APP_TIMEZONE,
+  weekday: "short",
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+});
+const timeFmt = new Intl.DateTimeFormat("de-DE", {
+  timeZone: APP_TIMEZONE,
+  hour: "2-digit",
+  minute: "2-digit",
+});
+function whenLabel(start: Date, end: Date | null) {
+  return end
+    ? `${whenFmt.format(start)} · ${timeFmt.format(start)}–${timeFmt.format(end)} Uhr`
+    : `${whenFmt.format(start)} · ganztägig (ohne Uhrzeit)`;
+}
+function motifOf(summary: unknown): string | null {
+  const m = (summary as { motif?: unknown } | null)?.motif;
+  return typeof m === "string" && m.trim() ? m.trim() : null;
+}
 
 /** Assigns side-by-side lanes to overlapping items of one day. */
 function layoutLanes(items: Item[]) {
@@ -128,7 +153,8 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
   const isAdmin = user.role === "ADMIN";
   const params = await searchParams;
   const view = params.view === "day" ? "day" : "week";
-  const today = localDateOf(new Date(), APP_TIMEZONE);
+  const now = new Date();
+  const today = localDateOf(now, APP_TIMEZONE);
   const date = typeof params.date === "string" && isLocalDate(params.date) ? params.date : today;
   const first = view === "week" ? startOfWeek(date) : date;
   const dayCount = view === "week" ? 7 : 1;
@@ -160,7 +186,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
       ...(scopeTattooer ? { tattooerId: scopeTattooer } : {}),
     },
     include: {
-      lead: { select: { id: true, name: true } },
+      lead: { select: { id: true, name: true, phoneE164: true, tattooSummary: true } },
       tattooer: { select: { id: true, createdAt: true, user: { select: { name: true } } } },
     },
     orderBy: { startsAt: "asc" },
@@ -185,8 +211,9 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
     include: {
       consultation: {
         select: {
-          lead: { select: { id: true, name: true } },
+          lead: { select: { id: true, name: true, phoneE164: true, tattooSummary: true } },
           tattooer: { select: { id: true, user: { select: { name: true } } } },
+          tattooBookings: { where: { cancelled: false }, select: { amountCents: true } },
         },
       },
     },
@@ -207,6 +234,29 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
       tone: TONES[(toneIndex.get(c.tattooer.id) ?? 0) % TONES.length],
       status: c.status,
       mode: c.mode,
+      detail: {
+        kind: "CONSULTATION",
+        title: "Beratung",
+        leadId: c.lead.id,
+        leadName: c.lead.name,
+        phone: c.lead.phoneE164,
+        when: whenLabel(c.startsAt, c.endsAt),
+        tattooerName: c.tattooer.user.name,
+        mode: CONSULTATION_MODE_LABELS[c.mode],
+        status:
+          c.status === "HELD"
+            ? { label: "stattgefunden", tone: "green" }
+            : c.status === "NO_SHOW"
+              ? { label: "No-Show", tone: "red" }
+              : c.endsAt <= now
+                ? { label: "Ergebnis fehlt", tone: "amber" }
+                : { label: "geplant", tone: "blue" },
+        motif: motifOf(c.lead.tattooSummary),
+        summary: summaryLines(c.lead.tattooSummary).filter((l) => !l.startsWith("Motiv:")),
+        amount: null,
+        total: null,
+        note: null,
+      },
       day,
       startMin,
       endMin: sameDayEnd ? Math.max(startMin + 15, localMinuteOf(c.endsAt, APP_TIMEZONE)) : 1440,
@@ -229,6 +279,30 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
       mode: null,
       lane: 0,
       lanes: 1,
+      detail: {
+        kind: "TATTOO" as const,
+        title: `Tattoo-Termin${sn.consultation.tattooBookings.length > 1 ? ` ${sn.sessionNumber}` : ""}`,
+        leadId: sn.consultation.lead.id,
+        leadName: sn.consultation.lead.name,
+        phone: sn.consultation.lead.phoneE164,
+        when:
+          sn.startsAt && sn.endsAt ? whenLabel(sn.startsAt, sn.endsAt) : whenLabel(sn.date, null),
+        tattooerName: t.user.name,
+        mode: null,
+        status: null,
+        motif: motifOf(sn.consultation.lead.tattooSummary),
+        summary: summaryLines(sn.consultation.lead.tattooSummary).filter(
+          (l) => !l.startsWith("Motiv:") && !l.startsWith("Referenzbilder"),
+        ),
+        amount: sn.amountCents != null ? formatEuro(sn.amountCents) : null,
+        total:
+          sn.consultation.tattooBookings.length > 1
+            ? formatEuro(
+                sn.consultation.tattooBookings.reduce((sum, b) => sum + (b.amountCents ?? 0), 0),
+              )
+            : null,
+        note: sn.note,
+      },
     };
     if (sn.startsAt && sn.endsAt) {
       const day = localDateOf(sn.startsAt, APP_TIMEZONE);
@@ -434,9 +508,9 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
                         </span>
                       </BlockerChip>
                     ) : (
-                      <Link
-                        href={`/leads/${i.leadId}`}
-                        className={cn("block rounded-lg border-l-4 px-3 py-2", i.tone)}
+                      <EntryChip
+                        detail={i.detail!}
+                        className={cn("block w-full rounded-lg border-l-4 px-3 py-2", i.tone)}
                         style={i.kind === "TATTOO" ? TATTOO_TEXTURE : undefined}
                       >
                         <span className="block text-sm font-medium">
@@ -450,7 +524,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
                           {i.mode && ` · ${CONSULTATION_MODE_LABELS[i.mode]}`}
                           {isAdmin && ` · ${i.tattooerName}`}
                         </span>
-                      </Link>
+                      </EntryChip>
                     )}
                   </li>
                 ))}
@@ -507,19 +581,19 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
                         {isAdmin && ` · ${i.tattooerName}`}
                       </BlockerChip>
                     ) : (
-                      <Link
+                      <EntryChip
                         key={i.id}
-                        href={`/leads/${i.leadId}`}
+                        detail={i.detail!}
                         title={`Tattoo-Termin ${i.sessionNumber} · ${i.leadName} · ${i.tattooerName} (ohne Uhrzeit)`}
                         className={cn(
-                          "block truncate rounded-md border-l-4 px-1.5 py-0.5 text-xs",
+                          "block w-full truncate rounded-md border-l-4 px-1.5 py-0.5 text-xs",
                           i.tone,
                         )}
                         style={TATTOO_TEXTURE}
                       >
                         <TattooTag n={i.sessionNumber} />
                         {i.leadName}
-                      </Link>
+                      </EntryChip>
                     ),
                   )}
               </div>
@@ -589,9 +663,9 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
                     );
                   }
                   return (
-                    <Link
+                    <EntryChip
                       key={i.id}
-                      href={`/leads/${i.leadId}`}
+                      detail={i.detail!}
                       title={`${i.kind === "TATTOO" ? `Tattoo-Termin ${i.sessionNumber}` : "Beratung"} · ${i.leadName} · ${i.tattooerName}`}
                       className={cn(
                         "absolute z-[1] overflow-hidden rounded-md border-l-4 px-1.5 py-1 text-xs leading-tight shadow-sm hover:z-10 hover:shadow",
@@ -614,7 +688,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
                         {formatTimeOfDay(i.startMin)}
                         {isAdmin && ` · ${i.tattooerName}`}
                       </span>
-                    </Link>
+                    </EntryChip>
                   );
                 })}
             </div>
