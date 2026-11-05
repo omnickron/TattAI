@@ -73,10 +73,13 @@ function MetricsTable({
   rows,
   first,
   showLeads,
+  showConversion = false,
 }: {
   rows: Array<{ key: string; label: ReactNode; metrics: Metrics }>;
   first: string;
   showLeads: boolean;
+  /** Extra column: share of booked consultations that became a tattoo appointment */
+  showConversion?: boolean;
 }) {
   return (
     <div className="-mx-4 overflow-x-auto sm:mx-0">
@@ -95,6 +98,14 @@ function MetricsTable({
             >
               Abschlussquote
             </th>
+            {showConversion && (
+              <th
+                className="px-2 py-2 text-right font-medium"
+                title="Anteil der gebuchten Beratungen, aus denen ein Tattoo-Termin wurde (inkl. No-Shows und Absagen)"
+              >
+                Beratung → Tattoo
+              </th>
+            )}
             <th className="px-4 py-2 text-right font-medium sm:pr-0">Umsatz</th>
           </tr>
         </thead>
@@ -108,6 +119,11 @@ function MetricsTable({
               <td className="px-2 py-2 text-right tabular-nums">{m.noShow}</td>
               <td className="px-2 py-2 text-right tabular-nums">{m.won}</td>
               <td className="px-2 py-2 text-right tabular-nums">{pct(rate(m.won, m.held))}</td>
+              {showConversion && (
+                <td className="px-2 py-2 text-right font-medium tabular-nums">
+                  {pct(rate(m.won, m.booked))}
+                </td>
+              )}
               <td className="px-4 py-2 text-right font-medium tabular-nums sm:pr-0">
                 {formatEuro(m.revenueCents, true)}
               </td>
@@ -307,10 +323,6 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin/
 
         <ConsultationAnalysis
           totals={consultationStats.totals}
-          byTattooer={consultationStats.byTattooer.map((r) => ({
-            ...r,
-            label: tattooerName.get(r.key) ?? "Unbekannt",
-          }))}
           byMode={consultationStats.byMode.map((r) => ({
             ...r,
             label: r.key === "PHONE" ? "Telefon" : "Vor Ort",
@@ -352,6 +364,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin/
             <MetricsTable
               first="Tätowierer"
               showLeads={false}
+              showConversion
               rows={report.byTattooer.map((x) => ({
                 key: x.key,
                 label: tattooerName.get(x.key) ?? "Unbekannt",

@@ -79,11 +79,9 @@ function Table({
 /** Consultations of the period by consultation date: held, no-show, cancelled. */
 export function ConsultationAnalysis({
   totals: t,
-  byTattooer,
   byMode,
 }: {
   totals: ConsultationStats;
-  byTattooer: Array<{ key: string; label: string; stats: ConsultationStats }>;
   byMode: Array<{ key: string; label: string; stats: ConsultationStats }>;
 }) {
   return (
@@ -142,17 +140,8 @@ export function ConsultationAnalysis({
                 ) : null;
               })}
             </div>
-            <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-soft">
-              {SEGMENTS.map((seg) => (
-                <li key={seg.key} className="flex items-center gap-1.5">
-                  <span className={`size-2 rounded-full ${seg.color}`} />
-                  {seg.label} {t[seg.key]}
-                </li>
-              ))}
-            </ul>
           </div>
 
-          {byTattooer.length > 1 && <Table first="Tätowierer" rows={byTattooer} />}
           {byMode.length > 1 && <Table first="Beratungsform" rows={byMode} />}
         </div>
       )}

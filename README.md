@@ -217,8 +217,9 @@ letzten fünf automatischen WhatsApp-Kontakte mit Vorschau der letzten Chatnachr
 
 Auf der Auswertung zeigt „Beratungen: stattgefunden, abgesagt, No-Show“ alle Beratungen mit Termin
 im gewählten Zeitraum (nach Beratungsdatum, mit Kampagnen- und Tätowierer-Filter): stattgefunden,
-No-Show, abgesagt (davon kurzfristig < 24 h), ohne Ergebnis und anstehend, mit Quoten pro Tätowierer
-und pro Beratungsform. Umbuchungen auf eine andere Person zählen nicht als Absage, Laufkunden nicht
+No-Show, abgesagt (davon kurzfristig < 24 h), ohne Ergebnis und anstehend, mit Quoten pro
+Beratungsform. Die Tabelle „Nach Tätowierer“ zeigt zusätzlich „Beratung → Tattoo“: den Anteil der
+gebuchten Beratungen, aus denen ein Tattoo-Termin wurde. Umbuchungen auf eine andere Person zählen nicht als Absage, Laufkunden nicht
 als Beratung.
 
 ## Content
