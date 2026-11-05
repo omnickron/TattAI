@@ -748,3 +748,18 @@ model BotKnowledge {
   updatedById      String?
   updatedAt        DateTime @updatedAt
 }
+
+// Billing settings of the operator (edited in the app by the operator only; env as fallback)
+model BillingSettings {
+  id            Int      @id @default(1)
+  commissionBps Int?
+  vatBps        Int?
+  paymentDays   Int?
+  issuerName    String?
+  issuerAddress String?
+  issuerTaxId   String?
+  issuerIban    String?
+  issuerEmail   String?
+  updatedById   String?
+  updatedAt     DateTime @updatedAt
+}

@@ -14,12 +14,13 @@ import { requireAdmin } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { formatDateTime } from "@/lib/format";
 import { updateConsentSettings, updateStudioSettings } from "./actions";
+import { BillingCard } from "./billing-card";
 import { TeamupCard } from "./teamup-card";
 
 export const metadata: Metadata = { title: "Einstellungen" };
 
 export default async function SettingsPage() {
-  await requireAdmin();
+  const user = await requireAdmin();
   const [settings, failedEvents] = await Promise.all([
     prisma.appSettings.findUnique({ where: { id: 1 } }),
     prisma.webhookEvent.findMany({
@@ -94,6 +95,8 @@ export default async function SettingsPage() {
         </Card>
 
         <TeamupCard />
+
+        <BillingCard user={user} />
 
         <Card>
           <CardTitle>Meta-Anbindung</CardTitle>

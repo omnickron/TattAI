@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import type { ActionState } from "@/lib/action-state";
 import { requireAdmin } from "@/lib/auth/session";
 import {
-  billingConfigFromEnv,
+  loadBillingConfig,
   BillingError,
   cancelInvoice,
   createInvoice,
@@ -26,7 +26,7 @@ export async function createInvoiceAction(month: string): Promise<ActionState> {
       month,
       createdById: user.id,
       timeZone: APP_TIMEZONE,
-      config: billingConfigFromEnv(),
+      config: await loadBillingConfig(prisma),
     });
     revalidatePath("/admin/billing");
     return { ok: true, message: `Rechnung ${inv.number} für ${monthLabel(month)} erstellt.` };

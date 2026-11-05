@@ -5,10 +5,13 @@ import {
   computeAmounts,
   createInvoice,
   loadMonthRevenue,
+  loadBillingConfig,
+  mergeBillingConfig,
   setInvoicePaid,
   shiftMonth,
   type BillingConfig,
 } from "@/lib/billing/billing";
+import { isOperator } from "@/lib/auth/operator";
 import { sessionDate } from "@/lib/outcomes/outcome";
 import { createTestPrisma, resetDatabase } from "./db";
 
@@ -199,5 +202,33 @@ describe("invoices", () => {
     expect(billingConfigFromEnv({} as unknown as NodeJS.ProcessEnv).commissionBps).toBe(1500);
     expect(shiftMonth("2026-12", 1)).toBe("2027-01");
     expect(shiftMonth("2026-01", -1)).toBe("2025-12");
+  });
+});
+
+describe("billing settings in the app", () => {
+  it("override the server environment field by field", async () => {
+    const env = {
+      BILLING_COMMISSION_PERCENT: "15",
+      BILLING_ISSUER_NAME: "Env GmbH",
+      BILLING_ISSUER_IBAN: "DE00ENV",
+    } as unknown as NodeJS.ProcessEnv;
+    expect((await loadBillingConfig(prisma, env)).issuer.name).toBe("Env GmbH");
+    await prisma.billingSettings.create({
+      data: { id: 1, commissionBps: 1200, issuerName: "App GmbH", issuerIban: "  " },
+    });
+    const cfg = await loadBillingConfig(prisma, env);
+    expect(cfg).toMatchObject({ commissionBps: 1200, vatBps: 1900 });
+    expect(cfg.issuer).toMatchObject({ name: "App GmbH", iban: "DE00ENV" });
+    expect(mergeBillingConfig(cfg, null)).toBe(cfg);
+  });
+
+  it("are editable only by the operator", () => {
+    const before = process.env.OPERATOR_EMAIL;
+    process.env.OPERATOR_EMAIL = "Nick@Example.com";
+    expect(isOperator({ email: "nick@example.com" })).toBe(true);
+    expect(isOperator({ email: "studio@example.com" })).toBe(false);
+    process.env.OPERATOR_EMAIL = "";
+    expect(isOperator({ email: "nick@example.com" })).toBe(false);
+    process.env.OPERATOR_EMAIL = before;
   });
 });

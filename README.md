@@ -248,8 +248,9 @@ fortlaufender Nummer (`2026-001`) erstellt; die Zahlen werden dabei eingefroren.
 Druckansicht bzw. PDF abrufbar (Kunden nur mit Initialen in der Anlage), Status offen / bezahlt /
 storniert. Ändert sich der Umsatz nach der Rechnung, zeigt die Seite die Abweichung.
 
-Provisionssatz, Steuersatz und Rechnungsdaten legt der Betreiber als Umgebungsvariablen fest
-(`BILLING_COMMISSION_PERCENT`, `BILLING_VAT_PERCENT`, `BILLING_ISSUER_*`, siehe `.env.example`).
+Provisionssatz, Steuersatz und Rechnungsdaten pflegt der **Betreiber** unter **Einstellungen →
+Rechnungsdaten**. Betreiber ist, wessen Google-Adresse auf dem Server als `OPERATOR_EMAIL` steht; alle
+anderen sehen die Werte nur. Die `BILLING_*`-Umgebungsvariablen gelten als Ausgangswert.
 
 ## Ablauf für Änderungen
 

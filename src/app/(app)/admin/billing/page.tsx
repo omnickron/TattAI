@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Badge, Card, CardTitle, PageHeader } from "@/components/ui";
 import { requireAdmin } from "@/lib/auth/session";
 import {
-  billingConfigFromEnv,
+  loadBillingConfig,
   isMonth,
   issuerComplete,
   loadMonthRevenue,
@@ -37,7 +37,7 @@ export default async function BillingPage({ searchParams }: PageProps<"/admin/bi
   const now = new Date();
   const current = monthOf(now, APP_TIMEZONE);
   const month = typeof params.monat === "string" && isMonth(params.monat) ? params.monat : current;
-  const cfg = billingConfigFromEnv();
+  const cfg = await loadBillingConfig(prisma);
   const [revenue, invoices] = await Promise.all([
     loadMonthRevenue(prisma, month, APP_TIMEZONE),
     prisma.invoice.findMany({ orderBy: [{ period: "desc" }, { number: "desc" }], take: 60 }),
@@ -219,8 +219,8 @@ export default async function BillingPage({ searchParams }: PageProps<"/admin/bi
             </p>
           ) : !issuerComplete(cfg) ? (
             <p className="text-sm text-ink-soft">
-              Für Rechnungen fehlen noch die Rechnungsdaten des Betreibers (Server-Einstellungen{" "}
-              <code className="text-xs">BILLING_ISSUER_*</code>).
+              Für Rechnungen fehlen noch die Rechnungsdaten des Betreibers (Einstellungen →
+              Rechnungsdaten).
             </p>
           ) : (
             <div className="space-y-3 text-sm">

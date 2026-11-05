@@ -11,6 +11,7 @@ ask() { local v; read -rp "$1: " v < /dev/tty; printf '%s' "$v"; }
 domain=$(ask "Adresse der App (z. B. studio.needl-booker.de)")
 admin_email=$(ask "Google-Adresse des Admins")
 admin_name=$(ask "Name des Admins")
+operator_email=$(ask "Google-Adresse des Betreibers (du, für Rechnungsdaten)")
 google_id=$(ask "Google Client-ID")
 google_secret=$(ask "Google Clientschlüssel")
 
@@ -60,7 +61,8 @@ BOT_API_KEY=""
 BOT_WEBHOOK_URL=""
 BOT_WEBHOOK_SECRET=""
 
-# Commission invoices (fill in your own invoice details)
+# Commission invoices: details are maintained in the app (Einstellungen) by the operator
+OPERATOR_EMAIL="$operator_email"
 BILLING_COMMISSION_PERCENT="15"
 BILLING_VAT_PERCENT="19"
 BILLING_PAYMENT_DAYS="14"

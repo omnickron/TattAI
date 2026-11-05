@@ -184,7 +184,7 @@ export async function createInvoice(
     throw new BillingError("Rechnungen gibt es erst, wenn der Monat vorbei ist.");
   if (!issuerComplete(cfg))
     throw new BillingError(
-      "Die Rechnungsdaten des Betreibers fehlen (Name, Anschrift, Steuernummer – Server-Einstellungen BILLING_ISSUER_*).",
+      "Die Rechnungsdaten des Betreibers fehlen (Name, Anschrift, Steuernummer – Einstellungen → Rechnungsdaten).",
     );
 
   const revenue = await loadMonthRevenue(prisma, input.month, tz);
@@ -262,4 +262,44 @@ export async function cancelInvoice(
   if (inv.status === "PAID")
     throw new BillingError("Bezahlte Rechnungen können nicht storniert werden.");
   return prisma.invoice.update({ where: { id }, data: { status: "CANCELLED", cancelledAt: now } });
+}
+
+type BillingSettingsRow = {
+  commissionBps: number | null;
+  vatBps: number | null;
+  paymentDays: number | null;
+  issuerName: string | null;
+  issuerAddress: string | null;
+  issuerTaxId: string | null;
+  issuerIban: string | null;
+  issuerEmail: string | null;
+};
+
+/** Values saved in the app override the server environment (which stays the fallback). */
+export function mergeBillingConfig(
+  env: BillingConfig,
+  row: BillingSettingsRow | null,
+): BillingConfig {
+  if (!row) return env;
+  const pick = (v: string | null, fallback: string) => (v?.trim() ? v.trim() : fallback);
+  return {
+    commissionBps: row.commissionBps ?? env.commissionBps,
+    vatBps: row.vatBps ?? env.vatBps,
+    paymentDays: row.paymentDays ?? env.paymentDays,
+    issuer: {
+      name: pick(row.issuerName, env.issuer.name),
+      address: pick(row.issuerAddress, env.issuer.address),
+      taxId: pick(row.issuerTaxId, env.issuer.taxId),
+      iban: pick(row.issuerIban, env.issuer.iban),
+      email: pick(row.issuerEmail, env.issuer.email),
+    },
+  };
+}
+
+export async function loadBillingConfig(
+  prisma: Pick<PrismaClient, "billingSettings">,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<BillingConfig> {
+  const row = await prisma.billingSettings.findUnique({ where: { id: 1 } });
+  return mergeBillingConfig(billingConfigFromEnv(env), row);
 }
