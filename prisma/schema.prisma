@@ -830,3 +830,23 @@ model PushSubscription {
 
   @@index([userId])
 }
+
+// Test runs of the bot with AI test customers (operator page)
+model BotEvalRun {
+  id          String    @id @default(cuid())
+  // PENDING | RUNNING | DONE | FAILED
+  status      String    @default("PENDING")
+  model       String?
+  requestedBy String?
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  // Average grade (1 = best … 6 = worst), x100
+  avgGrade    Int?
+  costMicros  Int       @default(0)
+  // One entry per test customer: persona, grade, problems, transcript
+  results     Json?
+  error       String?
+  createdAt   DateTime  @default(now())
+
+  @@index([createdAt])
+}

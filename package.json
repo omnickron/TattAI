@@ -24,7 +24,8 @@
     "db:update": "prisma migrate deploy && prisma generate",
     "dev:open-consultations": "tsx scripts/dev-open-consultations.ts",
     "teamup:check": "tsx scripts/teamup-check.ts",
-    "push:keys": "tsx scripts/vapid-keys.ts"
+    "push:keys": "tsx scripts/vapid-keys.ts",
+    "bot:test": "tsx scripts/bot-eval.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.6.0",

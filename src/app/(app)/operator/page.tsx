@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { PageHeader } from "@/components/ui";
 import { requireOperator } from "@/lib/auth/session";
 import { BillingCard } from "./billing-card";
+import { EvalCard } from "./eval-card";
 import { OperationsCard } from "./operations-card";
 
 export const metadata: Metadata = { title: "Betreiber" };
@@ -16,6 +17,7 @@ export default async function OperatorPage() {
         description="Nur für dich als Betreiber von NEEDL sichtbar – das Studio sieht diese Seite nicht."
       />
       <OperationsCard />
+      <EvalCard />
       <BillingCard />
     </>
   );

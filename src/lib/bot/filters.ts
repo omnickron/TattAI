@@ -39,13 +39,16 @@ export function forbiddenWordList(text: string | null | undefined): string[] {
     .filter((w) => w.length >= 3);
 }
 
+/** Mentions a price, an amount or a price range. */
+export const mentionsPrice = (text: string) => PRICE_RES.some((re) => re.test(text));
+
 /** Problems with a reply; empty = may be sent. */
 export function checkReply(text: string, ctx: ReplyContext): string[] {
   const problems: string[] = [];
   const t = text.trim();
   if (t.length > MAX_REPLY_CHARS)
     problems.push(`Zu lang (${t.length} Zeichen, höchstens ${MAX_REPLY_CHARS}). Kürzer schreiben.`);
-  if (PRICE_RES.some((re) => re.test(t)))
+  if (mentionsPrice(t))
     problems.push(
       "Enthält einen Preis oder Betrag. Nie Preise nennen – der Preis wird in der Beratung geklärt.",
     );
