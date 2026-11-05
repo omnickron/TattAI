@@ -36,7 +36,9 @@ import { handOverChat } from "./handover";
 
 export const FALLBACK_BETA = "server-side-fallback-2026-07-01";
 const MAX_ROUNDS = 8;
-const MAX_REJECTIONS = 2;
+const MAX_REJECTIONS = 3;
+/** Style problems (length): after the last try the draft is sent anyway instead of handing over */
+const isSoftProblem = (p: string) => p.startsWith("Zu lang") || p.includes("Sätze –");
 const HISTORY_MESSAGES = 40;
 export const HANDOVER_TEXT =
   "Danke dir! Ich gebe das kurz an unser Team weiter – es meldet sich so bald wie möglich jemand bei dir.";
@@ -215,6 +217,14 @@ type Answer = z.infer<typeof answerInput>;
 function fmt(date: Date, tz: string, opts: Intl.DateTimeFormatOptions) {
   return new Intl.DateTimeFormat("de-DE", { timeZone: tz, ...opts }).format(date);
 }
+/** "heute " / "morgen " before a date, so the bot never mixes up relative days. */
+function dayWord(d: Date, now: Date, tz: string) {
+  const day = (x: Date) => fmt(x, tz, { year: "numeric", month: "2-digit", day: "2-digit" });
+  if (day(d) === day(now)) return "heute, ";
+  if (day(d) === day(new Date(now.getTime() + 86_400_000))) return "morgen, ";
+  return "";
+}
+
 const slotLabel = (d: Date, tz: string) =>
   fmt(d, tz, {
     weekday: "short",
@@ -326,7 +336,18 @@ export async function runBotTurn(deps: BrainDeps, leadId: string): Promise<TurnR
   const knowledge = toKnowledge(
     (await prisma.botKnowledge.findUnique({ where: { id: 1 } })) as Record<string, unknown> | null,
   );
-  const consultation = await loadConsultationOptions(prisma);
+  const durations = await prisma.tattooerProfile.aggregate({
+    where: { user: { active: true } },
+    _min: { consultationMinutes: true },
+    _max: { consultationMinutes: true },
+  });
+  const consultation = {
+    ...(await loadConsultationOptions(prisma)),
+    minutes:
+      durations._min.consultationMinutes != null && durations._max.consultationMinutes != null
+        ? { min: durations._min.consultationMinutes, max: durations._max.consultationMinutes }
+        : null,
+  };
   const allowedLinks = Object.values(knowledge.links).filter(Boolean) as string[];
   const forbiddenWords = forbiddenWordList(knowledge.forbiddenWords);
 
@@ -372,9 +393,18 @@ export async function runBotTurn(deps: BrainDeps, leadId: string): Promise<TurnR
           offered = new Set([...offered, ...picked.map((d) => d.toISOString())]);
           if (!picked.length)
             return { content: "Keine freien Beratungstermine in diesem Zeitraum." };
+          const minutes = new Map(
+            slots.map((s) => [
+              s.start.getTime(),
+              Math.round((s.end.getTime() - s.start.getTime()) / 60_000),
+            ]),
+          );
           return {
             content: picked
-              .map((d) => `id ${d.toISOString()} = ${slotLabel(d, tz)} Uhr`)
+              .map(
+                (d) =>
+                  `id ${d.toISOString()} = ${dayWord(d, now, tz)}${slotLabel(d, tz)} Uhr (Beratung ${minutes.get(d.getTime()) ?? "?"} Min.)`,
+              )
               .join("\n"),
           };
         }
@@ -537,7 +567,16 @@ export async function runBotTurn(deps: BrainDeps, leadId: string): Promise<TurnR
         rejections++;
         log.push({ rejected: parsed.data.nachricht, problems });
         if (rejections >= MAX_REJECTIONS) {
-          handoverReason = `Antwort zweimal von den Filtern abgelehnt: ${problems.join(" ")}`;
+          if (problems.every(isSoftProblem)) {
+            // Only too long: a slightly long reply is better than handing a customer over
+            log.push({ sentDespite: problems });
+            answer = parsed.data;
+            results.push({ type: "tool_result", tool_use_id: t.id, content: "OK" });
+            continue;
+          }
+          handoverReason = `Antwort ${MAX_REJECTIONS}× von den Filtern abgelehnt: ${problems
+            .filter((p) => !isSoftProblem(p))
+            .join(" ")}`;
           answer = { ...parsed.data, nachricht: HANDOVER_TEXT, uebergabe: true };
         }
         results.push({

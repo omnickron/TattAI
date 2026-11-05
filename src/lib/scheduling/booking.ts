@@ -287,10 +287,14 @@ function isOverlapViolation(err: unknown): boolean {
 async function eventFor(deps: SchedulingDeps, consultationId: string) {
   const c = await deps.prisma.consultation.findUniqueOrThrow({
     where: { id: consultationId },
-    include: { lead: true },
+    include: {
+      lead: true,
+      _count: { select: { attachments: { where: { status: { in: ["STORED", "PENDING"] } } } } },
+    },
   });
   const settings = await deps.prisma.appSettings.findUnique({ where: { id: 1 } });
   return buildConsultationEvent({
+    imageCount: c._count.attachments,
     lead: c.lead,
     mode: c.mode,
     start: c.startsAt,
@@ -516,6 +520,14 @@ export async function bookConsultation(deps: SchedulingDeps, input: BookInput) {
         await tx.lead.update({
           where: { id: lead.id },
           data: { status: "CONSULTATION_BOOKED", statusChangedAt: now },
+        });
+        // Reference images sent before (or of a moved/cancelled consultation) come along
+        await tx.leadAttachment.updateMany({
+          where: {
+            leadId: lead.id,
+            OR: [{ consultationId: null }, { consultation: { status: "CANCELLED" } }],
+          },
+          data: { consultationId: consultation.id },
         });
         return consultation;
       },

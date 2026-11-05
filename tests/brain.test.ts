@@ -246,13 +246,14 @@ describe("bot turn", () => {
     expect(await prisma.consultation.count()).toBe(0);
   });
 
-  it("never lets a price through: rewrite once, then hand over", async () => {
+  it("never lets a price through: rewrite, then hand over", async () => {
     const brain = new ScriptedBrain([
       () => reply([answer("Das kostet so ca. 150 €.")]),
       (p) => {
         expect(lastToolResults(p)).toMatch(/Preis/);
         return reply([answer("Ab 100-200 Euro bist du dabei.")]);
       },
+      () => reply([answer("Rechne mit 80 Euro.")]),
     ]);
     const r = await runBotTurn({ ...base, brain }, leadId);
     expect(r.outcome).toBe("handover");
@@ -260,6 +261,18 @@ describe("bot turn", () => {
     const lead = await prisma.lead.findUniqueOrThrow({ where: { id: leadId } });
     expect(lead).toMatchObject({ botEnabled: false, botDisabledReason: "BOT_HANDOVER" });
     expect(lead.botHandoverNote).toMatch(/Filtern abgelehnt/);
+  });
+
+  it("sends a slightly long reply instead of handing over", async () => {
+    const long = "Das ist ein Satz. Noch einer. Und noch einer. Und ein vierter?";
+    const brain = new ScriptedBrain([
+      () => reply([answer(long)]),
+      () => reply([answer(long)]),
+      () => reply([answer(long)]),
+    ]);
+    const r = await runBotTurn({ ...base, brain }, leadId);
+    expect(r.outcome).toBe("sent");
+    expect(wa.texts).toEqual([long]);
   });
 
   it("rewrites a price reply into an allowed one", async () => {

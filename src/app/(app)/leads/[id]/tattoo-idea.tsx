@@ -1,3 +1,4 @@
+import { AttachmentThumbs } from "@/components/attachment-thumbs";
 import { formatDateTime } from "@/lib/format";
 import { summaryLines } from "@/lib/scheduling/event-content";
 
@@ -46,36 +47,7 @@ export function TattooIdea({
       {attachments.length > 0 && (
         <div>
           <h3 className="mb-2 text-sm font-medium">Referenzbilder und Dateien</h3>
-          <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-            {attachments.map((a) => (
-              <li key={a.id} className="overflow-hidden rounded-lg border border-line bg-muted">
-                {a.status !== "STORED" ? (
-                  <div className="flex aspect-square items-center justify-center p-2 text-center text-xs text-ink-soft">
-                    wird geladen …
-                  </div>
-                ) : a.mimeType?.startsWith("image/") && a.mimeType !== "image/heic" ? (
-                  <a href={`/api/attachments/${a.id}`} target="_blank" rel="noopener noreferrer">
-                    {/* eslint-disable-next-line @next/next/no-img-element -- private, auth-protected file */}
-                    <img
-                      src={`/api/attachments/${a.id}`}
-                      alt={a.caption ?? "Referenzbild"}
-                      className="aspect-square w-full object-cover"
-                      loading="lazy"
-                    />
-                  </a>
-                ) : (
-                  <a
-                    href={`/api/attachments/${a.id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex aspect-square items-center justify-center p-2 text-center text-xs underline"
-                  >
-                    {a.mimeType === "application/pdf" ? "PDF öffnen" : "Datei öffnen"}
-                  </a>
-                )}
-              </li>
-            ))}
-          </ul>
+          <AttachmentThumbs attachments={attachments} />
         </div>
       )}
     </div>

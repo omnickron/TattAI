@@ -84,7 +84,10 @@ describe("natural replies", () => {
     const k = emptyKnowledge();
     const both = buildSystemPrompt(k, { modes: ["ON_SITE", "PHONE"], free: true });
     expect(both).toContain("vor Ort im Studio; telefonisch");
-    expect(both).toContain("Die Beratung ist kostenlos");
+    expect(both).toContain("Die Beratung ist kostenlos und unverbindlich");
+    expect(
+      buildSystemPrompt(k, { modes: ["ON_SITE"], free: true, minutes: { min: 20, max: 30 } }),
+    ).toContain("Eine Beratung dauert je nach Tätowierer 20–30 Minuten");
     const onSite = buildSystemPrompt(k, { modes: ["ON_SITE"], free: false });
     expect(onSite).not.toContain("telefonisch");
     expect(onSite).not.toMatch(/kostenlos/i);

@@ -1,4 +1,5 @@
 import { ActionForm } from "@/components/action-form";
+import { AttachmentThumbs, type ThumbAttachment } from "@/components/attachment-thumbs";
 import {
   loadConsultationOptions,
   MODE_OPTION_LABELS,
@@ -71,6 +72,7 @@ type Consultation = OutcomeConsultation & {
   tattooerId: string;
   calendarEventId: string | null;
   tattooer: { user: { name: string } };
+  attachments: ThumbAttachment[];
 };
 
 export async function ConsultationsSection({
@@ -241,6 +243,14 @@ export async function ConsultationsSection({
                     </div>
                   )}
                 </details>
+                {c.attachments.length > 0 && (
+                  <div>
+                    <p className="mb-1.5 text-xs font-medium text-ink-soft">
+                      Referenzbilder ({c.attachments.length})
+                    </p>
+                    <AttachmentThumbs attachments={c.attachments} size="sm" className="max-w-md" />
+                  </div>
+                )}
                 {c.status === "SCHEDULED" && !c.calendarEventId && (
                   <p className="text-xs text-amber-700 dark:text-amber-400">
                     Kein Kalendereintrag vorhanden.

@@ -123,6 +123,11 @@ export async function getLeadForUser(user: CurrentUser, id: string) {
         include: {
           tattooer: { include: { user: { select: { name: true } } } },
           tattooBookings: { orderBy: { sessionNumber: "asc" } },
+          attachments: {
+            where: { status: { in: ["STORED", "PENDING"] } },
+            orderBy: { createdAt: "asc" },
+            select: { id: true, status: true, mimeType: true, caption: true },
+          },
         },
       },
       // Latest 200 messages (re-sorted ascending on the page)

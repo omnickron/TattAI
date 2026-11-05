@@ -70,6 +70,8 @@ export interface EventContentInput {
   studioAddress: string | null;
   appUrl: string;
   timeZone: string;
+  /** Reference images stored at this consultation (the files stay in the app) */
+  imageCount?: number;
 }
 
 /** Calendar event for a consultation. Contains customer data → event is private. */
@@ -81,7 +83,11 @@ export function buildConsultationEvent(input: EventContentInput): CalendarEventI
     `Telefon: ${lead.phoneE164 ?? "–"}`,
     ...(lead.email ? [`E-Mail: ${lead.email}`] : []),
   ];
-  const summary = summaryLines(lead.tattooSummary);
+  // The image count comes from the stored files when known (not from the bot's summary)
+  const summary = summaryLines(lead.tattooSummary).filter(
+    (l) => input.imageCount === undefined || !l.startsWith("Referenzbilder:"),
+  );
+  if (input.imageCount) summary.push(`Referenzbilder: ${input.imageCount} (in der App)`);
   lines.push("", "Tattoo-Idee:", ...(summary.length ? summary : ["(noch keine Zusammenfassung)"]));
   lines.push("", `In der App: ${input.appUrl.replace(/\/$/, "")}/leads/${lead.id}`);
 
