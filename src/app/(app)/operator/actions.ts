@@ -115,3 +115,17 @@ export async function setBotPaused(paused: boolean): Promise<void> {
   revalidatePath("/operator");
   revalidatePath("/admin/bot");
 }
+
+/** Queues a bot test run with AI test customers (the worker runs it). */
+export async function startBotEval(): Promise<ActionState> {
+  const user = await requireOperator();
+  if (!process.env.ANTHROPIC_API_KEY)
+    return { ok: false, message: "Kein Anthropic-API-Key auf dem Server (ANTHROPIC_API_KEY)." };
+  const open = await prisma.botEvalRun.findFirst({
+    where: { status: { in: ["PENDING", "RUNNING"] } },
+  });
+  if (open) return { ok: false, message: "Es läuft schon ein Test." };
+  await prisma.botEvalRun.create({ data: { requestedBy: user.name } });
+  revalidatePath("/operator");
+  return { ok: true, message: "Test gestartet – das dauert etwa 5–10 Minuten." };
+}

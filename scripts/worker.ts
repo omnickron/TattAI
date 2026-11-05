@@ -15,6 +15,7 @@ import { deliverBotEvents, deliveryConfigFromEnv } from "../src/lib/bot/deliveri
 import { brainConfigFromEnv, createBrainClient } from "../src/lib/bot/brain";
 import { BOT_EVENT, processBotInbox } from "../src/lib/bot/inbox";
 import { createPushSender } from "../src/lib/push";
+import { failStaleEvalRuns, runBotEval } from "../src/lib/bot/eval/run";
 import { createMediaDownloader, downloadPendingAttachments } from "../src/lib/whatsapp/media";
 
 const INTERVAL_MS = 30_000;
@@ -30,6 +31,8 @@ const calendarDeps = {
 const brain = createBrainClient();
 const push = createPushSender();
 let stopping = false;
+// A bot test run takes minutes: it runs alongside the regular jobs
+let evalRunning = false;
 let lastLeadRetry = 0;
 
 async function tick() {
@@ -44,6 +47,19 @@ async function tick() {
     }
   } catch (err) {
     console.error("[worker] messaging run failed:", err);
+  }
+  if (brain && !evalRunning) {
+    const run = await prisma.botEvalRun
+      .findFirst({ where: { status: "PENDING" }, orderBy: { createdAt: "asc" } })
+      .catch(() => null);
+    if (run) {
+      evalRunning = true;
+      console.info(`[worker] bot test ${run.id} started`);
+      runBotEval({ prisma, brain, config: brainConfigFromEnv() }, run.id)
+        .then((r) => console.info(`[worker] bot test ${run.id}: ${r.status}`))
+        .catch((err) => console.error("[worker] bot test failed:", err))
+        .finally(() => (evalRunning = false));
+    }
   }
   if (brain) {
     try {
@@ -97,6 +113,7 @@ async function tick() {
 }
 
 async function main() {
+  await failStaleEvalRuns(prisma).catch(() => undefined);
   console.info(
     `[worker] started (WhatsApp ${whatsapp.mock ? "mock" : "live"}, Bot ${brain ? "NEEDL" : "aus/extern"})`,
   );
