@@ -58,3 +58,12 @@ h3 {
   font-synthesis-weight: none;
   letter-spacing: 0.01em;
 }
+
+@media print {
+  body {
+    background: #fff;
+  }
+  @page {
+    margin: 18mm;
+  }
+}

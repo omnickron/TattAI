@@ -679,3 +679,43 @@ model ContentItem {
   @@index([uploaderId, createdAt])
   @@index([createdAt])
 }
+
+// ---------------------------------------------------------------------------
+// Billing: monthly commission invoices on the tattoo revenue booked through the app
+// ---------------------------------------------------------------------------
+
+enum InvoiceStatus {
+  OPEN
+  PAID
+  CANCELLED
+}
+
+model Invoice {
+  id            String        @id @default(cuid())
+  // "2026-001": sequential per year
+  number        String        @unique
+  // Billed month, local "YYYY-MM"
+  period        String
+  issuedAt      DateTime      @default(now())
+  dueAt         DateTime
+  // Frozen amounts at creation (cents; rates in basis points, 1500 = 15 %)
+  revenueCents  Int
+  sessionCount  Int
+  commissionBps Int
+  netCents      Int
+  vatBps        Int
+  vatCents      Int
+  grossCents    Int
+  // Snapshots: issuer/recipient address blocks and the billed sessions
+  issuer        Json
+  recipient     Json
+  lines         Json
+  status        InvoiceStatus @default(OPEN)
+  paidAt        DateTime?
+  cancelledAt   DateTime?
+  createdById   String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([period])
+}

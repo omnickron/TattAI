@@ -83,8 +83,8 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           </form>
         }
       />
-      <div className="lg:pl-60">
-        <main className="mx-auto max-w-6xl px-4 py-6 pb-16 sm:px-6 lg:px-8 lg:py-8">
+      <div className="lg:pl-60 print:pl-0">
+        <main className="mx-auto max-w-6xl px-4 py-6 pb-16 sm:px-6 lg:px-8 lg:py-8 print:max-w-none print:p-0">
           {children}
         </main>
       </div>

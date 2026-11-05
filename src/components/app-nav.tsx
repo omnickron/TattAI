@@ -200,7 +200,7 @@ export function AppNav({
   return (
     <>
       {/* Desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-20 hidden w-60 flex-col border-r border-line bg-surface lg:flex">
+      <aside className="fixed inset-y-0 left-0 z-20 hidden w-60 flex-col border-r border-line bg-surface lg:flex print:hidden">
         <div className="px-6 pb-6 pt-7">{logo}</div>
         <div className="flex-1 overflow-y-auto px-3">
           <NavList groups={groups} />
@@ -211,7 +211,7 @@ export function AppNav({
       </aside>
 
       {/* Mobile top bar */}
-      <header className="sticky top-0 z-20 flex items-center justify-between border-b border-line bg-surface/90 px-4 py-3 backdrop-blur lg:hidden">
+      <header className="sticky top-0 z-20 flex items-center justify-between border-b border-line bg-surface/90 px-4 py-3 backdrop-blur lg:hidden print:hidden">
         {logo}
         <button
           type="button"

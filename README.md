@@ -213,6 +213,25 @@ letzten fünf automatischen WhatsApp-Kontakte mit Vorschau der letzten Chatnachr
   später stattfinden). Ein Lead zählt für den Tätowierer, bei dem die Beratung stattfand (sonst der letzten
   Beratung) – Umbuchungen zählen nicht doppelt.
 
+## Content
+
+Unter **Content** laden alle Fotos und Videos ihrer Arbeiten hoch (Fotos bis 30 MB, Videos bis 500 MB),
+direkt vom Handy oder per Drag & Drop. Die Dateien liegen privat im Medienspeicher (`MEDIA_STORAGE_DIR/content`).
+Tätowierer sehen ihre eigenen Uploads, der Admin alle; er markiert, was in die nächste Meta-Anzeige soll,
+und lädt die Dateien herunter.
+
+## Abrechnung (Provision)
+
+Unter **Abrechnung** (Admin) steht pro Monat der über NEEDL gebuchte Tattoo-Umsatz: alle nicht
+abgesagten Tattoo-Termine mit Datum im Monat und eingetragenem Betrag. Daraus ergibt sich die
+Provision (Standard 15 %) zzgl. Umsatzsteuer. Für abgeschlossene Monate wird die Rechnung mit
+fortlaufender Nummer (`2026-001`) erstellt; die Zahlen werden dabei eingefroren. Die Rechnung ist als
+Druckansicht bzw. PDF abrufbar (Kunden nur mit Initialen in der Anlage), Status offen / bezahlt /
+storniert. Ändert sich der Umsatz nach der Rechnung, zeigt die Seite die Abweichung.
+
+Provisionssatz, Steuersatz und Rechnungsdaten legt der Betreiber als Umgebungsvariablen fest
+(`BILLING_COMMISSION_PERCENT`, `BILLING_VAT_PERCENT`, `BILLING_ISSUER_*`, siehe `.env.example`).
+
 ## Ablauf für Änderungen
 
 1. Entwicklung auf dem Branch `claude/new-session-ti5a92`, lokal testen (`git pull`,
