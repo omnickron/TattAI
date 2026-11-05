@@ -54,6 +54,9 @@ function Table({
             <th className="px-2 py-2 text-right font-medium">Stattgefunden</th>
             <th className="px-2 py-2 text-right font-medium">No-Show</th>
             <th className="px-2 py-2 text-right font-medium">Abgesagt</th>
+            <th className="px-2 py-2 text-right font-medium" title="anstehend + ohne Ergebnis">
+              Offen
+            </th>
             <th className="px-2 py-2 text-right font-medium">No-Show-Quote</th>
             <th className="px-4 py-2 text-right font-medium sm:pr-0">Absage-Quote</th>
           </tr>
@@ -66,6 +69,7 @@ function Table({
               <td className="px-2 py-2 text-right tabular-nums">{s.held}</td>
               <td className="px-2 py-2 text-right tabular-nums">{s.noShow}</td>
               <td className="px-2 py-2 text-right tabular-nums">{s.cancelled}</td>
+              <td className="px-2 py-2 text-right tabular-nums">{s.open + s.upcoming}</td>
               <td className="px-2 py-2 text-right tabular-nums">{pct(s.noShowRate)}</td>
               <td className="px-4 py-2 text-right tabular-nums sm:pr-0">{pct(s.cancelRate)}</td>
             </tr>
@@ -88,8 +92,9 @@ export function ConsultationAnalysis({
     <Card className="lg:col-span-2">
       <CardTitle>Beratungen: stattgefunden, abgesagt, No-Show</CardTitle>
       <p className="-mt-1 mb-4 text-sm text-ink-soft">
-        Alle Beratungen mit Termin im Zeitraum (nach Beratungsdatum). Quoten beziehen sich auf die
-        bereits entschiedenen Beratungen; Umbuchungen zählen nicht als Absage.
+        Alle Beratungen mit Termin im gewählten Zeitraum (nach Beratungsdatum, spätere Termine
+        zählen nicht). „Offen“ = anstehend + ohne Ergebnis. Quoten beziehen sich auf die bereits
+        entschiedenen Beratungen; Umbuchungen zählen nicht als Absage.
       </p>
       {t.total === 0 ? (
         <p className="py-4 text-sm text-ink-soft">Keine Beratungen im Zeitraum.</p>

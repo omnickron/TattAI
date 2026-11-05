@@ -176,3 +176,48 @@ describe("rate", () => {
     expect(rate(1, 4)).toBe(0.25);
   });
 });
+
+describe("consultationStats", () => {
+  it("adds up: every consultation is in exactly one bucket, per form as well as in total", async () => {
+    const { consultationStats } = await import("./consultations");
+    const now = new Date("2026-11-05T12:00:00Z");
+    const mk = (
+      status: "SCHEDULED" | "HELD" | "NO_SHOW" | "CANCELLED",
+      hoursFromNow: number,
+      mode: "ON_SITE" | "PHONE",
+    ) => {
+      const startsAt = new Date(now.getTime() + hoursFromNow * 3600_000);
+      return {
+        status,
+        startsAt,
+        endsAt: new Date(startsAt.getTime() + 1800_000),
+        cancelledAt: null,
+        tattooerId: "t",
+        mode,
+      };
+    };
+    const rows = [
+      mk("HELD", -50, "ON_SITE"),
+      mk("NO_SHOW", -30, "ON_SITE"),
+      mk("CANCELLED", -20, "PHONE"),
+      mk("SCHEDULED", -5, "ON_SITE"),
+      mk("SCHEDULED", -0.25, "PHONE"), // running → upcoming
+      mk("SCHEDULED", 3, "ON_SITE"),
+    ];
+    const total = consultationStats(rows, now);
+    const parts = ["ON_SITE", "PHONE"].map((m) =>
+      consultationStats(
+        rows.filter((r) => r.mode === m),
+        now,
+      ),
+    );
+    const sum = (k: "held" | "noShow" | "cancelled" | "open" | "upcoming" | "total") =>
+      parts.reduce((s, p) => s + p[k], 0);
+    for (const k of ["held", "noShow", "cancelled", "open", "upcoming", "total"] as const)
+      expect(sum(k)).toBe(total[k]);
+    expect(total.held + total.noShow + total.cancelled + total.open + total.upcoming).toBe(
+      total.total,
+    );
+    expect(total).toMatchObject({ open: 1, upcoming: 2 });
+  });
+});
