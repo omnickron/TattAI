@@ -185,6 +185,11 @@ model Lead {
   // Structured tattoo idea, filled by the chatbot (phase 3)
   tattooSummary Json?
 
+  // Short memory the built-in bot keeps about the chat (max. 400 characters)
+  botMemory       String?
+  // Why the bot handed the chat over to a person (shown in the app)
+  botHandoverNote String?
+
   // Original lead payload from Meta, for traceability
   rawPayload Json?
 
@@ -197,6 +202,7 @@ model Lead {
   outboundMessages OutboundMessage[]
   attachments      LeadAttachment[]
   botDeliveries    BotDelivery[]
+  botTurns         BotTurn[]
 
   @@index([status])
   @@index([createdAt])
@@ -762,4 +768,28 @@ model BillingSettings {
   issuerEmail   String?
   updatedById   String?
   updatedAt     DateTime @updatedAt
+}
+
+// One run of the built-in bot (answer to one or more customer messages):
+// usage for costs/limits and what happened, for checking the bot later.
+model BotTurn {
+  id               String   @id @default(cuid())
+  leadId           String
+  lead             Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  model            String?
+  inputTokens      Int      @default(0)
+  outputTokens     Int      @default(0)
+  cacheReadTokens  Int      @default(0)
+  cacheWriteTokens Int      @default(0)
+  // sent | handover | silent | error
+  outcome          String
+  mode             String?
+  reply            String?
+  // Tools used, filter rejections, errors
+  log              Json?
+  error            String?
+  createdAt        DateTime @default(now())
+
+  @@index([leadId, createdAt])
+  @@index([createdAt])
 }

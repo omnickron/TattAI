@@ -12,6 +12,8 @@ import { defaultPhoneCountry } from "../src/lib/settings";
 import { createWhatsAppClient } from "../src/lib/whatsapp/client";
 import { runMessagingWorker } from "../src/lib/whatsapp/messaging";
 import { deliverBotEvents, deliveryConfigFromEnv } from "../src/lib/bot/deliveries";
+import { brainConfigFromEnv, createBrainClient } from "../src/lib/bot/brain";
+import { BOT_EVENT, processBotInbox } from "../src/lib/bot/inbox";
 import { createMediaDownloader, downloadPendingAttachments } from "../src/lib/whatsapp/media";
 
 const INTERVAL_MS = 30_000;
@@ -23,6 +25,8 @@ const calendarDeps = {
   timeZone: process.env.APP_TIMEZONE || "Europe/Berlin",
   appUrl: process.env.APP_URL,
 };
+// Built-in bot: on when an Anthropic API key is set
+const brain = createBrainClient();
 let stopping = false;
 let lastLeadRetry = 0;
 
@@ -39,8 +43,24 @@ async function tick() {
   } catch (err) {
     console.error("[worker] messaging run failed:", err);
   }
+  if (brain) {
+    try {
+      const inbox = await processBotInbox({
+        ...calendarDeps,
+        whatsapp,
+        brain,
+        config: brainConfigFromEnv(),
+      });
+      if (inbox.answered || inbox.handedOver || inbox.failed) console.info("[worker] bot:", inbox);
+    } catch (err) {
+      console.error("[worker] bot run failed:", err);
+    }
+  }
   try {
-    const bot = await deliverBotEvents(prisma, deliveryConfigFromEnv());
+    const bot = await deliverBotEvents(prisma, {
+      ...deliveryConfigFromEnv(),
+      skipEvents: brain ? [BOT_EVENT] : [],
+    });
     if (bot.delivered || bot.failed) console.info("[worker] bot events:", bot);
   } catch (err) {
     console.error("[worker] bot delivery failed:", err);
@@ -74,7 +94,9 @@ async function tick() {
 }
 
 async function main() {
-  console.info(`[worker] started (WhatsApp ${whatsapp.mock ? "mock" : "live"})`);
+  console.info(
+    `[worker] started (WhatsApp ${whatsapp.mock ? "mock" : "live"}, Bot ${brain ? "NEEDL" : "aus/extern"})`,
+  );
   while (!stopping) {
     await tick();
     await new Promise((resolve) => setTimeout(resolve, INTERVAL_MS));

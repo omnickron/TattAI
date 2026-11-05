@@ -60,6 +60,12 @@ TEAMUP_CALENDAR_KEY=""
 BOT_API_KEY=""
 BOT_WEBHOOK_URL=""
 BOT_WEBHOOK_SECRET=""
+# Built-in WhatsApp bot (Claude). Set the key to switch it on; customer messages are
+# then answered by NEEDL itself instead of being sent to BOT_WEBHOOK_URL.
+ANTHROPIC_API_KEY=""
+# Optional: model and effort (low | medium | high)
+BOT_MODEL="claude-opus-5-5"
+BOT_EFFORT="low"
 
 # Commission invoices: details are maintained in the app (Einstellungen) by the operator
 OPERATOR_EMAIL="$operator_email"

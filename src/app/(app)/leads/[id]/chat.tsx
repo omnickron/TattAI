@@ -46,6 +46,7 @@ export function ChatSection({
     globallyEnabled: boolean;
     disabledAt: Date | null;
     disabledReason: string | null;
+    handoverNote?: string | null;
     disabledBy: string | null;
   };
   leadId: string;
@@ -88,6 +89,9 @@ export function ChatSection({
               : `${BOT_REASON_LABELS[(bot.disabledReason ?? "MANUAL") as BotDisabledReason]}${
                   bot.disabledBy ? ` von ${bot.disabledBy}` : ""
                 }${bot.disabledAt ? ` am ${formatDateTime(bot.disabledAt)}` : ""}.`}
+          {!bot.enabled && bot.disabledReason === "BOT_HANDOVER" && bot.handoverNote && (
+            <span className="block font-medium text-ink">Grund: {bot.handoverNote}</span>
+          )}
         </p>
       </div>
       {messages.length === 0 ? (
