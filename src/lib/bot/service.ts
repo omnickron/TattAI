@@ -292,6 +292,11 @@ export async function botSaveTattooSummary(deps: BotDeps, leadId: string, body: 
   let calendarUpdated = true;
   for (const c of upcoming)
     calendarUpdated = (await refreshConsultationEvent(deps, c.id)) && calendarUpdated;
+  // Tattoo sessions show the motif too: queue them for the calendar sync (worker picks them up)
+  await deps.prisma.tattooBooking.updateMany({
+    where: { consultation: { leadId }, cancelled: false, calendarEventId: { not: null } },
+    data: { calendarSyncPending: true, calendarNextAttemptAt: null },
+  });
   return { tattooSummary: stored, calendarUpdated };
 }
 

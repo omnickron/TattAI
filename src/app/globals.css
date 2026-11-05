@@ -1,12 +1,13 @@
 @import "tailwindcss";
 
 :root {
-  --paper: #f7f6f3;
+  /* neutral, very light grey (no warm tint) */
+  --paper: #f6f7f9;
   --surface: #ffffff;
-  --muted: #f0eee9;
-  --line: #e2dfd8;
-  --ink: #1c1b19;
-  --ink-soft: #6b6862;
+  --muted: #eef0f3;
+  --line: #e3e6ea;
+  --ink: #18181b;
+  --ink-soft: #6b6f76;
   --accent: #b4532a;
   /* single-series chart color (validated against the light surface) */
   --chart-1: #2a78d6;
@@ -14,12 +15,12 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --paper: #121211;
-    --surface: #1b1b19;
-    --muted: #262522;
-    --line: #33322e;
-    --ink: #edebe6;
-    --ink-soft: #a19e97;
+    --paper: #111214;
+    --surface: #191a1d;
+    --muted: #232428;
+    --line: #2e3035;
+    --ink: #ececee;
+    --ink-soft: #9da1a8;
     --accent: #e07a4f;
     --chart-1: #3987e5;
   }
@@ -46,4 +47,23 @@ body {
   background: var(--paper);
   color: var(--ink);
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Headings use the logo typeface (one medium cut: no faux bold, slightly open spacing) */
+h1,
+h2,
+h3 {
+  font-family: var(--font-logo), ui-sans-serif, system-ui, sans-serif;
+  font-weight: 500;
+  font-synthesis-weight: none;
+  letter-spacing: 0.01em;
+}
+
+@media print {
+  body {
+    background: #fff;
+  }
+  @page {
+    margin: 18mm;
+  }
 }

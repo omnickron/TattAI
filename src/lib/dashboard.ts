@@ -1,3 +1,4 @@
+import { loadHandovers } from "./bot/handover";
 import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 import { leadScope, type CurrentUser } from "./auth/session";
@@ -180,8 +181,13 @@ export async function loadDashboard(user: CurrentUser, now = new Date()) {
     .map((id) => contactLeads.find((l) => l.id === id))
     .filter((l): l is NonNullable<typeof l> => Boolean(l));
 
+  const handovers = await loadHandovers(prisma, {
+    isAdmin,
+    tattooerId: user.tattooerProfile?.id ?? null,
+  });
   return {
     isAdmin,
+    handovers,
     openOutcomes,
     openCount,
     today: { items, currentId, nextId, dayStart },

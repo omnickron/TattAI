@@ -10,6 +10,8 @@ export interface LeadFilters {
   q?: string;
   status?: LeadStatus;
   campaign?: string;
+  /** "customers": only people with a booked tattoo (for tattooers: with them) */
+  view?: "customers";
   page: number;
 }
 
@@ -24,6 +26,7 @@ export function parseLeadFilters(
     q: str("q") || undefined,
     status: LEAD_STATUS_ORDER.includes(status) ? status : undefined,
     campaign: str("campaign") || undefined,
+    view: str("ansicht") === "kunden" ? "customers" : undefined,
     page: Number.isFinite(page) && page > 0 ? page : 1,
   };
 }
@@ -41,6 +44,16 @@ function searchWhere(q: string): Prisma.LeadWhereInput {
   return { OR: or };
 }
 
+/** Booked customers: a booked tattoo (incl. walk-ins) – for tattooers with themselves. */
+function customersWhere(user: CurrentUser): Prisma.LeadWhereInput {
+  const tattooerId = user.role === "ADMIN" ? undefined : user.tattooerProfile?.id;
+  return {
+    consultations: {
+      some: { status: "HELD", tattooBooked: true, ...(tattooerId ? { tattooerId } : {}) },
+    },
+  };
+}
+
 export async function listLeads(user: CurrentUser, filters: LeadFilters) {
   const scope = leadScope(user);
   const where: Prisma.LeadWhereInput = {
@@ -49,6 +62,7 @@ export async function listLeads(user: CurrentUser, filters: LeadFilters) {
       filters.status ? { status: filters.status } : {},
       filters.campaign ? { metaCampaignId: filters.campaign } : {},
       filters.q ? searchWhere(filters.q) : {},
+      filters.view === "customers" ? customersWhere(user) : {},
     ],
   };
 

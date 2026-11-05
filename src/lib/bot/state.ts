@@ -4,11 +4,12 @@
  */
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 
-export type BotDisabledReason = "HUMAN_TAKEOVER" | "MANUAL";
+export type BotDisabledReason = "HUMAN_TAKEOVER" | "MANUAL" | "BOT_HANDOVER";
 
 export const BOT_REASON_LABELS: Record<BotDisabledReason, string> = {
   HUMAN_TAKEOVER: "Chat von einem Menschen übernommen",
   MANUAL: "manuell ausgeschaltet",
+  BOT_HANDOVER: "Bot hat an einen Menschen übergeben",
 };
 
 type Db = Pick<PrismaClient, "lead" | "botDelivery" | "messagingSettings">;

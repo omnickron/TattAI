@@ -131,6 +131,40 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
         </p>
       )}
 
+      {/* 0. Chats the bot handed over – only when needed */}
+      {data.handovers.length > 0 && (
+        <Card className="border-red-300 bg-red-50/60 dark:border-red-900 dark:bg-red-950/30">
+          <SectionTitle count={data.handovers.length}>Braucht euch</SectionTitle>
+          <p className="-mt-1 mb-3 text-sm text-ink-soft">
+            Der Bot hat diese Chats an euch übergeben. Sobald ihr im Chat antwortet oder den Bot
+            wieder einschaltet, verschwinden sie hier.
+          </p>
+          <ul className="space-y-2">
+            {data.handovers.map((h) => (
+              <li key={h.id}>
+                <Link
+                  href={`/leads/${h.id}`}
+                  className="flex items-center gap-3 rounded-lg bg-surface p-3 hover:bg-muted"
+                >
+                  <Initials name={h.name} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{h.name}</span>
+                    <span className="block truncate text-xs text-ink-soft">
+                      {h.botHandoverNote ?? "Übergabe durch den Bot"}
+                    </span>
+                  </span>
+                  {h.botHandoverAt && (
+                    <span className="shrink-0 text-xs text-ink-soft">
+                      {formatRelative(h.botHandoverAt, now)}
+                    </span>
+                  )}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
       {/* 1. Open outcomes – only when needed */}
       {data.openCount > 0 && (
         <Card className="border-amber-300 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/30">

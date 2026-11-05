@@ -176,6 +176,15 @@ Für den echten Betrieb: WhatsApp-Business-Konto und Nummer in Meta anlegen, Sys
 (Felder: `messages`, `message_template_status_update`, `phone_number_quality_update`, `account_update`) und die
 Variablen `WHATSAPP_*` aus `.env.example` setzen.
 
+## Bot-Wissen
+
+Unter **Bot** (Admin) steht das Wissen, aus dem der WhatsApp-Bot antwortet, in zehn Bereichen:
+Studio & Team, Standort, Leistungen & Stile, Ablauf, häufige Fragen, Einwände, typische Anliegen,
+Ton, No-Gos und Links. Jeder Bereich wird einzeln gespeichert; die Seite zeigt, was noch fehlt.
+Der Bot nennt nie Preise – Preisangaben im Wissen werden beim Speichern erkannt und markiert.
+Feste Regeln (keine Preise, KI-Hinweis nur auf Nachfrage, keine Gesundheitsdaten, kein Alter, nur
+echte Buchungen) stehen daneben und sind nicht änderbar.
+
 ## Chatbot
 
 Der Chatbot selbst ist nicht Teil des Projekts; NEEDL bietet ihm eine API (`/api/bot/v1`, API-Schlüssel) und
@@ -212,6 +221,36 @@ letzten fünf automatischen WhatsApp-Kontakte mit Vorschau der letzten Chatnachr
 - **Zuordnung**: Alles zählt zum Zeitraum, in dem der *Lead* eingegangen ist (auch wenn Beratung oder Tattoo
   später stattfinden). Ein Lead zählt für den Tätowierer, bei dem die Beratung stattfand (sonst der letzten
   Beratung) – Umbuchungen zählen nicht doppelt.
+
+### Beratungsanalyse
+
+Auf der Auswertung zeigt „Beratungen: stattgefunden, abgesagt, No-Show“ alle Beratungen mit Termin
+im gewählten Zeitraum (nach Beratungsdatum, mit Kampagnen- und Tätowierer-Filter): stattgefunden,
+No-Show, abgesagt (davon kurzfristig < 24 h), ohne Ergebnis und anstehend, mit Quoten pro
+Beratungsform. Die Tabelle „Nach Tätowierer“ zeigt zusätzlich „Beratung → Tattoo“: den Anteil der
+gebuchten Beratungen, aus denen ein Tattoo-Termin wurde. Umbuchungen auf eine andere Person zählen nicht als Absage, Laufkunden nicht
+als Beratung.
+
+## Content
+
+Unter **Content** laden alle Fotos und Videos ihrer Arbeiten hoch (Fotos bis 30 MB, Videos bis 500 MB),
+direkt vom Handy oder per Drag & Drop. Die Dateien liegen privat im Medienspeicher (`MEDIA_STORAGE_DIR/content`).
+Tätowierer sehen ihre eigenen Uploads, der Admin alle; er markiert, was in die nächste Meta-Anzeige soll,
+und lädt die Dateien herunter.
+
+## Abrechnung (Provision)
+
+Unter **Abrechnung** (Admin) steht pro Monat der Tattoo-Umsatz mit **Kunden aus Meta-Anzeigen**: alle
+nicht abgesagten Tattoo-Termine mit Datum im Monat und eingetragenem Betrag. Manuell angelegte Kunden
+und Laufkunden ohne Anzeige werden separat angezeigt, aber nicht berechnet. Daraus ergibt sich die
+Provision (Standard 15 %) zzgl. Umsatzsteuer. Für abgeschlossene Monate wird die Rechnung mit
+fortlaufender Nummer (`2026-001`) erstellt; die Zahlen werden dabei eingefroren. Die Rechnung ist als
+Druckansicht bzw. PDF abrufbar (Kunden nur mit Initialen in der Anlage), Status offen / bezahlt /
+storniert. Ändert sich der Umsatz nach der Rechnung, zeigt die Seite die Abweichung.
+
+Provisionssatz, Steuersatz und Rechnungsdaten pflegt der **Betreiber** unter **Einstellungen →
+Rechnungsdaten**. Betreiber ist, wessen Google-Adresse auf dem Server als `OPERATOR_EMAIL` steht; alle
+anderen sehen die Werte nur. Die `BILLING_*`-Umgebungsvariablen gelten als Ausgangswert.
 
 ## Ablauf für Änderungen
 

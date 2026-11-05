@@ -16,7 +16,10 @@ import { requireAdmin } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { APP_TIMEZONE, formatDate } from "@/lib/format";
 import { formatEuro } from "@/lib/outcomes/money";
-import { buildReport, rate, type Metrics, type ReportLead } from "@/lib/reports/report";
+import { loadConsultationStats } from "@/lib/reports/consultations";
+import { loadReport } from "@/lib/reports/load";
+import { ConsultationAnalysis } from "./consultation-analysis";
+import { rate, type Metrics } from "@/lib/reports/report";
 import { addDays, isLocalDate, localDateOf, startOfLocalDay } from "@/lib/time";
 
 export const metadata: Metadata = { title: "Auswertung" };
@@ -70,10 +73,13 @@ function MetricsTable({
   rows,
   first,
   showLeads,
+  showConversion = false,
 }: {
   rows: Array<{ key: string; label: ReactNode; metrics: Metrics }>;
   first: string;
   showLeads: boolean;
+  /** Extra column: share of booked consultations that became a tattoo appointment */
+  showConversion?: boolean;
 }) {
   return (
     <div className="-mx-4 overflow-x-auto sm:mx-0">
@@ -88,10 +94,18 @@ function MetricsTable({
             <th className="px-2 py-2 text-right font-medium">Abschlüsse</th>
             <th
               className="px-2 py-2 text-right font-medium"
-              title="Abschlüsse je stattgefundene Beratung"
+              title="Abschlüsse aus Beratungen je stattgefundene Beratung (ohne Laufkunden)"
             >
               Abschlussquote
             </th>
+            {showConversion && (
+              <th
+                className="px-2 py-2 text-right font-medium"
+                title="Anteil der gebuchten Beratungen, aus denen ein Tattoo-Termin wurde (inkl. No-Shows und Absagen)"
+              >
+                Beratung → Tattoo
+              </th>
+            )}
             <th className="px-4 py-2 text-right font-medium sm:pr-0">Umsatz</th>
           </tr>
         </thead>
@@ -103,8 +117,20 @@ function MetricsTable({
               <td className="px-2 py-2 text-right tabular-nums">{m.booked}</td>
               <td className="px-2 py-2 text-right tabular-nums">{m.held}</td>
               <td className="px-2 py-2 text-right tabular-nums">{m.noShow}</td>
-              <td className="px-2 py-2 text-right tabular-nums">{m.won}</td>
-              <td className="px-2 py-2 text-right tabular-nums">{pct(rate(m.won, m.held))}</td>
+              <td className="px-2 py-2 text-right tabular-nums">
+                {m.won}
+                {m.walkIns > 0 && (
+                  <span className="block text-xs text-ink-soft">davon {m.walkIns} Laufk.</span>
+                )}
+              </td>
+              <td className="px-2 py-2 text-right tabular-nums">
+                {pct(rate(m.wonFromConsultation, m.held))}
+              </td>
+              {showConversion && (
+                <td className="px-2 py-2 text-right font-medium tabular-nums">
+                  {pct(rate(m.wonFromConsultation, m.booked))}
+                </td>
+              )}
               <td className="px-4 py-2 text-right font-medium tabular-nums sm:pr-0">
                 {formatEuro(m.revenueCents, true)}
               </td>
@@ -128,37 +154,9 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin/
   const campaign = str("campaign") || null;
   const tattooerId = str("tattooer") || null;
 
-  const [rows, campaigns, tattooers] = await Promise.all([
-    prisma.lead.findMany({
-      where: {
-        createdAt: {
-          gte: startOfLocalDay(from, APP_TIMEZONE),
-          lt: startOfLocalDay(addDays(to, 1), APP_TIMEZONE),
-        },
-        ...(campaign
-          ? campaign === "none"
-            ? { metaCampaignId: null }
-            : { metaCampaignId: campaign }
-          : {}),
-      },
-      select: {
-        id: true,
-        createdAt: true,
-        source: true,
-        metaCampaignId: true,
-        metaCampaignName: true,
-        consultations: {
-          select: {
-            tattooerId: true,
-            status: true,
-            startsAt: true,
-            tattooBooked: true,
-            walkIn: true,
-            tattooBookings: { select: { date: true, amountCents: true, cancelled: true } },
-          },
-        },
-      },
-    }),
+  const [report, consultationStats, campaigns, tattooers] = await Promise.all([
+    loadReport(prisma, { from, to, campaign, tattooerId, now, timeZone: APP_TIMEZONE }),
+    loadConsultationStats(prisma, { from, to, campaign, tattooerId, now, timeZone: APP_TIMEZONE }),
     prisma.lead.groupBy({
       by: ["metaCampaignId", "metaCampaignName"],
       where: { metaCampaignId: { not: null } },
@@ -170,15 +168,6 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin/
   ]);
   const tattooerName = new Map(tattooers.map((t) => [t.id, t.user.name]));
 
-  const leads: ReportLead[] = rows.map((l) => ({
-    id: l.id,
-    createdAt: l.createdAt,
-    source: l.source,
-    campaignId: l.metaCampaignId,
-    campaignName: l.metaCampaignName,
-    consultations: l.consultations.map((c) => ({ ...c, sessions: c.tattooBookings })),
-  }));
-  const report = buildReport(leads, { now, from, to, tattooerId, timeZone: APP_TIMEZONE });
   const t = report.totals;
   const qs = (over: Record<string, string>) =>
     `/admin/dashboard?${new URLSearchParams({
@@ -245,8 +234,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin/
 
       {tattooerId && (
         <p className="mb-4 text-sm text-ink-soft">
-          Gefiltert nach {tattooerName.get(tattooerId)}: Es zählen nur Leads, deren Beratung bei
-          dieser Person lag.
+          Gefiltert nach {tattooerName.get(tattooerId)}: Es zählen nur Leads mit Beratung oder
+          Tattoo bei dieser Person – und davon nur ihr eigener Teil (Termine, Abschlüsse, Umsatz).
         </p>
       )}
 
@@ -264,7 +253,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin/
         <Tile
           label="Tattoo-Abschlüsse"
           value={t.won}
-          sub={`${pct(rate(t.won, t.held))} der stattgefundenen Beratungen`}
+          sub={`${pct(rate(t.wonFromConsultation, t.held))} der stattgefundenen Beratungen${t.walkIns ? ` · ${t.walkIns} Laufkunden` : ""}`}
         />
         <Tile
           label="Umsatz"
@@ -308,7 +297,11 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin/
               { label: "Leads", value: t.leads },
               { label: "Beratung gebucht", value: t.booked, note: pct(rate(t.booked, t.leads)) },
               { label: "Beratung stattgefunden", value: t.held, note: pct(rate(t.held, t.booked)) },
-              { label: "Tattoo gebucht", value: t.won, note: pct(rate(t.won, t.held)) },
+              {
+                label: "Tattoo gebucht",
+                value: t.wonFromConsultation,
+                note: pct(rate(t.wonFromConsultation, t.held)),
+              },
             ]}
           />
           <p className="mt-3 text-xs text-ink-soft">
@@ -338,6 +331,14 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin/
             format={(v) => formatEuro(v, true)}
           />
         </Card>
+
+        <ConsultationAnalysis
+          totals={consultationStats.totals}
+          byMode={consultationStats.byMode.map((r) => ({
+            ...r,
+            label: r.key === "PHONE" ? "Telefon" : "Vor Ort",
+          }))}
+        />
 
         <Card className="lg:col-span-2">
           <CardTitle>Nach Kampagne</CardTitle>
@@ -374,6 +375,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin/
             <MetricsTable
               first="Tätowierer"
               showLeads={false}
+              showConversion
               rows={report.byTattooer.map((x) => ({
                 key: x.key,
                 label: tattooerName.get(x.key) ?? "Unbekannt",

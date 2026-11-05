@@ -11,6 +11,7 @@ ask() { local v; read -rp "$1: " v < /dev/tty; printf '%s' "$v"; }
 domain=$(ask "Adresse der App (z. B. studio.needl-booker.de)")
 admin_email=$(ask "Google-Adresse des Admins")
 admin_name=$(ask "Name des Admins")
+operator_email=$(ask "Google-Adresse des Betreibers (du, für Rechnungsdaten)")
 google_id=$(ask "Google Client-ID")
 google_secret=$(ask "Google Clientschlüssel")
 
@@ -59,6 +60,28 @@ TEAMUP_CALENDAR_KEY=""
 BOT_API_KEY=""
 BOT_WEBHOOK_URL=""
 BOT_WEBHOOK_SECRET=""
+# Built-in WhatsApp bot (Claude). Set the key to switch it on; customer messages are
+# then answered by NEEDL itself instead of being sent to BOT_WEBHOOK_URL.
+ANTHROPIC_API_KEY=""
+# Optional: model and effort (low | medium | high)
+BOT_MODEL="claude-opus-5-5"
+BOT_EFFORT="low"
+# Push notifications (e.g. "Lena braucht euch"). Generate with: npm run push:keys
+VAPID_PUBLIC_KEY=""
+VAPID_PRIVATE_KEY=""
+# Contact for the push services, e.g. mailto:admin@example.de
+VAPID_SUBJECT=""
+
+# Commission invoices: details are maintained in the app (Einstellungen) by the operator
+OPERATOR_EMAIL="$operator_email"
+BILLING_COMMISSION_PERCENT="15"
+BILLING_VAT_PERCENT="19"
+BILLING_PAYMENT_DAYS="14"
+BILLING_ISSUER_NAME=""
+BILLING_ISSUER_ADDRESS=""
+BILLING_ISSUER_TAX_ID=""
+BILLING_ISSUER_IBAN=""
+BILLING_ISSUER_EMAIL=""
 ENV
 echo
 echo ".env angelegt (nur für root lesbar). Starten mit:"

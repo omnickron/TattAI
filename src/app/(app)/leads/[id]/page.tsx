@@ -126,6 +126,7 @@ export default async function LeadPage({ params, searchParams }: PageProps<"/lea
               globallyEnabled: messaging?.botGloballyEnabled ?? true,
               disabledAt: lead.botDisabledAt,
               disabledReason: lead.botDisabledReason,
+              handoverNote: lead.botHandoverNote,
               disabledBy: lead.botDisabledBy?.name ?? null,
             }}
             messages={lead.messages}

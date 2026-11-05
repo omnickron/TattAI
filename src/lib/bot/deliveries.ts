@@ -14,6 +14,8 @@ export interface DeliveryConfig {
   secret: string | undefined;
   fetchImpl?: typeof fetch;
   now?: () => Date;
+  /** Events handled elsewhere (customer messages when the built-in bot answers) */
+  skipEvents?: string[];
 }
 
 export function deliveryConfigFromEnv(): DeliveryConfig {
@@ -26,11 +28,12 @@ export function deliveryConfigFromEnv(): DeliveryConfig {
 export async function deliverBotEvents(prisma: PrismaClient, cfg: DeliveryConfig, limit = 25) {
   const now = (cfg.now ?? (() => new Date()))();
   const result = { delivered: 0, failed: 0, dropped: 0 };
+  const eventFilter = cfg.skipEvents?.length ? { event: { notIn: cfg.skipEvents } } : {};
 
   if (!cfg.url || !cfg.secret) {
     // No bot connected: drop events instead of flooding a bot configured later.
     const dropped = await prisma.botDelivery.updateMany({
-      where: { status: { in: ["PENDING", "FAILED"] } },
+      where: { status: { in: ["PENDING", "FAILED"] }, ...eventFilter },
       data: {
         status: "DEAD",
         lastError: "Kein Bot angebunden (BOT_WEBHOOK_URL/BOT_WEBHOOK_SECRET fehlt)",
@@ -40,7 +43,7 @@ export async function deliverBotEvents(prisma: PrismaClient, cfg: DeliveryConfig
   }
 
   const due = await prisma.botDelivery.findMany({
-    where: { status: { in: ["PENDING", "FAILED"] }, nextAttemptAt: { lte: now } },
+    where: { status: { in: ["PENDING", "FAILED"] }, nextAttemptAt: { lte: now }, ...eventFilter },
     orderBy: { createdAt: "asc" },
     take: limit,
     include: { lead: { select: { botEnabled: true } } },

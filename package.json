@@ -22,9 +22,12 @@
     "predev": "prisma generate",
     "prebuild": "prisma generate",
     "db:update": "prisma migrate deploy && prisma generate",
-    "dev:open-consultations": "tsx scripts/dev-open-consultations.ts"
+    "dev:open-consultations": "tsx scripts/dev-open-consultations.ts",
+    "teamup:check": "tsx scripts/teamup-check.ts",
+    "push:keys": "tsx scripts/vapid-keys.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.6.0",
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
     "dotenv": "^18.0.9",
@@ -36,6 +39,7 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "server-only": "^0.0.1",
+    "web-push": "^3.6.7",
     "zod": "^4.6.7"
   },
   "devDependencies": {
@@ -44,6 +48,7 @@
     "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/web-push": "^3.6.4",
     "eslint": "^9",
     "eslint-config-next": "16.4.4",
     "prettier": "^3.9.10",

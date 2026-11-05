@@ -4,8 +4,9 @@
  * Attribution: everything is assigned to the period in which the LEAD came in
  * (cohort view) – consultations, tattoo bookings and revenue of those leads,
  * whenever they happen. This answers "what did the leads of this campaign/period bring?".
- * A lead is attributed to ONE tattooer: the one of its held consultation, otherwise
- * of its latest consultation (reschedules/reassignments do not double count).
+ * Per tattooer, a lead counts with ITS OWN consultations and tattoos only (e.g. consultation
+ * and tattoo with Alex, a later walk-in tattoo with Kim → each gets their own revenue).
+ * Cancelled consultations (reschedules/reassignments) only count if nothing else is left.
  */
 import { addDays, DEFAULT_TIME_ZONE, localDateOf, startOfWeek } from "../time";
 
@@ -19,6 +20,8 @@ export interface ReportConsultation {
   tattooerId: string;
   status: "SCHEDULED" | "HELD" | "NO_SHOW" | "CANCELLED";
   startsAt: Date;
+  /** End of the consultation (open outcome only once it is over). */
+  endsAt?: Date;
   tattooBooked: boolean | null;
   // Walk-in tattoo without consultation: counts for won/revenue, not as a consultation
   walkIn?: boolean;
@@ -39,7 +42,12 @@ export interface Metrics {
   booked: number;
   held: number;
   noShow: number;
+  /** Leads with a booked tattoo (incl. walk-ins) */
   won: number;
+  /** …of which via a consultation (basis of all conversion rates) */
+  wonFromConsultation: number;
+  /** …of which only as walk-in (no consultation won the tattoo) */
+  walkIns: number;
   open: number;
   sessions: number;
   revenueCents: number;
@@ -61,6 +69,8 @@ const empty = (): Metrics => ({
   held: 0,
   noShow: 0,
   won: 0,
+  wonFromConsultation: 0,
+  walkIns: 0,
   open: 0,
   sessions: 0,
   revenueCents: 0,
@@ -68,7 +78,25 @@ const empty = (): Metrics => ({
   missingAmounts: 0,
 });
 
-/** The tattooer a lead counts for, or null if it never had a consultation. */
+/**
+ * Tattooers a lead counts for: everyone with a non-cancelled consultation or walk-in;
+ * if all were cancelled, the one of the latest consultation.
+ */
+export function tattooersOf(lead: ReportLead): string[] {
+  const active = [
+    ...new Set(lead.consultations.filter((c) => c.status !== "CANCELLED").map((c) => c.tattooerId)),
+  ];
+  if (active.length) return active;
+  const latest = attributedTattooer(lead);
+  return latest ? [latest] : [];
+}
+
+/** The lead restricted to one tattooer's consultations. */
+function onlyOf(lead: ReportLead, tattooerId: string): ReportLead {
+  return { ...lead, consultations: lead.consultations.filter((c) => c.tattooerId === tattooerId) };
+}
+
+/** The main tattooer of a lead, or null if it never had a consultation. */
 export function attributedTattooer(lead: ReportLead): string | null {
   const held = lead.consultations.filter((c) => c.status === "HELD");
   const pool = held.length ? held : lead.consultations;
@@ -84,8 +112,12 @@ function addLead(m: Metrics, lead: ReportLead, now: Date) {
   const held = cs.some((c) => c.status === "HELD");
   if (held) m.held++;
   else if (cs.some((c) => c.status === "NO_SHOW")) m.noShow++;
-  if (all.some((c) => c.status === "HELD" && c.tattooBooked === true)) m.won++;
-  m.open += cs.filter((c) => c.status === "SCHEDULED" && c.startsAt <= now).length;
+  const viaConsultation = cs.some((c) => c.status === "HELD" && c.tattooBooked === true);
+  const viaWalkIn = all.some((c) => c.walkIn && c.tattooBooked === true);
+  if (viaConsultation || viaWalkIn) m.won++;
+  if (viaConsultation) m.wonFromConsultation++;
+  else if (viaWalkIn) m.walkIns++;
+  m.open += cs.filter((c) => c.status === "SCHEDULED" && (c.endsAt ?? c.startsAt) <= now).length;
   for (const c of all) {
     if (!(c.status === "HELD" && c.tattooBooked)) continue;
     for (const s of c.sessions) {
@@ -153,9 +185,11 @@ export function buildReport(leads: ReportLead[], opts: ReportOptions): Report {
   const buckets = bucketsFor(opts.from, opts.to, granularity);
   const series = new Map(buckets.map((b) => [b.key, empty()]));
 
-  for (const lead of leads) {
-    const tattooer = attributedTattooer(lead);
-    if (opts.tattooerId && tattooer !== opts.tattooerId) continue;
+  for (const full of leads) {
+    const involved = tattooersOf(full);
+    if (opts.tattooerId && !involved.includes(opts.tattooerId)) continue;
+    // With a tattooer filter, only that person's part of the lead counts
+    const lead = opts.tattooerId ? onlyOf(full, opts.tattooerId) : full;
 
     addLead(totals, lead, opts.now);
 
@@ -165,9 +199,9 @@ export function buildReport(leads: ReportLead[], opts: ReportOptions): Report {
     if (!campaigns.has(ckey)) campaigns.set(ckey, { label: clabel, metrics: empty() });
     addLead(campaigns.get(ckey)!.metrics, lead, opts.now);
 
-    if (tattooer) {
-      if (!tattooers.has(tattooer)) tattooers.set(tattooer, empty());
-      addLead(tattooers.get(tattooer)!, lead, opts.now);
+    for (const t of opts.tattooerId ? [opts.tattooerId] : involved) {
+      if (!tattooers.has(t)) tattooers.set(t, empty());
+      addLead(tattooers.get(t)!, onlyOf(full, t), opts.now);
     }
 
     const local = localDateOf(lead.createdAt, tz);

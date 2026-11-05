@@ -1,7 +1,13 @@
 import type { ReactNode } from "react";
-import { NavLinks } from "@/components/nav-links";
+import Link from "next/link";
+import { AppNav, type NavGroup } from "@/components/app-nav";
+import { cn } from "@/components/ui";
 import { requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
+import { logoFont } from "../fonts";
+import { PushToggle } from "@/components/push-toggle";
+import { isOperator } from "@/lib/auth/operator";
+import { vapidPublicKey } from "@/lib/push";
 import { signOutAction } from "./actions";
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
@@ -15,52 +21,98 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       ...(isAdmin ? {} : { tattooerId: user.tattooerProfile?.id ?? "__none__" }),
     },
   });
-  const items = [
-    { href: "/", label: "Übersicht" },
-    { href: "/leads", label: "Leads" },
-    { href: "/calendar", label: "Kalender" },
-    { href: "/consultations", label: "Beratungen", badge: openOutcomes },
-    ...(user.tattooerProfile ? [{ href: "/availability", label: "Verfügbarkeit" }] : []),
+  // Chats the bot handed over that nobody has picked up yet
+  const handovers = await prisma.lead.count({
+    where: {
+      botEnabled: false,
+      botDisabledReason: "BOT_HANDOVER",
+      ...(isAdmin
+        ? {}
+        : { consultations: { some: { tattooerId: user.tattooerProfile?.id ?? "__none__" } } }),
+    },
+  });
+  const groups: NavGroup[] = [
+    {
+      items: [
+        { href: "/", label: "Übersicht", icon: "home", badge: handovers },
+        { href: "/leads", label: "Leads", icon: "leads" },
+        { href: "/calendar", label: "Kalender", icon: "calendar" },
+        { href: "/consultations", label: "Beratungen", icon: "consultations", badge: openOutcomes },
+        ...(user.tattooerProfile
+          ? [{ href: "/availability", label: "Verfügbarkeit", icon: "availability" as const }]
+          : []),
+        { href: "/content", label: "Content", icon: "content" },
+      ],
+    },
     ...(isAdmin
       ? [
-          { href: "/admin/dashboard", label: "Auswertung" },
-          { href: "/admin/tattooers", label: "Tätowierer" },
-          { href: "/admin/fairness", label: "Fairness" },
-          { href: "/admin/whatsapp", label: "WhatsApp" },
-          { href: "/admin/settings", label: "Einstellungen" },
+          {
+            label: "Studio",
+            items: [
+              { href: "/admin/dashboard", label: "Auswertung", icon: "report" as const },
+              { href: "/admin/billing", label: "Abrechnung", icon: "billing" as const },
+              { href: "/admin/tattooers", label: "Tätowierer", icon: "tattooers" as const },
+              { href: "/admin/fairness", label: "Fairness", icon: "fairness" as const },
+              { href: "/admin/whatsapp", label: "WhatsApp", icon: "whatsapp" as const },
+              { href: "/admin/bot", label: "Bot", icon: "bot" as const },
+              { href: "/admin/settings", label: "Einstellungen", icon: "settings" as const },
+            ],
+          },
+        ]
+      : []),
+    ...(isOperator(user)
+      ? [
+          {
+            label: "Betreiber",
+            items: [{ href: "/operator", label: "Bot & Abrechnung", icon: "operator" as const }],
+          },
         ]
       : []),
   ];
 
   return (
     <div className="min-h-dvh">
-      <header className="sticky top-0 z-10 border-b border-line bg-paper/90 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
-          <div className="flex items-center gap-2">
-            <span className="flex h-7 w-7 items-center justify-center rounded-md bg-ink text-xs font-bold text-paper">
-              N
-            </span>
-            <span className="font-semibold tracking-tight">NEEDL</span>
-          </div>
-          <div className="order-3 w-full sm:order-none sm:w-auto sm:flex-1">
-            <NavLinks items={items} />
-          </div>
-          <div className="ml-auto flex items-center gap-3 text-sm">
-            <span className="hidden text-ink-soft md:inline">
-              {user.name} · {isAdmin ? "Admin" : "Tätowierer"}
-            </span>
+      <AppNav
+        groups={groups}
+        logo={
+          <Link href="/" className={cn(logoFont.className, "text-xl leading-none tracking-wide")}>
+            NEEDL
+          </Link>
+        }
+        userName={user.name}
+        userRole={isAdmin ? "Admin" : "Tätowierer"}
+        signOut={
+          <div className="flex items-center">
+            <PushToggle publicKey={vapidPublicKey()} />
             <form action={signOutAction}>
               <button
                 type="submit"
-                className="rounded-lg px-2 py-1 text-ink-soft hover:bg-muted hover:text-ink"
+                title="Abmelden"
+                aria-label="Abmelden"
+                className="rounded-lg p-2 text-ink-soft hover:bg-muted hover:text-ink"
               >
-                Abmelden
+                <svg
+                  viewBox="0 0 24 24"
+                  className="size-[18px]"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.6}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H4" />
+                </svg>
               </button>
             </form>
           </div>
-        </div>
-      </header>
-      <main className="mx-auto max-w-6xl px-4 py-6 pb-16">{children}</main>
+        }
+      />
+      <div className="lg:pl-60 print:pl-0">
+        <main className="mx-auto max-w-6xl px-4 py-6 pb-16 sm:px-6 lg:px-8 lg:py-8 print:max-w-none print:p-0">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }

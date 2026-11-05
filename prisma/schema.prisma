@@ -29,10 +29,12 @@ model User {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  tattooerProfile  TattooerProfile?
-  leadNotes        LeadNote[]
-  sentMessages     Message[]
-  botDisabledLeads Lead[]           @relation("BotDisabledBy")
+  tattooerProfile   TattooerProfile?
+  leadNotes         LeadNote[]
+  sentMessages      Message[]
+  botDisabledLeads  Lead[]             @relation("BotDisabledBy")
+  contentItems      ContentItem[]
+  pushSubscriptions PushSubscription[]
 }
 
 enum CalendarProvider {
@@ -184,6 +186,12 @@ model Lead {
   // Structured tattoo idea, filled by the chatbot (phase 3)
   tattooSummary Json?
 
+  // Short memory the built-in bot keeps about the chat (max. 400 characters)
+  botMemory       String?
+  // Why the bot handed the chat over to a person (shown in the app)
+  botHandoverNote String?
+  botHandoverAt   DateTime?
+
   // Original lead payload from Meta, for traceability
   rawPayload Json?
 
@@ -196,6 +204,7 @@ model Lead {
   outboundMessages OutboundMessage[]
   attachments      LeadAttachment[]
   botDeliveries    BotDelivery[]
+  botTurns         BotTurn[]
 
   @@index([status])
   @@index([createdAt])
@@ -285,6 +294,8 @@ model Consultation {
   // Calendar id the event was written to (the tattooer's "Beratungen" calendar)
   calendarId               String?
   cancelledAt              DateTime?
+  // Cancelled only because it was moved to a new appointment (not a real cancellation)
+  rescheduled              Boolean            @default(false)
   createdById              String?
   // Walk-in customer: tattoo project without a consultation. Holds the tattoo sessions only and
   // is excluded from every consultation list, count, fairness and reminder.
@@ -365,22 +376,22 @@ model FairnessShare {
 
 // Singleton row (id = 1) with settings the admin can change in the UI.
 model AppSettings {
-  id                 Int      @id @default(1)
+  id                    Int      @id @default(1)
   // Key of the consent checkbox in the Meta instant form (custom disclaimer).
-  consentCheckboxKey String?
+  consentCheckboxKey    String?
   // Exact wording of the consent text shown in the form; snapshotted per lead.
-  consentText        String?
+  consentText           String?
   // Studio name, available as {{Studio}} in WhatsApp templates
-  studioName         String?
+  studioName            String?
   // Address used as location of on-site consultations in calendar events
-  studioAddress      String?
+  studioAddress         String?
   // TeamUp (shared studio calendar): sub-calendar the app writes to and the "Artist" field
   // ("who" = TeamUp's built-in "Wer" field, otherwise the id of a custom field)
   teamupSubcalendarId   String?
   teamupSubcalendarName String?
   teamupArtistFieldId   String?
   teamupArtistFieldName String?
-  updatedAt          DateTime @updatedAt
+  updatedAt             DateTime @updatedAt
 }
 
 enum WebhookEventStatus {
@@ -650,4 +661,172 @@ model CalendarEventDeletion {
   createdAt  DateTime @default(now())
 
   @@unique([calendarId, eventId])
+}
+
+// ---------------------------------------------------------------------------
+// Content for Meta ads (photos/videos uploaded by the team)
+// ---------------------------------------------------------------------------
+
+enum ContentKind {
+  IMAGE
+  VIDEO
+}
+
+model ContentItem {
+  id            String      @id @default(cuid())
+  uploaderId    String
+  uploader      User        @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+  kind          ContentKind
+  mimeType      String
+  sizeBytes     Int
+  originalName  String
+  // Relative path inside MEDIA_STORAGE_DIR (private, never served publicly)
+  storagePath   String      @unique
+  // Admin: picked for an upcoming ad
+  selectedForAd Boolean     @default(false)
+  createdAt     DateTime    @default(now())
+
+  @@index([uploaderId, createdAt])
+  @@index([createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Billing: monthly commission invoices on the tattoo revenue booked through the app
+// ---------------------------------------------------------------------------
+
+enum InvoiceStatus {
+  OPEN
+  PAID
+  CANCELLED
+}
+
+model Invoice {
+  id            String        @id @default(cuid())
+  // "2026-001": sequential per year
+  number        String        @unique
+  // Billed month, local "YYYY-MM"
+  period        String
+  issuedAt      DateTime      @default(now())
+  dueAt         DateTime
+  // Frozen amounts at creation (cents; rates in basis points, 1500 = 15 %)
+  revenueCents  Int
+  sessionCount  Int
+  commissionBps Int
+  netCents      Int
+  vatBps        Int
+  vatCents      Int
+  grossCents    Int
+  // Snapshots: issuer/recipient address blocks and the billed sessions
+  issuer        Json
+  recipient     Json
+  lines         Json
+  status        InvoiceStatus @default(OPEN)
+  paidAt        DateTime?
+  cancelledAt   DateTime?
+  createdById   String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([period])
+}
+
+// ---------------------------------------------------------------------------
+// WhatsApp bot: studio knowledge the bot answers from (maintained by the admin)
+// ---------------------------------------------------------------------------
+
+model BotKnowledge {
+  id               Int      @id @default(1)
+  // Name the bot signs with, e.g. "Mia vom Black Rose Team" (optional)
+  assistantName    String?
+  about            String?
+  team             String?
+  location         String?
+  openingHours     String?
+  services         String?
+  process          String?
+  customerConcerns String?
+  toneExamples     String?
+  forbiddenWords   String?
+  noGos            String?
+  // { website, instagram, impressum, datenschutz }
+  links            Json?
+  // [{ q, a }]
+  faq              Json?
+  objections       Json?
+  updatedById      String?
+  updatedAt        DateTime @updatedAt
+}
+
+// Billing settings of the operator (edited in the app by the operator only; env as fallback)
+model BillingSettings {
+  id            Int      @id @default(1)
+  commissionBps Int?
+  vatBps        Int?
+  paymentDays   Int?
+  issuerName    String?
+  issuerAddress String?
+  issuerTaxId   String?
+  issuerIban    String?
+  issuerEmail   String?
+  updatedById   String?
+  updatedAt     DateTime @updatedAt
+}
+
+// One run of the built-in bot (answer to one or more customer messages):
+// usage for costs/limits and what happened, for checking the bot later.
+model BotTurn {
+  id               String   @id @default(cuid())
+  leadId           String
+  lead             Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  model            String?
+  inputTokens      Int      @default(0)
+  outputTokens     Int      @default(0)
+  cacheReadTokens  Int      @default(0)
+  cacheWriteTokens Int      @default(0)
+  // Cost in millionths of a US dollar (list prices of the model)
+  costMicros       Int      @default(0)
+  // sent | handover | silent | error
+  outcome          String
+  mode             String?
+  reply            String?
+  // Tools used, filter rejections, errors
+  log              Json?
+  error            String?
+  createdAt        DateTime @default(now())
+
+  @@index([leadId, createdAt])
+  @@index([createdAt])
+}
+
+// Safety limits of the built-in bot (single row, id = 1)
+model BotSettings {
+  id                 Int       @id @default(1)
+  // Bot replies per customer
+  maxPerHourPerLead  Int       @default(30)
+  maxPerDayPerLead   Int       @default(80)
+  // Bot replies across all chats per day
+  maxPerDayTotal     Int       @default(1500)
+  // Cost brake in euro cents (1 $ counted as 1 €, on the safe side)
+  dailyBudgetCents   Int       @default(500)
+  monthlyBudgetCents Int       @default(10000)
+  // Paused automatically after repeated errors (or by hand); null = running
+  pausedAt           DateTime?
+  pausedReason       String?
+  // Last alert sent (e.g. "budget-day:2026-11-05"), so each alert goes out once
+  lastAlertKey       String?
+  updatedAt          DateTime  @updatedAt
+}
+
+// Browser push subscriptions (installed PWA / browser) per user
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }

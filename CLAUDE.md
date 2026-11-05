@@ -12,7 +12,7 @@ Sprache der Oberfläche und aller Texte für Nutzer: Deutsch. Code, Variablen un
 - Erwartet werden ca. 100 bis 150 Leads pro Woche.
 - Es gibt keine Empfangskraft: Jeder Tätowierer führt seine Beratungen selbst durch und bucht sie für sich.
 - Kapazität ist vorerst kein Thema der App. Die von den Tätowierern freigegebenen Zeiten werden einfach gefüllt.
-- Der Chatbot für WhatsApp wird NICHT in diesem Projekt gebaut. Die App stellt nur eine saubere Schnittstelle bereit, an die er später angebunden wird.
+- Der WhatsApp-Chatbot wird direkt in NEEDL gebaut (Entscheidung vom 05.11.2026, vorher außerhalb geplant): Claude (Anthropic API) als Gehirn im Hintergrunddienst, Gedächtnis und Regeln aus NEEDL, kein Make. Ziel: Tattoo-Idee klären und Beratungstermin buchen. Anrede „du“. Übergabe an Menschen mit Meldung in der App und per Push-Benachrichtigung. Die Bot-Schnittstelle (API) bleibt für andere Anbindungen bestehen. Der Bot nennt NIE Preise, Schätzungen oder Preisrahmen (Preis klärt die Beratung). Kein aktiver KI-Hinweis; nur auf Nachfrage: „Manche Nachrichten werden durch eine KI automatisiert.“ Er gibt sich nie als Mensch aus. (Transparenzpflicht nach EU-KI-Verordnung Art. 50 vor Livegang rechtlich prüfen lassen.)
 
 ## Entscheidungen (verbindlich)
 
@@ -32,6 +32,11 @@ Sprache der Oberfläche und aller Texte für Nutzer: Deutsch. Code, Variablen un
 - Sieht alle Leads, Termine, Tätowierer und Auswertungen.
 - Legt Tätowierer an, deaktiviert sie, setzt Soll-Anteile (Fairness).
 - Kann Termine umverteilen und Leads manuell bearbeiten.
+
+**Betreiber** (Anbieter von NEEDL, Entscheidung vom 05.11.2026)
+- Vorerst keine eigene Rolle, sondern ein Admin mit der E-Mail aus `OPERATOR_EMAIL` (Server-Umgebung).
+- Eigener Menüpunkt „Betreiber“: Bot-Betrieb (Kosten, Kostenlimits, Antwort-Grenzen, Fehler, Pause), Rechnungsdaten (Provision, Steuer, Absender), Rechnungen erstellen und verwalten.
+- Der Studio-Admin pflegt das Bot-Wissen, sieht den Bot-Status ohne Kosten, schaltet den Bot über die WhatsApp-Einstellungen bzw. pro Chat und sieht seine Rechnungen.
 
 **Tätowierer**
 - Pflegt eigene Verfügbarkeiten für Beratungen (wiederkehrend und Ausnahmen wie Urlaub).
@@ -116,6 +121,7 @@ User (Rolle), TattooerProfile (Google-Verbindung, Beratungsdauer, Puffer), Avail
 Nach jeder Phase lauffähigen Stand liefern, bevor die nächste beginnt.
 
 ## Spätere Ideen (nicht jetzt umsetzen)
+- Echte dritte Rolle „Betreiber“ über mehrere Studios hinweg (erst bei Umbau auf mehrere Studios pro Installation).
 - Ad-Budget bei Meta automatisch drosseln, wenn alle Slots belegt sind.
 - Verteilung nach Stil und Spezialisierung.
 - Meta-Kosten importieren (ROI) und Conversions API.

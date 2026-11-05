@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildConsultationEvent } from "./event-content";
+import { buildConsultationEvent, buildTattooEvent } from "./event-content";
 
 const base = {
   lead: {
@@ -44,5 +44,43 @@ describe("buildConsultationEvent", () => {
     expect(e.location).toBeNull();
     expect(e.description).toContain("Telefon – bitte Kunden anrufen");
     expect(e.description).toContain("(noch keine Zusammenfassung)");
+  });
+});
+
+describe("buildTattooEvent", () => {
+  const session = {
+    lead: base.lead,
+    sessionNumber: 2,
+    multipleSessions: true,
+    slot: { start: base.start, end: base.end },
+    localDate: "2026-11-09",
+    nextLocalDate: "2026-11-10",
+    studioAddress: base.studioAddress,
+    note: null,
+    appUrl: base.appUrl,
+    timeZone: base.timeZone,
+  };
+
+  it("puts motif and price at the top of the notes", () => {
+    const e = buildTattooEvent({ ...session, amountCents: 45000, totalCents: 90000 });
+    const [first, second] = e.description.split("\n");
+    expect(first).toBe("Motiv: Rose mit Schriftzug");
+    expect(second).toMatch(/^Preis: 450,00\s€ \(gesamt 900,00\s€\)$/);
+  });
+
+  it("says when no price is entered yet", () => {
+    const e = buildTattooEvent({ ...session, multipleSessions: false, amountCents: null });
+    expect(e.description).toContain("Preis: noch nicht eingetragen");
+  });
+
+  it("shows the motif for consultations, too", () => {
+    const e = buildConsultationEvent({ ...base, mode: "ON_SITE" });
+    expect(e.description.split("\n")[0]).toBe("Motiv: Rose mit Schriftzug");
+    const open = buildConsultationEvent({
+      ...base,
+      lead: { ...base.lead, tattooSummary: null },
+      mode: "ON_SITE",
+    });
+    expect(open.description.split("\n")[0]).toBe("Motiv: noch offen");
   });
 });
