@@ -30,6 +30,7 @@ import {
 import { botActiveFor, isBotGloballyEnabled } from "./state";
 import { sendBotReply } from "../whatsapp/replies";
 import type { PushSender } from "../push";
+import { loadConsultationOptions } from "../consultation-options";
 import { costMicros } from "./costs";
 import { handOverChat } from "./handover";
 
@@ -325,6 +326,7 @@ export async function runBotTurn(deps: BrainDeps, leadId: string): Promise<TurnR
   const knowledge = toKnowledge(
     (await prisma.botKnowledge.findUnique({ where: { id: 1 } })) as Record<string, unknown> | null,
   );
+  const consultation = await loadConsultationOptions(prisma);
   const allowedLinks = Object.values(knowledge.links).filter(Boolean) as string[];
   const forbiddenWords = forbiddenWordList(knowledge.forbiddenWords);
 
@@ -345,7 +347,7 @@ export async function runBotTurn(deps: BrainDeps, leadId: string): Promise<TurnR
   const system = [
     {
       type: "text" as const,
-      text: buildSystemPrompt(knowledge),
+      text: buildSystemPrompt(knowledge, consultation),
       cache_control: { type: "ephemeral" as const },
     },
   ];
@@ -378,6 +380,14 @@ export async function runBotTurn(deps: BrainDeps, leadId: string): Promise<TurnR
         }
         case "termin_buchen": {
           const i = bookInput.parse(raw);
+          const mode = i.form === "telefon" ? "PHONE" : "ON_SITE";
+          if (!consultation.modes.includes(mode))
+            return {
+              content: `Diese Beratungsform bietet das Studio nicht an. Möglich: ${consultation.modes
+                .map((m) => (m === "PHONE" ? "telefon" : "vor_ort"))
+                .join(", ")}.`,
+              isError: true,
+            };
           if (!offered.has(new Date(i.start).toISOString()))
             return {
               content: "Diese Zeit kam nicht aus freie_termine. Erst freie_termine abfragen.",

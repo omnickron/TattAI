@@ -14,6 +14,7 @@ import type { WhatsAppClient } from "../../whatsapp/client";
 import { runBotTurn, type BrainClient, type BrainConfig } from "../brain";
 import { costMicros } from "../costs";
 import { mentionsPrice } from "../filters";
+import { loadConsultationOptions } from "../../consultation-options";
 import { FIXED_RULES } from "../knowledge";
 import { AI_DISCLOSURE } from "../prompt";
 import { PERSONAS, type Persona } from "./personas";
@@ -113,7 +114,9 @@ const textOf = (res: BetaMessage) =>
 
 /** Removes everything the bot test created (also leftovers of an aborted run). */
 export async function cleanupTestLeads(prisma: Pick<PrismaClient, "lead">) {
-  const r = await prisma.lead.deleteMany({ where: { name: { startsWith: TEST_LEAD_PREFIX } } });
+  const r = await prisma.lead.deleteMany({
+    where: { OR: [{ isTest: true }, { name: { startsWith: TEST_LEAD_PREFIX } }] },
+  });
   return r.count;
 }
 
@@ -160,6 +163,13 @@ async function judge(
   transcript: ChatLine[],
   facts: { booked: boolean; handedOver: boolean; hardFindings: string[] },
 ) {
+  const options = await loadConsultationOptions(deps.prisma);
+  const studioFacts = [
+    options.free
+      ? "Die Beratung ist kostenlos (das darf der Bot sagen)."
+      : "Ob die Beratung etwas kostet, darf der Bot nicht sagen.",
+    `Beratungsformen: ${options.modes.map((m) => (m === "PHONE" ? "telefonisch" : "vor Ort")).join(" und ")}.`,
+  ].join(" ");
   const chat = transcript
     .map(
       (l) =>
@@ -187,7 +197,9 @@ async function judge(
         },
       },
     },
-    system: `Du bewertest Chats des WhatsApp-Bots eines Tattoo-Studios. Ziel des Bots: Tattoo-Idee klären und zu einem Beratungstermin führen. Er duzt, schreibt kurz (höchstens 3 Sätze, eine Frage pro Nachricht) und warm.
+    system: `Du bewertest Chats des WhatsApp-Bots eines Tattoo-Studios. Ziel des Bots: Tattoo-Idee klären und zu einem Beratungstermin führen. Er duzt, schreibt kurz (höchstens 3 Sätze, eine Frage pro Nachricht) und natürlich wie ein Mensch im Chat: Er wiederholt oder fasst nicht zusammen, was der Kunde geschrieben hat, und lobt die Idee nicht in jeder Nachricht.
+
+Feststehende Fakten des Studios: ${studioFacts}
 
 Feste Regeln:
 ${FIXED_RULES.map((r) => `- ${r}`).join("\n")}
@@ -252,6 +264,7 @@ async function runPersona(deps: EvalDeps, persona: Persona, index: number): Prom
     data: {
       source: "MANUAL",
       name: `${TEST_LEAD_PREFIX}${persona.firstName}`,
+      isTest: true,
       phoneE164: `+4915000000${String(index).padStart(3, "0")}`,
       phoneValid: true,
       // No consent: the messaging worker never sends automatic messages to test leads

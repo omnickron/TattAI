@@ -13,7 +13,8 @@ import {
 import { requireAdmin } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { formatDateTime } from "@/lib/format";
-import { updateConsentSettings, updateStudioSettings } from "./actions";
+import { loadConsultationOptions } from "@/lib/consultation-options";
+import { updateConsentSettings, updateConsultationSettings, updateStudioSettings } from "./actions";
 import { TeamupCard } from "./teamup-card";
 
 export const metadata: Metadata = { title: "Einstellungen" };
@@ -29,6 +30,7 @@ export default async function SettingsPage() {
     }),
   ]);
   const mockMode = process.env.META_GRAPH_MOCK === "true";
+  const consultation = await loadConsultationOptions(prisma);
 
   return (
     <>
@@ -89,6 +91,37 @@ export default async function SettingsPage() {
                 placeholder="Straße Nr., PLZ Ort"
               />
             </Field>
+            <Button type="submit">Speichern</Button>
+          </ActionForm>
+        </Card>
+
+        <Card>
+          <CardTitle>Beratung</CardTitle>
+          <p className="mb-4 text-sm text-ink-soft">
+            Welche Beratungsformen ihr anbietet. Nur diese stehen beim Buchen zur Auswahl, und nur
+            diese bietet der Bot an.
+          </p>
+          <ActionForm action={updateConsultationSettings}>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                name="onSite"
+                defaultChecked={consultation.modes.includes("ON_SITE")}
+              />
+              Vor Ort im Studio
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                name="phone"
+                defaultChecked={consultation.modes.includes("PHONE")}
+              />
+              Telefonisch (für Kunden, die nicht anreisen können)
+            </label>
+            <label className="flex items-center gap-2 border-t border-line pt-3 text-sm">
+              <input type="checkbox" name="free" defaultChecked={consultation.free} />
+              Die Beratung ist kostenlos (der Bot darf das sagen)
+            </label>
             <Button type="submit">Speichern</Button>
           </ActionForm>
         </Card>

@@ -7,6 +7,7 @@ import { APP_TIMEZONE } from "@/lib/format";
 import { formatEuro } from "@/lib/outcomes/money";
 import { CONSULTATION_MODE_LABELS, summaryLines } from "@/lib/scheduling/event-content";
 import { EntryChip, type EntryDetail } from "./entry-detail";
+import { loadConsultationOptions } from "@/lib/consultation-options";
 import { AddEntryButton, BlockerChip, ClickLayer, NewEntryProvider } from "./new-entry";
 import {
   addDays,
@@ -179,6 +180,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
     where: {
       status: { not: "CANCELLED" },
       walkIn: false,
+      lead: { isTest: false },
       startsAt: {
         gte: startOfLocalDay(first, APP_TIMEZONE),
         lt: startOfLocalDay(addDays(first, dayCount), APP_TIMEZONE),
@@ -397,6 +399,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
       isAdmin={isAdmin}
       tattooers={dialogTattooers}
       defaultTattooerId={isAdmin ? filter : (user.tattooerProfile?.id ?? null)}
+      modes={(await loadConsultationOptions(prisma)).modes}
     >
       <PageHeader
         title="Kalender"

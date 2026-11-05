@@ -1,4 +1,9 @@
 import { ActionForm } from "@/components/action-form";
+import {
+  loadConsultationOptions,
+  MODE_OPTION_LABELS,
+  selectableModes,
+} from "@/lib/consultation-options";
 import { OutcomePanel, type OutcomeConsultation } from "@/components/outcome-panel";
 import {
   Badge,
@@ -85,6 +90,7 @@ export async function ConsultationsSection({
 }) {
   const isAdmin = user.role === "ADMIN";
   const now = new Date();
+  const modeOptions = await loadConsultationOptions(prisma);
   const hasUpcoming = consultations.some((c) => c.status === "SCHEDULED" && c.endsAt > now);
   const tattooers = isAdmin
     ? await prisma.tattooerProfile.findMany({
@@ -186,8 +192,11 @@ export async function ConsultationsSection({
                             aria-label="Beratungsform"
                             className="w-44"
                           >
-                            <option value="ON_SITE">Vor Ort</option>
-                            <option value="PHONE">Telefon (kann nicht anreisen)</option>
+                            {selectableModes(modeOptions, c.mode).map((m) => (
+                              <option key={m} value={m}>
+                                {MODE_OPTION_LABELS[m]}
+                              </option>
+                            ))}
                           </Select>
                           <Button type="submit" variant="secondary">
                             Ändern
@@ -265,6 +274,7 @@ async function BookingForm({
   bookDate: string | undefined;
   tattooers: Array<{ id: string; user: { name: string } }>;
 }) {
+  const modeOptions = await loadConsultationOptions(prisma);
   const today = localDateOf(new Date(), APP_TIMEZONE);
   const day = bookDate && isLocalDate(bookDate) && bookDate >= today ? bookDate : today;
   const slots = await getAvailableSlots(schedulingDeps(), {
@@ -320,9 +330,12 @@ async function BookingForm({
             </div>
           </fieldset>
           <div className="grid gap-2 sm:grid-cols-2">
-            <Select name="mode" defaultValue="ON_SITE" aria-label="Beratungsform">
-              <option value="ON_SITE">Vor Ort</option>
-              <option value="PHONE">Telefon (kann nicht anreisen)</option>
+            <Select name="mode" defaultValue={modeOptions.modes[0]} aria-label="Beratungsform">
+              {modeOptions.modes.map((m) => (
+                <option key={m} value={m}>
+                  {MODE_OPTION_LABELS[m]}
+                </option>
+              ))}
             </Select>
             <Select name="tattooerId" defaultValue="" aria-label="Tätowierer">
               <option value="">Automatisch (fair)</option>

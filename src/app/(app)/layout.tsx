@@ -18,12 +18,14 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     where: {
       status: "SCHEDULED",
       endsAt: { lte: new Date() },
+      lead: { isTest: false },
       ...(isAdmin ? {} : { tattooerId: user.tattooerProfile?.id ?? "__none__" }),
     },
   });
   // Chats the bot handed over that nobody has picked up yet
   const handovers = await prisma.lead.count({
     where: {
+      isTest: false,
       botEnabled: false,
       botDisabledReason: "BOT_HANDOVER",
       ...(isAdmin

@@ -18,6 +18,7 @@ export async function loadReport(
 ) {
   const rows = await prisma.lead.findMany({
     where: {
+      isTest: false,
       createdAt: {
         gte: startOfLocalDay(from, timeZone),
         lt: startOfLocalDay(addDays(to, 1), timeZone),

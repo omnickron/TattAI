@@ -5,6 +5,8 @@ import { LeadStatusBadge } from "@/components/lead-status-badge";
 import { OutcomePanel } from "@/components/outcome-panel";
 import { Badge, Card, cn } from "@/components/ui";
 import { requireUser } from "@/lib/auth/session";
+import { ActionButton } from "./admin/billing/buttons";
+import { resolveHandover } from "./handover-actions";
 import { loadDashboard } from "@/lib/dashboard";
 import { APP_TIMEZONE, formatRelative } from "@/lib/format";
 import { CONSULTATION_MODE_LABELS } from "@/lib/scheduling/event-content";
@@ -136,15 +138,15 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
         <Card className="border-red-300 bg-red-50/60 dark:border-red-900 dark:bg-red-950/30">
           <SectionTitle count={data.handovers.length}>Braucht euch</SectionTitle>
           <p className="-mt-1 mb-3 text-sm text-ink-soft">
-            Der Bot hat diese Chats an euch übergeben. Sobald ihr im Chat antwortet oder den Bot
-            wieder einschaltet, verschwinden sie hier.
+            Der Bot hat diese Chats an euch übergeben. Sie bleiben hier, bis ihr im Chat antwortet,
+            den Bot wieder einschaltet oder sie als erledigt markiert (z. B. nach einem Anruf).
           </p>
           <ul className="space-y-2">
             {data.handovers.map((h) => (
-              <li key={h.id}>
+              <li key={h.id} className="flex items-center gap-2 rounded-lg bg-surface pr-3">
                 <Link
                   href={`/leads/${h.id}`}
-                  className="flex items-center gap-3 rounded-lg bg-surface p-3 hover:bg-muted"
+                  className="flex min-w-0 flex-1 items-center gap-3 rounded-lg p-3 hover:bg-muted"
                 >
                   <Initials name={h.name} />
                   <span className="min-w-0 flex-1">
@@ -159,6 +161,12 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
                     </span>
                   )}
                 </Link>
+                <ActionButton
+                  action={resolveHandover.bind(null, h.id)}
+                  confirm={`Übergabe für ${h.name} als erledigt markieren? Der Bot bleibt in diesem Chat aus.`}
+                >
+                  Erledigt
+                </ActionButton>
               </li>
             ))}
           </ul>

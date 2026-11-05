@@ -2,7 +2,7 @@
  * Hard checks on every bot reply before it goes out. A rejected reply is sent back to
  * the model with the reason; if it fails again, the chat is handed over to a person.
  */
-import { MAX_REPLY_CHARS } from "./prompt";
+import { MAX_REPLY_CHARS, MAX_REPLY_SENTENCES } from "./prompt";
 
 export interface ReplyContext {
   allowedLinks: string[];
@@ -39,6 +39,18 @@ export function forbiddenWordList(text: string | null | undefined): string[] {
     .filter((w) => w.length >= 3);
 }
 
+/** Sentences in a chat message (abbreviations like "z. B." or "ca." don't end one). */
+export function sentenceCount(text: string): number {
+  const cleaned = text
+    .replace(/\b(z\.\s?B|ca|bzw|evtl|ggf|inkl|u\.\s?a|d\.\s?h|Nr|Str)\./gi, "$1")
+    .replace(/\d+\.\d+\.?/g, "0")
+    .replace(/https?:\/\/\S+/g, "link");
+  return cleaned
+    .split(/[.!?…]+(?:\s+|$)/)
+    .map((x) => x.replace(/[\p{Extended_Pictographic}\s]/gu, ""))
+    .filter((x) => x.length > 1).length;
+}
+
 /** Mentions a price, an amount or a price range. */
 export const mentionsPrice = (text: string) => PRICE_RES.some((re) => re.test(text));
 
@@ -48,6 +60,11 @@ export function checkReply(text: string, ctx: ReplyContext): string[] {
   const t = text.trim();
   if (t.length > MAX_REPLY_CHARS)
     problems.push(`Zu lang (${t.length} Zeichen, höchstens ${MAX_REPLY_CHARS}). Kürzer schreiben.`);
+  const sentences = sentenceCount(t);
+  if (sentences > MAX_REPLY_SENTENCES)
+    problems.push(
+      `${sentences} Sätze – höchstens ${MAX_REPLY_SENTENCES} kurze Sätze. Kürzer schreiben, nichts wiederholen.`,
+    );
   if (mentionsPrice(t))
     problems.push(
       "Enthält einen Preis oder Betrag. Nie Preise nennen – der Preis wird in der Beratung geklärt.",

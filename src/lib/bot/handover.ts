@@ -47,6 +47,7 @@ export async function loadHandovers(
 ) {
   return prisma.lead.findMany({
     where: {
+      isTest: false,
       botEnabled: false,
       botDisabledReason: "BOT_HANDOVER",
       ...(scope.isAdmin

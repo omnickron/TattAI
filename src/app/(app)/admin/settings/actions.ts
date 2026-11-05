@@ -123,3 +123,21 @@ export async function updateTeamupSettings(
   revalidatePath("/availability");
   return { ok: true, message: `TeamUp gespeichert.${note}` };
 }
+
+/** Consultation forms the studio offers and whether the consultation is free. */
+export async function updateConsultationSettings(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireAdmin();
+  const data = {
+    consultationOnSite: formData.get("onSite") === "on",
+    consultationPhone: formData.get("phone") === "on",
+    consultationFree: formData.get("free") === "on",
+  };
+  if (!data.consultationOnSite && !data.consultationPhone)
+    return { ok: false, message: "Mindestens eine Beratungsform muss angeboten werden." };
+  await prisma.appSettings.upsert({ where: { id: 1 }, update: data, create: { id: 1, ...data } });
+  revalidatePath("/admin/settings");
+  return { ok: true, message: "Gespeichert. Gilt für neue Buchungen und den Bot." };
+}
