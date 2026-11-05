@@ -33,6 +33,7 @@ model User {
   leadNotes        LeadNote[]
   sentMessages     Message[]
   botDisabledLeads Lead[]           @relation("BotDisabledBy")
+  contentItems     ContentItem[]
 }
 
 enum CalendarProvider {
@@ -365,22 +366,22 @@ model FairnessShare {
 
 // Singleton row (id = 1) with settings the admin can change in the UI.
 model AppSettings {
-  id                 Int      @id @default(1)
+  id                    Int      @id @default(1)
   // Key of the consent checkbox in the Meta instant form (custom disclaimer).
-  consentCheckboxKey String?
+  consentCheckboxKey    String?
   // Exact wording of the consent text shown in the form; snapshotted per lead.
-  consentText        String?
+  consentText           String?
   // Studio name, available as {{Studio}} in WhatsApp templates
-  studioName         String?
+  studioName            String?
   // Address used as location of on-site consultations in calendar events
-  studioAddress      String?
+  studioAddress         String?
   // TeamUp (shared studio calendar): sub-calendar the app writes to and the "Artist" field
   // ("who" = TeamUp's built-in "Wer" field, otherwise the id of a custom field)
   teamupSubcalendarId   String?
   teamupSubcalendarName String?
   teamupArtistFieldId   String?
   teamupArtistFieldName String?
-  updatedAt          DateTime @updatedAt
+  updatedAt             DateTime @updatedAt
 }
 
 enum WebhookEventStatus {
@@ -650,4 +651,31 @@ model CalendarEventDeletion {
   createdAt  DateTime @default(now())
 
   @@unique([calendarId, eventId])
+}
+
+// ---------------------------------------------------------------------------
+// Content for Meta ads (photos/videos uploaded by the team)
+// ---------------------------------------------------------------------------
+
+enum ContentKind {
+  IMAGE
+  VIDEO
+}
+
+model ContentItem {
+  id            String      @id @default(cuid())
+  uploaderId    String
+  uploader      User        @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+  kind          ContentKind
+  mimeType      String
+  sizeBytes     Int
+  originalName  String
+  // Relative path inside MEDIA_STORAGE_DIR (private, never served publicly)
+  storagePath   String      @unique
+  // Admin: picked for an upcoming ad
+  selectedForAd Boolean     @default(false)
+  createdAt     DateTime    @default(now())
+
+  @@index([uploaderId, createdAt])
+  @@index([createdAt])
 }
