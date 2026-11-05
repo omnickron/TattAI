@@ -12,7 +12,7 @@ Sprache der Oberfläche und aller Texte für Nutzer: Deutsch. Code, Variablen un
 - Erwartet werden ca. 100 bis 150 Leads pro Woche.
 - Es gibt keine Empfangskraft: Jeder Tätowierer führt seine Beratungen selbst durch und bucht sie für sich.
 - Kapazität ist vorerst kein Thema der App. Die von den Tätowierern freigegebenen Zeiten werden einfach gefüllt.
-- Der Chatbot für WhatsApp wird NICHT in diesem Projekt gebaut. Die App stellt nur eine saubere Schnittstelle bereit, an die er später angebunden wird.
+- Der WhatsApp-Chatbot wird direkt in NEEDL gebaut (Entscheidung vom 05.11.2026, vorher außerhalb geplant): Claude (Anthropic API) als Gehirn im Hintergrunddienst, Gedächtnis und Regeln aus NEEDL, kein Make. Ziel: Tattoo-Idee klären und Beratungstermin buchen. Anrede „du“. Übergabe an Menschen mit Meldung in der App und per Push-Benachrichtigung. Die Bot-Schnittstelle (API) bleibt für andere Anbindungen bestehen.
 
 ## Entscheidungen (verbindlich)
 
