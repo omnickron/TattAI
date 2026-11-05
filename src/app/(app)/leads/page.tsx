@@ -1,7 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { LeadStatusBadge } from "@/components/lead-status-badge";
-import { Badge, Button, ButtonLink, EmptyState, Input, PageHeader, Select } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  ButtonLink,
+  cn,
+  EmptyState,
+  Input,
+  PageHeader,
+  Select,
+} from "@/components/ui";
 import { requireUser } from "@/lib/auth/session";
 import { formatDateTime, formatPhone } from "@/lib/format";
 import { LEAD_STATUS_LABELS, LEAD_STATUS_ORDER, PLATFORM_LABELS } from "@/lib/labels";
@@ -14,6 +23,7 @@ function pageHref(filters: LeadFilters, page: number) {
   if (filters.q) params.set("q", filters.q);
   if (filters.status) params.set("status", filters.status);
   if (filters.campaign) params.set("campaign", filters.campaign);
+  if (filters.view === "customers") params.set("ansicht", "kunden");
   if (page > 1) params.set("page", String(page));
   const qs = params.toString();
   return qs ? `/leads?${qs}` : "/leads";
@@ -33,11 +43,43 @@ export default async function LeadsPage({ searchParams }: PageProps<"/leads">) {
         description={
           isAdmin
             ? `${total} ${total === 1 ? "Lead" : "Leads"}${hasFilters ? " (gefiltert)" : ""}`
-            : "Leads mit Beratungsterminen bei dir"
+            : filters.view === "customers"
+              ? "Deine Kunden mit gebuchtem Tattoo"
+              : "Leads mit Beratungsterminen bei dir"
         }
       />
 
+      {!isAdmin && (
+        <div
+          role="tablist"
+          aria-label="Ansicht"
+          className="mb-4 inline-grid grid-cols-2 gap-1 rounded-lg bg-muted p-1 text-sm"
+        >
+          {[
+            { key: undefined, label: "Alle Leads" },
+            { key: "customers" as const, label: "Kunden" },
+          ].map((v) => {
+            const active = filters.view === v.key;
+            return (
+              <Link
+                key={v.label}
+                role="tab"
+                aria-selected={active}
+                href={pageHref({ ...filters, view: v.key }, 1)}
+                className={cn(
+                  "rounded-md px-4 py-1.5 text-center font-medium",
+                  active ? "bg-surface shadow-sm" : "text-ink-soft hover:text-ink",
+                )}
+              >
+                {v.label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+
       <form className="mb-4 grid gap-2 sm:grid-cols-[1fr_auto_auto_auto]" role="search">
+        {filters.view === "customers" && <input type="hidden" name="ansicht" value="kunden" />}
         <Input
           type="search"
           name="q"
@@ -66,7 +108,7 @@ export default async function LeadsPage({ searchParams }: PageProps<"/leads">) {
             Filtern
           </Button>
           {hasFilters && (
-            <ButtonLink href="/leads" variant="ghost">
+            <ButtonLink href={pageHref({ page: 1, view: filters.view }, 1)} variant="ghost">
               Zurücksetzen
             </ButtonLink>
           )}
@@ -77,9 +119,11 @@ export default async function LeadsPage({ searchParams }: PageProps<"/leads">) {
         <EmptyState>
           {hasFilters
             ? "Keine Leads für diese Filter gefunden."
-            : isAdmin
-              ? "Noch keine Leads eingegangen."
-              : "Dir sind noch keine Leads zugeordnet. Sie erscheinen hier, sobald du Beratungstermine hast."}
+            : filters.view === "customers"
+              ? "Noch keine Kunden mit gebuchtem Tattoo."
+              : isAdmin
+                ? "Noch keine Leads eingegangen."
+                : "Dir sind noch keine Leads zugeordnet. Sie erscheinen hier, sobald du Beratungstermine hast."}
         </EmptyState>
       ) : (
         <div className="overflow-hidden rounded-xl border border-line bg-surface">
