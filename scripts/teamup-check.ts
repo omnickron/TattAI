@@ -52,7 +52,7 @@ async function main() {
     .request<unknown>("/field-definitions")
     .catch((e) =>
       String(e.message).includes("403")
-        ? "eigene Felder nur mit Admin-Link lesbar – NEEDL nutzt dann das Feld „Wer“"
+        ? "eigene Felder nur mit Admin-Link lesbar – NEEDL nutzt dann das eingebaute Feld („Wer“, evtl. umbenannt z. B. in „Künstler“)"
         : `Fehler: ${e.message}`,
     );
   console.log(
@@ -109,7 +109,7 @@ async function main() {
   console.log("   geändert: ok");
   await client.deleteEvent(conn, conn.calendarId, id);
   console.log("   gelöscht: ok");
-  if (fieldId === WHO_FIELD) console.log("   (Artist über das Feld „Wer“)");
+  if (fieldId === WHO_FIELD) console.log("   (Artist über das eingebaute Feld „Wer“/„Künstler“)");
   console.log("\nAlles erfolgreich.");
 }
 

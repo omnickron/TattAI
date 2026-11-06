@@ -39,6 +39,8 @@ export function normalizeCalendarKey(value: string | null | undefined): string |
 }
 /** Built-in "Wer" field of TeamUp entries. */
 export const WHO_FIELD = "who";
+/** TeamUp lets studios rename the built-in field (e.g. "Künstler"); internally it stays "who". */
+export const WHO_FIELD_LABEL = "Eingebautes Feld (z. B. „Wer“ oder „Künstler“)";
 /** remote_id prefix of entries written by this app (excluded from busy times). */
 export const REMOTE_ID_PREFIX = "needl:";
 
@@ -405,7 +407,7 @@ export class TeamupClient implements CalendarClient {
 
   /** Admin settings: fields that can serve as "Artist" (built-in "Wer" + custom fields). */
   async listFields(): Promise<TeamupField[]> {
-    const who: TeamupField = { id: WHO_FIELD, name: "Wer (eingebautes Feld)", choices: null };
+    const who: TeamupField = { id: WHO_FIELD, name: WHO_FIELD_LABEL, choices: null };
     try {
       return [who, ...parseFieldDefinitions(await this.request<unknown>("/field-definitions"))];
     } catch (err) {
@@ -482,7 +484,7 @@ export class MockTeamupClient implements CalendarClient {
 
   async listFields(): Promise<TeamupField[]> {
     return [
-      { id: WHO_FIELD, name: "Wer (eingebautes Feld)", choices: null },
+      { id: WHO_FIELD, name: WHO_FIELD_LABEL, choices: null },
       { id: "artist", name: "Artist (Beispiel)", choices: await this.artists() },
     ];
   }

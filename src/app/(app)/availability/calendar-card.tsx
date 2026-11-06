@@ -259,7 +259,7 @@ async function TeamupPanel({
                 defaultValue={profile.teamupArtist ?? userName}
                 required
                 maxLength={100}
-                placeholder="Name wie im Feld „Wer“"
+                placeholder="Name wie in TeamUp (Feld „Wer“ bzw. „Künstler“)"
                 list="teamup-who-names"
               />
             )}
@@ -272,7 +272,8 @@ async function TeamupPanel({
             )}
             {cfg.artistFieldId === WHO_FIELD && (
               <span className="block text-xs text-ink-soft">
-                Genau so geschrieben, wie er in TeamUp im Feld „Wer“ steht.
+                Genau so geschrieben, wie er in TeamUp im eingebauten Feld steht (bei euch evtl.
+                „Künstler“).
               </span>
             )}
           </label>

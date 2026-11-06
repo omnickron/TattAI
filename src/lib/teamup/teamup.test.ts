@@ -12,6 +12,7 @@ import {
   TeamupClient,
   teamupEventBody,
   WHO_FIELD,
+  WHO_FIELD_LABEL,
   type TeamupConfig,
   type TeamupEvent,
 } from "./teamup";
@@ -287,7 +288,7 @@ describe("fields without administrator rights", () => {
       artistFieldId: null,
     }));
     expect(await client.listFields()).toEqual([
-      { id: WHO_FIELD, name: "Wer (eingebautes Feld)", choices: null },
+      { id: WHO_FIELD, name: WHO_FIELD_LABEL, choices: null },
     ]);
   });
 });
