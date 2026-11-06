@@ -292,3 +292,55 @@ describe("fields without administrator rights", () => {
     ]);
   });
 });
+
+describe("own sub-calendar per tattooer", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("counts entries in the own sub-calendar and entries with the own name as busy", () => {
+    const events = [
+      ev({
+        id: "1",
+        who: "",
+        subcalendar_ids: [12675385],
+        start_dt: "2026-11-09T10:00:00+01:00",
+        end_dt: "2026-11-09T11:00:00+01:00",
+      }),
+      ev({
+        id: "2",
+        who: "Krissi",
+        subcalendar_ids: [12092668],
+        start_dt: "2026-11-09T12:00:00+01:00",
+        end_dt: "2026-11-09T13:00:00+01:00",
+      }),
+      ev({
+        id: "3",
+        who: "Nico",
+        subcalendar_ids: [13354656],
+        start_dt: "2026-11-09T14:00:00+01:00",
+        end_dt: "2026-11-09T15:00:00+01:00",
+      }),
+    ];
+    const busy = busyOfArtist(events, WHO_FIELD, "Krissi", "Europe/Berlin", "12675385");
+    expect(busy.map((b) => b.start.toISOString())).toEqual([
+      "2026-11-09T09:00:00.000Z",
+      "2026-11-09T11:00:00.000Z",
+    ]);
+  });
+
+  it("writes into the own sub-calendar, otherwise the studio default", async () => {
+    const cfg = { apiKey: "k", calendarKey: "ks1", subcalendarId: "100", artistFieldId: WHO_FIELD };
+    const client = new TeamupClient(async () => cfg);
+    const conn = {
+      tattooerId: "t",
+      provider: "TEAMUP" as const,
+      refreshTokenEnc: null,
+      calendarId: null,
+    };
+    expect(
+      await client.ensureConsultationCalendar({ ...conn, teamupSubcalendarId: "12675385" }),
+    ).toBe("teamup:12675385");
+    expect(await client.ensureConsultationCalendar(conn)).toBe("teamup:100");
+    const noDefault = new TeamupClient(async () => ({ ...cfg, subcalendarId: null }));
+    await expect(noDefault.ensureConsultationCalendar(conn)).rejects.toThrow(/Kein Unterkalender/);
+  });
+});

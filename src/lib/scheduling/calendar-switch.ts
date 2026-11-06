@@ -26,6 +26,8 @@ export async function connectTeamup(
   deps: SchedulingDeps,
   tattooerId: string,
   artist: { value: string; label: string },
+  /** Own sub-calendar of the tattooer; null = studio default from the settings */
+  subcalendar: { id: string; name: string } | null = null,
 ) {
   const { prisma } = deps;
   const value = artist.value.trim();
@@ -51,6 +53,7 @@ export async function connectTeamup(
     ...connectionOf(profile),
     provider: "TEAMUP",
     teamupArtist: value,
+    teamupSubcalendarId: subcalendar?.id ?? null,
     calendarId: null,
   });
   await prisma.tattooerProfile.update({
@@ -59,6 +62,8 @@ export async function connectTeamup(
       calendarProvider: "TEAMUP",
       teamupArtist: value,
       teamupArtistLabel: artist.label.trim() || value,
+      teamupSubcalendarId: subcalendar?.id ?? null,
+      teamupSubcalendarName: subcalendar?.name ?? null,
       teamupConnectedAt: nowOf(deps),
       consultationCalendarId: calendarId,
       // Remember the Google app calendar for a later switch back

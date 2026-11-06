@@ -86,7 +86,8 @@ export interface TeamupEvent {
 }
 
 export function teamupConfigured(cfg: TeamupConfig | null): cfg is TeamupConfig {
-  return Boolean(cfg?.apiKey && cfg.calendarKey && cfg.subcalendarId && cfg.artistFieldId);
+  // The default sub-calendar is optional: tattooers can choose their own
+  return Boolean(cfg?.apiKey && cfg.calendarKey && cfg.artistFieldId);
 }
 
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -102,17 +103,24 @@ export function eventHasArtist(ev: TeamupEvent, fieldId: string, artist: string)
   return false;
 }
 
-/** Busy intervals of one artist (entries written by the app are ignored). */
+/**
+ * Busy intervals of one artist: entries with their artist value or in their own
+ * sub-calendar (entries written by the app are ignored – NEEDL knows them itself).
+ */
 export function busyOfArtist(
   events: TeamupEvent[],
   fieldId: string,
   artist: string,
   timeZone: string,
+  ownSubcalendarId?: string | null,
 ): Interval[] {
   const busy: Interval[] = [];
   for (const ev of events) {
     if (ev.remote_id?.startsWith(REMOTE_ID_PREFIX)) continue;
-    if (!eventHasArtist(ev, fieldId, artist)) continue;
+    const inOwn =
+      Boolean(ownSubcalendarId) &&
+      (ev.subcalendar_ids ?? []).some((id) => String(id) === String(ownSubcalendarId));
+    if (!inOwn && !eventHasArtist(ev, fieldId, artist)) continue;
     if (ev.all_day) {
       const startDay = localDateOf(new Date(ev.start_dt), timeZone);
       const endDay = localDateOf(new Date(ev.end_dt), timeZone);
@@ -286,14 +294,24 @@ export class TeamupClient implements CalendarClient {
     if (!cfg.artistFieldId || !conn.teamupArtist)
       throw new CalendarError("TeamUp: Artist ist nicht zugeordnet.");
     const events = await this.listEvents(from, to, cfg);
-    return busyOfArtist(events, cfg.artistFieldId, conn.teamupArtist, this.timeZone);
+    return busyOfArtist(
+      events,
+      cfg.artistFieldId,
+      conn.teamupArtist,
+      this.timeZone,
+      conn.teamupSubcalendarId,
+    );
   }
 
-  async ensureConsultationCalendar(): Promise<string> {
+  /** The tattooer's own sub-calendar, otherwise the studio default from the settings. */
+  async ensureConsultationCalendar(conn?: CalendarConnection): Promise<string> {
     const cfg = await this.config();
-    if (!cfg.subcalendarId)
-      throw new CalendarError("TeamUp: Es ist kein Unterkalender für die App-Termine gewählt.");
-    return `${TEAMUP_PREFIX}${cfg.subcalendarId}`;
+    const sub = conn?.teamupSubcalendarId || cfg.subcalendarId;
+    if (!sub)
+      throw new CalendarError(
+        "TeamUp: Kein Unterkalender gewählt (eigenen unter Verfügbarkeit wählen oder Standard in den Einstellungen).",
+      );
+    return `${TEAMUP_PREFIX}${sub}`;
   }
 
   private bodyFor(

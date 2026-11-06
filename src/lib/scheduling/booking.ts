@@ -94,6 +94,7 @@ export type CalendarProfileFields = {
   consultationCalendarId: string | null;
   calendarProvider: CalendarProviderName;
   teamupArtist: string | null;
+  teamupSubcalendarId?: string | null;
   teamupConnectedAt: Date | null;
 };
 
@@ -124,6 +125,7 @@ export function connectionOf(t: CalendarProfileFields): CalendarConnection {
     tattooerId: t.id,
     provider: t.calendarProvider,
     teamupArtist: t.teamupArtist,
+    teamupSubcalendarId: t.teamupSubcalendarId ?? null,
     refreshTokenEnc: t.googleRefreshTokenEnc,
     calendarId: t.consultationCalendarId,
   };

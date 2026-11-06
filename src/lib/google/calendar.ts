@@ -19,6 +19,8 @@ export interface CalendarConnection {
   provider?: CalendarProviderName;
   /** TeamUp: value of the "Artist" field that marks this tattooer's entries. */
   teamupArtist?: string | null;
+  /** TeamUp: the tattooer's own sub-calendar (null = studio default). */
+  teamupSubcalendarId?: string | null;
   /** Encrypted refresh token (null in mock mode). */
   refreshTokenEnc: string | null;
   /** The tattooer's app calendar ("Studio-Termine"): consultations and tattoo sessions. */
