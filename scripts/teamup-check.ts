@@ -6,7 +6,12 @@
  *                                                           – also creates, changes and deletes a test entry
  */
 import "dotenv/config";
-import { TeamupClient, WHO_FIELD, type TeamupConfig } from "../src/lib/teamup/teamup";
+import {
+  normalizeCalendarKey,
+  TeamupClient,
+  WHO_FIELD,
+  type TeamupConfig,
+} from "../src/lib/teamup/teamup";
 
 const TZ = process.env.APP_TIMEZONE || "Europe/Berlin";
 
@@ -16,7 +21,7 @@ function step(title: string) {
 
 async function main() {
   const apiKey = process.env.TEAMUP_API_KEY?.trim();
-  const calendarKey = process.env.TEAMUP_CALENDAR_KEY?.trim();
+  const calendarKey = normalizeCalendarKey(process.env.TEAMUP_CALENDAR_KEY);
   if (!apiKey || !calendarKey) {
     console.log("TEAMUP_API_KEY und TEAMUP_CALENDAR_KEY fehlen in der .env.");
     process.exit(1);
@@ -101,7 +106,32 @@ async function main() {
   console.log("\nAlles erfolgreich.");
 }
 
+const HINTS: Array<[RegExp, string]> = [
+  [
+    /TeamUp 404/,
+    "Der Kalender-Schlüssel (TEAMUP_CALENDAR_KEY) ist unbekannt. Er muss aus einem Freigabe-Link stammen (TeamUp-Einstellungen → Sharing, Berechtigung „Modify“), meist beginnt er mit „ks“. Der Schlüssel aus der Adresszeile beim Öffnen über dein Konto funktioniert nicht.",
+  ],
+  [
+    /TeamUp 401/,
+    "Der API-Schlüssel (TEAMUP_API_KEY) wird nicht akzeptiert. Bitte prüfen oder neu erzeugen.",
+  ],
+  [
+    /TeamUp 403/,
+    "Der Freigabe-Link hat zu wenige Rechte. Für NEEDL braucht er „Modify“ für die betroffenen Unterkalender.",
+  ],
+];
+
 main().catch((err) => {
-  console.error(`\nFEHLER: ${err instanceof Error ? err.message : String(err)}`);
+  const message = err instanceof Error ? err.message : String(err);
+  console.error(`\nFEHLER: ${message}`);
+  const hint = HINTS.find(([re]) => re.test(message));
+  if (hint) console.error(`\nHinweis: ${hint[1]}`);
+  console.error(`(Geprüfter Kalender-Schlüssel: ${maskedKey()})`);
   process.exit(1);
 });
+
+/** First and last characters only – never the whole key. */
+function maskedKey() {
+  const k = normalizeCalendarKey(process.env.TEAMUP_CALENDAR_KEY) ?? "";
+  return k.length > 6 ? `${k.slice(0, 3)}…${k.slice(-2)} (${k.length} Zeichen)` : "(zu kurz)";
+}

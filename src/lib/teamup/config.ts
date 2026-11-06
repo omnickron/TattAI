@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@/generated/prisma/client";
-import { isTeamupMock, type TeamupConfig } from "./teamup";
+import { isTeamupMock, normalizeCalendarKey, type TeamupConfig } from "./teamup";
 
 type SettingsDb = Pick<PrismaClient, "appSettings">;
 
@@ -14,7 +14,7 @@ export async function loadTeamupConfig(db: SettingsDb): Promise<TeamupConfig | n
   });
   const mock = isTeamupMock();
   const apiKey = mock ? "mock" : process.env.TEAMUP_API_KEY?.trim();
-  const calendarKey = mock ? "mock" : process.env.TEAMUP_CALENDAR_KEY?.trim();
+  const calendarKey = mock ? "mock" : normalizeCalendarKey(process.env.TEAMUP_CALENDAR_KEY);
   if (!apiKey || !calendarKey) return null;
   return {
     apiKey,
