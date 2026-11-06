@@ -22,7 +22,7 @@ Sprache der Oberfläche und aller Texte für Nutzer: Deutsch. Code, Variablen un
 - Lead-Quelle: Meta Instant-Formular (Lead Ads). Felder: Name, Telefonnummer, optional E-Mail. Kein Click-to-WhatsApp.
 - Das Tattoo-Anliegen wird nicht im Formular, sondern vom Chatbot im WhatsApp-Chat geklärt.
 - Keine Altersabfrage in der App oder im Chat (wird persönlich geklärt).
-- Kalender: Google Kalender oder TeamUp, pro Tätowierer wählbar. Bei TeamUp teilt sich das Studio einen Kalender; das Pflichtfeld „Artist“ hält fest, wem ein Termin gehört. Login bleibt Google.
+- Kalender: Google Kalender oder TeamUp, pro Tätowierer wählbar. Bei TeamUp teilt sich das Studio einen Kalender; jeder Tätowierer hat dort seinen eigenen Unterkalender (in NEEDL wählbar), und das eingebaute Feld (im Studio „Künstler“ genannt) hält fest, wem ein Termin gehört. NEEDL braucht dafür nur einen Freigabe-Link mit „Modify“, keine Admin-Rechte (Entscheidung vom 06.11.2026). Login bleibt Google.
 - Tattoo-Umsatz wird manuell in der App erfasst. Es gibt keine Kassensoftware.
 - Die App ist die Quelle der Wahrheit für Leads und Termine, Google Kalender wird synchronisiert.
 
