@@ -190,6 +190,11 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
     include: {
       lead: { select: { id: true, name: true, phoneE164: true, tattooSummary: true } },
       tattooer: { select: { id: true, createdAt: true, user: { select: { name: true } } } },
+      attachments: {
+        where: { status: { in: ["STORED", "PENDING"] } },
+        orderBy: { createdAt: "asc" },
+        select: { id: true, status: true, mimeType: true, caption: true },
+      },
     },
     orderBy: { startsAt: "asc" },
   });
@@ -216,6 +221,11 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
           lead: { select: { id: true, name: true, phoneE164: true, tattooSummary: true } },
           tattooer: { select: { id: true, user: { select: { name: true } } } },
           tattooBookings: { where: { cancelled: false }, select: { amountCents: true } },
+          attachments: {
+            where: { status: { in: ["STORED", "PENDING"] } },
+            orderBy: { createdAt: "asc" },
+            select: { id: true, status: true, mimeType: true, caption: true },
+          },
         },
       },
     },
@@ -254,7 +264,10 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
                 ? { label: "Ergebnis fehlt", tone: "amber" }
                 : { label: "geplant", tone: "blue" },
         motif: motifOf(c.lead.tattooSummary),
-        summary: summaryLines(c.lead.tattooSummary).filter((l) => !l.startsWith("Motiv:")),
+        summary: summaryLines(c.lead.tattooSummary).filter(
+          (l) => !l.startsWith("Motiv:") && !l.startsWith("Referenzbilder"),
+        ),
+        images: c.attachments,
         amount: null,
         total: null,
         note: null,
@@ -296,6 +309,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
         summary: summaryLines(sn.consultation.lead.tattooSummary).filter(
           (l) => !l.startsWith("Motiv:") && !l.startsWith("Referenzbilder"),
         ),
+        images: sn.consultation.attachments,
         amount: sn.amountCents != null ? formatEuro(sn.amountCents) : null,
         total:
           sn.consultation.tattooBookings.length > 1

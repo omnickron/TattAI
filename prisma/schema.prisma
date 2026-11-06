@@ -317,6 +317,7 @@ model Consultation {
 
   tattooBookings   TattooBooking[]
   outboundMessages OutboundMessage[]
+  attachments      LeadAttachment[]
 
   @@index([tattooerId, startsAt])
   @@index([leadId])
@@ -617,26 +618,31 @@ enum AttachmentStatus {
 
 // Files customers send (reference images). Stored privately on disk, never public.
 model LeadAttachment {
-  id          String           @id @default(cuid())
-  leadId      String
-  lead        Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  messageId   String?
-  message     Message?         @relation(fields: [messageId], references: [id], onDelete: SetNull)
-  waMediaId   String?          @unique
-  mimeType    String?
-  fileName    String?
-  sizeBytes   Int?
-  caption     String?
-  status      AttachmentStatus @default(PENDING)
-  attempts    Int              @default(0)
-  lastError   String?
+  id             String           @id @default(cuid())
+  leadId         String
+  lead           Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  messageId      String?
+  message        Message?         @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  // Consultation the file belongs to (reference images): the next consultation when it
+  // arrives, otherwise attached when a consultation is booked
+  consultationId String?
+  consultation   Consultation?    @relation(fields: [consultationId], references: [id], onDelete: SetNull)
+  waMediaId      String?          @unique
+  mimeType       String?
+  fileName       String?
+  sizeBytes      Int?
+  caption        String?
+  status         AttachmentStatus @default(PENDING)
+  attempts       Int              @default(0)
+  lastError      String?
   // Path relative to MEDIA_STORAGE_DIR
-  storagePath String?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  storagePath    String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 
   @@index([leadId])
   @@index([status])
+  @@index([consultationId])
 }
 
 // Outgoing events to the chatbot (signed webhook), delivered with retries by the worker.

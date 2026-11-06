@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { AttachmentThumbs, type ThumbAttachment } from "@/components/attachment-thumbs";
 import { Badge, cn } from "@/components/ui";
 
 /** Everything the popup shows about a calendar entry (built on the server). */
@@ -17,6 +18,8 @@ export type EntryDetail = {
   status: { label: string; tone: "blue" | "green" | "amber" | "red" | "gray" | "violet" } | null;
   motif: string | null;
   summary: string[];
+  /** Reference images of the consultation */
+  images: ThumbAttachment[];
   amount: string | null;
   total: string | null;
   note: string | null;
@@ -144,6 +147,14 @@ export function EntryChip({
               )}
               {detail.note && <Row label="Notiz">{detail.note}</Row>}
             </dl>
+            {detail.images.length > 0 && (
+              <div className="mt-3">
+                <p className="mb-1.5 text-sm text-ink-soft">
+                  Referenzbilder ({detail.images.length})
+                </p>
+                <AttachmentThumbs attachments={detail.images} size="sm" />
+              </div>
+            )}
 
             <div className="mt-5 flex justify-end gap-2">
               <button

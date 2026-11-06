@@ -161,13 +161,30 @@ async function judge(
   deps: EvalDeps,
   persona: Persona,
   transcript: ChatLine[],
-  facts: { booked: boolean; handedOver: boolean; hardFindings: string[] },
+  facts: {
+    booked: boolean;
+    handedOver: boolean;
+    hardFindings: string[];
+    savedIdea?: unknown;
+  },
 ) {
   const options = await loadConsultationOptions(deps.prisma);
+  const durations = await deps.prisma.tattooerProfile.aggregate({
+    where: { user: { active: true } },
+    _min: { consultationMinutes: true },
+    _max: { consultationMinutes: true },
+  });
   const studioFacts = [
     options.free
-      ? "Die Beratung ist kostenlos (das darf der Bot sagen)."
+      ? "Die Beratung ist kostenlos und unverbindlich (das darf der Bot sagen)."
       : "Ob die Beratung etwas kostet, darf der Bot nicht sagen.",
+    durations._min.consultationMinutes != null
+      ? `Beratungsdauer laut Einstellungen: ${
+          durations._min.consultationMinutes === durations._max.consultationMinutes
+            ? durations._min.consultationMinutes
+            : `${durations._min.consultationMinutes}–${durations._max.consultationMinutes}`
+        } Minuten.`
+      : "",
     `Beratungsformen: ${options.modes.map((m) => (m === "PHONE" ? "telefonisch" : "vor Ort")).join(" und ")}.`,
   ].join(" ");
   const chat = transcript
@@ -215,6 +232,7 @@ ${persona.expectHandover ? "Hier sollte der Bot an einen Menschen übergeben.\n"
 Fakten aus NEEDL: Termin gebucht: ${facts.booked ? "ja" : "nein"}; an Menschen übergeben: ${facts.handedOver ? "ja" : "nein"}${
           facts.hardFindings.length ? `; automatische Prüfung: ${facts.hardFindings.join(" ")}` : ""
         }
+Vom Bot gespeicherte Tattoo-Idee: ${facts.savedIdea ? JSON.stringify(facts.savedIdea) : "(nichts gespeichert)"}
 
 <chat>
 ${chat}
@@ -332,7 +350,14 @@ async function runPersona(deps: EvalDeps, persona: Persona, index: number): Prom
     });
     cost += turns._sum.costMicros ?? 0;
     result.hardFindings = hardChecks(persona, transcript, result);
-    const j = await judge(deps, persona, transcript, result);
+    const saved = await prisma.lead.findUnique({
+      where: { id: lead.id },
+      select: { tattooSummary: true },
+    });
+    const j = await judge(deps, persona, transcript, {
+      ...result,
+      savedIdea: saved?.tattooSummary,
+    });
     cost += j.cost;
     result.grade = j.note;
     result.goalReached = j.ziel_erreicht;

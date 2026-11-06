@@ -132,6 +132,12 @@ async function handleInbound(prisma: PrismaClient, m: WaMessage, now: Date) {
   const media = m.image ?? m.document;
   const attachmentIds: string[] = [];
   if (media?.id) {
+    // Reference images belong to the customer's next consultation (if one is booked)
+    const upcoming = await prisma.consultation.findFirst({
+      where: { leadId: lead.id, status: "SCHEDULED", walkIn: false, endsAt: { gt: now } },
+      orderBy: { startsAt: "asc" },
+      select: { id: true },
+    });
     const created = await prisma.leadAttachment.upsert({
       where: { waMediaId: media.id },
       update: {},
@@ -142,6 +148,7 @@ async function handleInbound(prisma: PrismaClient, m: WaMessage, now: Date) {
         mimeType: media.mime_type ?? null,
         fileName: m.document?.filename ?? null,
         caption: media.caption ?? null,
+        consultationId: upcoming?.id ?? null,
       },
     });
     attachmentIds.push(created.id);
