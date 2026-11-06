@@ -12,6 +12,7 @@ import {
   TeamupClient,
   teamupEventBody,
   WHO_FIELD,
+  WHO_FIELD_LABEL,
   type TeamupConfig,
   type TeamupEvent,
 } from "./teamup";
@@ -269,5 +270,25 @@ describe("calendar key from the environment", () => {
     expect(normalizeCalendarKey("https://teamup.com/ksabc123")).toBe("ksabc123");
     expect(normalizeCalendarKey("https://teamup.com/ksabc123/?view=w")).toBe("ksabc123");
     expect(normalizeCalendarKey("")).toBeUndefined();
+  });
+});
+
+describe("fields without administrator rights", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("falls back to the built-in 'Wer' field when custom fields are forbidden", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response('{"error":{"id":"no_permission"}}', { status: 403 })),
+    );
+    const client = new TeamupClient(async () => ({
+      apiKey: "k",
+      calendarKey: "ks1",
+      subcalendarId: null,
+      artistFieldId: null,
+    }));
+    expect(await client.listFields()).toEqual([
+      { id: WHO_FIELD, name: WHO_FIELD_LABEL, choices: null },
+    ]);
   });
 });
