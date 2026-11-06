@@ -21,6 +21,8 @@ type Profile = {
   teamupConnectedAt: Date | null;
   teamupArtist: string | null;
   teamupArtistLabel: string | null;
+  teamupSubcalendarId: string | null;
+  teamupSubcalendarName: string | null;
 };
 
 const GOOGLE_MESSAGES: Record<string, { ok: boolean; text: string }> = {
@@ -213,8 +215,10 @@ async function TeamupPanel({
   let field: TeamupField | null = null;
   let loadError: string | null = null;
   let whoNames: string[] = [];
+  let subcalendars: Array<{ id: string; name: string }> = [];
   try {
     const client = createTeamupClient();
+    subcalendars = await client.listSubcalendars();
     const fields = await client.listFields();
     field = fields.find((f) => f.id === cfg.artistFieldId) ?? null;
     if (cfg.artistFieldId === WHO_FIELD) whoNames = await client.recentWhoValues().catch(() => []);
@@ -226,13 +230,21 @@ async function TeamupPanel({
   return (
     <div className="space-y-3 text-sm">
       <p className="text-ink-soft">
-        Gemeinsamer Studio-Kalender: Du bist belegt, wenn dort ein Termin mit deinem Artist steht.
-        Beratungen und Tattoo-Termine aus der App trägt sie mit deinem Artist ein.
+        Gemeinsamer Studio-Kalender: Du bist belegt, wenn in deinem Unterkalender ein Termin steht
+        oder irgendwo einer mit deinem Namen. Beratungen und Tattoo-Termine aus der App landen in
+        deinem Unterkalender, mit deinem Namen.
       </p>
       {inUse && (
         <p>
           Verbunden als Artist{" "}
-          <span className="font-medium">„{profile.teamupArtistLabel ?? profile.teamupArtist}“</span>{" "}
+          <span className="font-medium">„{profile.teamupArtistLabel ?? profile.teamupArtist}“</span>
+          {profile.teamupSubcalendarName && (
+            <>
+              {" "}
+              im Unterkalender{" "}
+              <span className="font-medium">„{profile.teamupSubcalendarName}“</span>
+            </>
+          )}{" "}
           seit {formatDateTime(profile.teamupConnectedAt)}.
         </p>
       )}
@@ -277,7 +289,31 @@ async function TeamupPanel({
               </span>
             )}
           </label>
-          <Button type="submit">{inUse ? "Artist speichern" : "TeamUp verwenden"}</Button>
+          <label className="block space-y-1.5">
+            <span className="font-medium">Dein Unterkalender</span>
+            <Select
+              name="subcalendar"
+              defaultValue={
+                profile.teamupSubcalendarId ??
+                guessSubcalendar(subcalendars, [
+                  profile.teamupArtistLabel,
+                  profile.teamupArtist,
+                  userName,
+                ])
+              }
+            >
+              <option value="">Standard aus den Einstellungen</option>
+              {subcalendars.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </Select>
+            <span className="block text-xs text-ink-soft">
+              Hier landen deine Termine aus der App.
+            </span>
+          </label>
+          <Button type="submit">{inUse ? "Speichern" : "TeamUp verwenden"}</Button>
           {!inUse && profile.calendarProvider === "GOOGLE" && profile.googleConnectedAt && (
             <p className="text-xs text-ink-soft">
               Anstehende Termine ziehen von Google in TeamUp um.
@@ -303,4 +339,22 @@ async function TeamupPanel({
       )}
     </div>
   );
+}
+
+/** Pre-selects the sub-calendar named like the tattooer (e.g. "Nico", "Nick Ink"). */
+function guessSubcalendar(
+  subs: Array<{ id: string; name: string }>,
+  names: Array<string | null | undefined>,
+): string {
+  const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9äöüß]/g, "");
+  for (const raw of names) {
+    const n = raw ? norm(raw) : "";
+    if (!n) continue;
+    const exact = subs.find((s) => norm(s.name) === n);
+    if (exact) return exact.id;
+    const first = norm(raw!.split(/\s+/)[0]);
+    const byFirst = subs.find((s) => norm(s.name.split(/\s+/)[0]) === first);
+    if (byFirst) return byFirst.id;
+  }
+  return "";
 }

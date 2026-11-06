@@ -62,21 +62,21 @@ export async function updateTeamupSettings(
   await requireAdmin();
   const subcalendarId = String(formData.get("teamupSubcalendarId") ?? "").trim();
   const fieldId = String(formData.get("teamupArtistFieldId") ?? "").trim();
-  if (!subcalendarId || !fieldId)
-    return { ok: false, message: "Bitte Unterkalender und Artist-Feld auswählen." };
+  if (!fieldId) return { ok: false, message: "Bitte das Artist-Feld auswählen." };
 
   const client = createTeamupClient();
-  let subcalendarName: string;
+  let subcalendarName: string | null = null;
   let fieldName: string;
   try {
     const [subcalendars, fields] = await Promise.all([
       client.listSubcalendars(),
       client.listFields(),
     ]);
-    const sub = subcalendars.find((s) => s.id === subcalendarId);
+    const sub = subcalendarId ? subcalendars.find((s) => s.id === subcalendarId) : null;
     const field = fields.find((f) => f.id === fieldId);
-    if (!sub || !field) return { ok: false, message: "Auswahl nicht (mehr) in TeamUp vorhanden." };
-    subcalendarName = sub.name;
+    if ((subcalendarId && !sub) || !field)
+      return { ok: false, message: "Auswahl nicht (mehr) in TeamUp vorhanden." };
+    subcalendarName = sub?.name ?? null;
     fieldName = field.name;
   } catch (err) {
     return {
@@ -87,7 +87,7 @@ export async function updateTeamupSettings(
 
   const before = await prisma.appSettings.findUnique({ where: { id: 1 } });
   const data = {
-    teamupSubcalendarId: subcalendarId,
+    teamupSubcalendarId: subcalendarId || null,
     teamupSubcalendarName: subcalendarName,
     teamupArtistFieldId: fieldId,
     teamupArtistFieldName: fieldName,
@@ -110,14 +110,25 @@ export async function updateTeamupSettings(
       data: { teamupConnectedAt: null, teamupArtist: null, teamupArtistLabel: null },
     });
     note = ` Das Artist-Feld wurde geändert: ${teamupProfiles.length} Tätowierer müssen ihren Artist unter „Verfügbarkeit“ neu wählen.`;
-  } else if (before?.teamupSubcalendarId && before.teamupSubcalendarId !== subcalendarId) {
+  } else if (
+    subcalendarId &&
+    before?.teamupSubcalendarId &&
+    before.teamupSubcalendarId !== subcalendarId
+  ) {
+    // Only tattooers without an own sub-calendar use the default
     const deps = schedulingDeps();
+    const usingDefault = await prisma.tattooerProfile.findMany({
+      where: { calendarProvider: "TEAMUP", teamupSubcalendarId: null },
+      select: { id: true },
+    });
     await prisma.tattooerProfile.updateMany({
-      where: { calendarProvider: "TEAMUP" },
+      where: { id: { in: usingDefault.map((p) => p.id) } },
       data: { consultationCalendarId: `${TEAMUP_PREFIX}${subcalendarId}` },
     });
-    for (const p of teamupProfiles) await moveUpcomingEntries(deps, p.id);
-    note = " Anstehende Termine wurden in den neuen Unterkalender verschoben.";
+    for (const p of usingDefault) await moveUpcomingEntries(deps, p.id);
+    if (usingDefault.length)
+      note =
+        " Anstehende Termine ohne eigenen Unterkalender wurden in den neuen Standard verschoben.";
   }
   revalidatePath("/admin/settings");
   revalidatePath("/availability");

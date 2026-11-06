@@ -61,11 +61,14 @@ model TattooerProfile {
 
   // Which calendar this tattooer uses. consultationCalendarId is the current app calendar:
   // a Google calendar id, or "teamup:<subcalendar id>" for the shared TeamUp calendar.
-  calendarProvider  CalendarProvider @default(GOOGLE)
+  calendarProvider      CalendarProvider @default(GOOGLE)
   // TeamUp: value of the studio's "Artist" field that marks this tattooer's entries
-  teamupArtist      String?
-  teamupArtistLabel String?
-  teamupConnectedAt DateTime?
+  teamupArtist          String?
+  teamupArtistLabel     String?
+  // Own TeamUp sub-calendar of this tattooer (null = the studio's default from the settings)
+  teamupSubcalendarId   String?
+  teamupSubcalendarName String?
+  teamupConnectedAt     DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -176,7 +176,22 @@ export async function connectTeamupAction(
 ): Promise<ActionState> {
   const user = await requireTattooer();
   const value = String(formData.get("artist") ?? "").trim();
+  const subcalendarId = String(formData.get("subcalendar") ?? "").trim();
   let label = value;
+  let subcalendar: { id: string; name: string } | null = null;
+  try {
+    if (subcalendarId) {
+      const subs = await createTeamupClient().listSubcalendars();
+      const found = subs.find((s) => s.id === subcalendarId);
+      if (!found) return { ok: false, message: "Diesen Unterkalender gibt es in TeamUp nicht." };
+      subcalendar = found;
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      message: `TeamUp ist gerade nicht erreichbar: ${err instanceof Error ? err.message : err}`,
+    };
+  }
   try {
     // Choice fields: show the choice's name instead of its id
     const fields = await createTeamupClient().listFields();
@@ -189,10 +204,15 @@ export async function connectTeamupAction(
     // label stays the raw value
   }
   try {
-    const res = await connectTeamup(schedulingDeps(), user.tattooerProfile.id, {
-      value,
-      label: label.slice(0, 100),
-    });
+    const res = await connectTeamup(
+      schedulingDeps(),
+      user.tattooerProfile.id,
+      {
+        value,
+        label: label.slice(0, 100),
+      },
+      subcalendar,
+    );
     return done(`TeamUp verbunden – deine Termine laufen jetzt über TeamUp.${moveSummary(res)}`);
   } catch (err) {
     if (err instanceof BookingError || err instanceof CalendarError)

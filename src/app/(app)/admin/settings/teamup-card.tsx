@@ -27,9 +27,7 @@ export async function TeamupCard() {
     select: { teamupArtistLabel: true, teamupArtist: true, user: { select: { name: true } } },
     orderBy: { createdAt: "asc" },
   });
-  const ready = Boolean(
-    credentials && settings?.teamupSubcalendarId && settings.teamupArtistFieldId,
-  );
+  const ready = Boolean(credentials && settings?.teamupArtistFieldId);
 
   return (
     <Card id="teamup">
@@ -69,19 +67,16 @@ export async function TeamupCard() {
       ) : (
         <ActionForm action={updateTeamupSettings}>
           <Field
-            label="Unterkalender für App-Termine"
+            label="Standard-Unterkalender (optional)"
             htmlFor="teamupSubcalendarId"
-            hint="Hier trägt die App Beratungen und Tattoo-Termine ein."
+            hint="Für Tätowierer ohne eigenen Unterkalender. Jeder wählt seinen eigenen unter „Verfügbarkeit“."
           >
             <Select
               id="teamupSubcalendarId"
               name="teamupSubcalendarId"
               defaultValue={settings?.teamupSubcalendarId ?? ""}
-              required
             >
-              <option value="" disabled>
-                Bitte auswählen …
-              </option>
+              <option value="">Keiner – jeder nutzt seinen eigenen</option>
               {subcalendars.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
