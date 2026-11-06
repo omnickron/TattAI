@@ -23,6 +23,20 @@ import {
 } from "../google/calendar";
 
 export const TEAMUP_API = "https://api.teamup.com";
+
+/**
+ * The calendar key from TEAMUP_CALENDAR_KEY: accepts the bare key ("ks…") as well as a
+ * pasted sharing link ("https://teamup.com/ks…/") and ignores quotes and spaces.
+ */
+export function normalizeCalendarKey(value: string | null | undefined): string | undefined {
+  const v = value
+    ?.trim()
+    .replace(/^["']|["']$/g, "")
+    .trim();
+  if (!v) return undefined;
+  const m = /teamup\.com\/([^/?#\s]+)/i.exec(v);
+  return (m ? m[1] : v.replace(/^\/+|\/+$/g, "")) || undefined;
+}
 /** Built-in "Wer" field of TeamUp entries. */
 export const WHO_FIELD = "who";
 /** remote_id prefix of entries written by this app (excluded from busy times). */

@@ -5,6 +5,7 @@ import {
   busyOfArtist,
   eventHasArtist,
   isoWithOffset,
+  normalizeCalendarKey,
   notesHtml,
   parseFieldDefinitions,
   REMOTE_ID_PREFIX,
@@ -258,5 +259,15 @@ describe("RoutingCalendarClient", () => {
       "teamup:create",
       "google:ensure:null",
     ]);
+  });
+});
+
+describe("calendar key from the environment", () => {
+  it("accepts the bare key and pasted sharing links", () => {
+    expect(normalizeCalendarKey("ksabc123")).toBe("ksabc123");
+    expect(normalizeCalendarKey(' "ksabc123" ')).toBe("ksabc123");
+    expect(normalizeCalendarKey("https://teamup.com/ksabc123")).toBe("ksabc123");
+    expect(normalizeCalendarKey("https://teamup.com/ksabc123/?view=w")).toBe("ksabc123");
+    expect(normalizeCalendarKey("")).toBeUndefined();
   });
 });
