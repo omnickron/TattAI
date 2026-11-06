@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import type { ActionState } from "@/lib/action-state";
 import { requireOperator } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
@@ -128,4 +129,67 @@ export async function startBotEval(): Promise<ActionState> {
   await prisma.botEvalRun.create({ data: { requestedBy: user.name } });
   revalidatePath("/operator");
   return { ok: true, message: "Test gestartet – das dauert etwa 5–10 Minuten." };
+}
+
+const adminSchema = z.object({
+  name: z.string().trim().min(1, "Name fehlt.").max(200),
+  email: z.email("E-Mail-Adresse ist ungültig.").trim().toLowerCase().max(200),
+});
+
+/** Adds a studio admin (studio owner); an existing tattooer with that e-mail becomes admin. */
+export async function createStudioAdmin(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireOperator();
+  const parsed = adminSchema.safeParse({
+    name: formData.get("name"),
+    email: formData.get("email"),
+  });
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message };
+  const { name, email } = parsed.data;
+  const domain = process.env.GOOGLE_WORKSPACE_DOMAIN?.trim().toLowerCase();
+  if (domain && !email.endsWith(`@${domain}`))
+    return { ok: false, message: `Die E-Mail muss zur Studio-Domain @${domain} gehören.` };
+  const tattoos = formData.get("tattoos") === "on";
+
+  const existing = await prisma.user.findUnique({
+    where: { email },
+    include: { tattooerProfile: true },
+  });
+  if (existing?.role === "ADMIN")
+    return { ok: false, message: `${existing.name} ist schon Admin.` };
+  if (existing) {
+    await prisma.user.update({
+      where: { id: existing.id },
+      data: { role: "ADMIN", active: true },
+    });
+    revalidatePath("/operator");
+    return { ok: true, message: `${existing.name} ist jetzt Admin (bleibt auch Tätowierer).` };
+  }
+  await prisma.user.create({
+    data: {
+      name,
+      email,
+      role: "ADMIN",
+      ...(tattoos
+        ? { tattooerProfile: { create: { fairnessShare: { create: { weight: 1 } } } } }
+        : {}),
+    },
+  });
+  revalidatePath("/operator");
+  revalidatePath("/admin/tattooers");
+  return {
+    ok: true,
+    message: `${name} wurde als Admin angelegt und kann sich jetzt mit Google anmelden.`,
+  };
+}
+
+/** Locks or unlocks a studio admin's login (never the operator's own). */
+export async function setStudioAdminActive(userId: string, active: boolean): Promise<ActionState> {
+  const user = await requireOperator();
+  if (userId === user.id) return { ok: false, message: "Dich selbst kannst du nicht sperren." };
+  await prisma.user.update({ where: { id: userId, role: "ADMIN" }, data: { active } });
+  revalidatePath("/operator");
+  return { ok: true, message: active ? "Wieder aktiviert." : "Deaktiviert, Anmeldung gesperrt." };
 }
