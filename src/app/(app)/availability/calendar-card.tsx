@@ -212,9 +212,12 @@ async function TeamupPanel({
 
   let field: TeamupField | null = null;
   let loadError: string | null = null;
+  let whoNames: string[] = [];
   try {
-    const fields = await createTeamupClient().listFields();
+    const client = createTeamupClient();
+    const fields = await client.listFields();
     field = fields.find((f) => f.id === cfg.artistFieldId) ?? null;
+    if (cfg.artistFieldId === WHO_FIELD) whoNames = await client.recentWhoValues().catch(() => []);
   } catch (err) {
     loadError = err instanceof Error ? err.message : String(err);
   }
@@ -257,7 +260,15 @@ async function TeamupPanel({
                 required
                 maxLength={100}
                 placeholder="Name wie im Feld „Wer“"
+                list="teamup-who-names"
               />
+            )}
+            {whoNames.length > 0 && (
+              <datalist id="teamup-who-names">
+                {whoNames.map((n) => (
+                  <option key={n} value={n} />
+                ))}
+              </datalist>
             )}
             {cfg.artistFieldId === WHO_FIELD && (
               <span className="block text-xs text-ink-soft">

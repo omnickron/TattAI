@@ -50,8 +50,15 @@ async function main() {
   }
   const raw = await client
     .request<unknown>("/field-definitions")
-    .catch((e) => `Fehler: ${e.message}`);
-  console.log("   Rohdaten (gekürzt):", JSON.stringify(raw).slice(0, 600));
+    .catch((e) =>
+      String(e.message).includes("403")
+        ? "eigene Felder nur mit Admin-Link lesbar – NEEDL nutzt dann das Feld „Wer“"
+        : `Fehler: ${e.message}`,
+    );
+  console.log(
+    "   Eigene Felder:",
+    typeof raw === "string" ? raw : JSON.stringify(raw).slice(0, 600),
+  );
 
   step("3. Einträge der nächsten 7 Tage (Feldwerte, keine Inhalte)");
   const from = new Date();

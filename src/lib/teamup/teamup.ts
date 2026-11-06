@@ -393,10 +393,26 @@ export class TeamupClient implements CalendarClient {
       .map((s) => ({ id: String(s.id), name: s.name }));
   }
 
+  /** Names used in the built-in "Wer" field of recent entries (suggestions for tattooers). */
+  async recentWhoValues(days = 60): Promise<string[]> {
+    const now = new Date();
+    const events = await this.listEvents(new Date(now.getTime() - days * 86_400_000), now);
+    const names = new Set<string>();
+    for (const e of events)
+      for (const n of String(e.who ?? "").split(/[,;]/)) if (n.trim()) names.add(n.trim());
+    return [...names].sort((a, b) => a.localeCompare(b, "de"));
+  }
+
   /** Admin settings: fields that can serve as "Artist" (built-in "Wer" + custom fields). */
   async listFields(): Promise<TeamupField[]> {
-    const custom = parseFieldDefinitions(await this.request<unknown>("/field-definitions"));
-    return [{ id: WHO_FIELD, name: "Wer (eingebautes Feld)", choices: null }, ...custom];
+    const who: TeamupField = { id: WHO_FIELD, name: "Wer (eingebautes Feld)", choices: null };
+    try {
+      return [who, ...parseFieldDefinitions(await this.request<unknown>("/field-definitions"))];
+    } catch (err) {
+      // Custom field definitions need an administrator link; "Wer" works without them.
+      if (err instanceof CalendarError && err.status === 403) return [who];
+      throw err;
+    }
   }
 }
 
@@ -458,6 +474,10 @@ export class MockTeamupClient implements CalendarClient {
       { id: "mock-studio-termine", name: "Studio-Termine (Beispiel)" },
       { id: "mock-privat", name: "Privat (Beispiel)" },
     ];
+  }
+
+  async recentWhoValues(): Promise<string[]> {
+    return ["Kim", "Alex"];
   }
 
   async listFields(): Promise<TeamupField[]> {
