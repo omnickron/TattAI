@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ButtonLink, cn, EmptyState, PageHeader, Select, Button } from "@/components/ui";
 import { requireUser } from "@/lib/auth/session";
+import { loadExternalEntries } from "@/lib/calendar/external";
+import { createCalendarClient } from "@/lib/google/client";
 import { prisma } from "@/lib/db";
 import { APP_TIMEZONE } from "@/lib/format";
 import { formatEuro } from "@/lib/outcomes/money";
@@ -66,10 +68,10 @@ const BLOCK_TEXTURE = {
     "repeating-linear-gradient(45deg, transparent 0 5px, color-mix(in srgb, currentColor 10%, transparent) 5px 10px)",
 };
 
-function BlockTag() {
+function BlockTag({ external }: { external?: string }) {
   return (
     <span className="mr-1 rounded bg-zinc-500 px-1 py-px text-[10px] font-semibold uppercase tracking-wide text-white">
-      Blocker
+      {external ?? "Blocker"}
     </span>
   );
 }
@@ -85,6 +87,8 @@ function TattooTag({ n }: { n?: number }) {
 type Item = {
   id: string;
   kind: "CONSULTATION" | "TATTOO" | "BLOCKER";
+  /** Read-only entry from the tattooer's own calendar (TeamUp / Google) */
+  external?: "TeamUp" | "Google";
   blockId?: string;
   note?: string | null;
   tattooerId?: string;
@@ -375,6 +379,57 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
     }
   }
 
+  // Entries from the tattooers' own calendars (TeamUp / Google), read-only
+  const external = await loadExternalEntries(prisma, createCalendarClient(prisma), {
+    from: rangeStart,
+    to: rangeEnd,
+    tattooerId: scopeTattooer,
+    own: [
+      ...consultations.map((c) => ({
+        tattooerId: c.tattooer.id,
+        start: c.startsAt,
+        end: c.endsAt,
+      })),
+      ...sessions
+        .filter((sn) => sn.startsAt && sn.endsAt)
+        .map((sn) => ({
+          tattooerId: sn.consultation.tattooer.id,
+          start: sn.startsAt!,
+          end: sn.endsAt!,
+        })),
+    ],
+  }).catch(() => ({ entries: [], failed: [] as string[] }));
+  for (const [n, e] of external.entries.entries()) {
+    for (const d of days) {
+      const dayStart = startOfLocalDay(d, APP_TIMEZONE);
+      const dayEnd = startOfLocalDay(addDays(d, 1), APP_TIMEZONE);
+      if (e.start >= dayEnd || e.end <= dayStart) continue;
+      const base = {
+        id: `ext-${n}-${d}`,
+        kind: "BLOCKER" as const,
+        external: e.source,
+        note: e.title ?? "Belegt",
+        tattooerId: e.tattooerId,
+        leadId: "",
+        leadName: e.title ?? "Belegt",
+        tattooerName: e.tattooerName,
+        tone: BLOCK_TONE,
+        status: "BLOCKER",
+        mode: null,
+        day: d,
+        lane: 0,
+        lanes: 1,
+      };
+      if (e.start <= dayStart && e.end >= dayEnd) {
+        allDay.push({ ...base, startMin: 0, endMin: 0 });
+      } else {
+        const from = e.start > dayStart ? localMinuteOf(e.start, APP_TIMEZONE) : 0;
+        const to = e.end < dayEnd ? localMinuteOf(e.end, APP_TIMEZONE) : 1440;
+        items.push({ ...base, startMin: from, endMin: Math.max(from + 15, to) });
+      }
+    }
+  }
+
   // People the "new appointment" dialog offers (admin: all active, tattooer: self)
   const dialogTattooers = (
     await prisma.tattooerProfile.findMany({
@@ -384,8 +439,8 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
     })
   ).map((t) => ({ id: t.id, name: t.user.name, consultationMinutes: t.consultationMinutes }));
   const canCreate = dialogTattooers.length > 0;
-  const canDeleteBlock = (tattooerId?: string) =>
-    isAdmin || tattooerId === user.tattooerProfile?.id;
+  const canDeleteBlock = (i: Pick<Item, "tattooerId" | "external">) =>
+    !i.external && (isAdmin || i.tattooerId === user.tattooerProfile?.id);
 
   items.sort((a, b) => a.day.localeCompare(b.day) || a.startMin - b.startMin);
   for (const d of days) layoutLanes(items.filter((i) => i.day === d));
@@ -419,10 +474,15 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
         title="Kalender"
         description={
           isAdmin
-            ? "Beratungen, Tattoo-Termine und Blocker aller Tätowierer – mit „+ Termin“ oder einem Klick auf eine freie Stelle trägst du etwas ein."
-            : "Deine Beratungen, Tattoo-Termine und Blocker – mit „+ Termin“ oder einem Klick auf eine freie Stelle trägst du etwas ein."
+            ? "Beratungen, Tattoo-Termine, Blocker und belegte Zeiten aus TeamUp/Google aller Tätowierer – mit „+ Termin“ oder einem Klick auf eine freie Stelle trägst du etwas ein."
+            : "Deine Beratungen, Tattoo-Termine, Blocker und belegte Zeiten aus deinem Kalender – mit „+ Termin“ oder einem Klick auf eine freie Stelle trägst du etwas ein."
         }
       />
+      {external.failed.length > 0 && (
+        <p className="mb-3 rounded-lg bg-amber-50 p-2 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+          Belegte Zeiten aus TeamUp/Google gerade nicht abrufbar für: {external.failed.join(", ")}.
+        </p>
+      )}
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {canCreate && (
@@ -509,13 +569,13 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
                     {i.kind === "BLOCKER" ? (
                       <BlockerChip
                         id={i.blockId!}
-                        canDelete={canDeleteBlock(i.tattooerId)}
+                        canDelete={canDeleteBlock(i)}
                         className={cn("block w-full rounded-lg border-l-4 px-3 py-2", i.tone)}
                         style={BLOCK_TEXTURE}
                       >
                         <span className="block text-sm font-medium">
-                          <BlockTag />
-                          {i.note || "Blocker"}
+                          <BlockTag external={i.external} />
+                          {i.note || (i.external ? "Belegt" : "Blocker")}
                         </span>
                         <span className="block text-xs text-ink-soft tabular-nums">
                           {i.endMin === 0
@@ -586,15 +646,15 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
                       <BlockerChip
                         key={i.id}
                         id={i.blockId!}
-                        canDelete={canDeleteBlock(i.tattooerId)}
+                        canDelete={canDeleteBlock(i)}
                         className={cn(
                           "block w-full truncate rounded-md border-l-4 px-1.5 py-0.5 text-xs",
                           i.tone,
                         )}
                         style={BLOCK_TEXTURE}
                       >
-                        <BlockTag />
-                        {i.note || "Blocker"}
+                        <BlockTag external={i.external} />
+                        {i.note || (i.external ? "Belegt" : "Blocker")}
                         {isAdmin && ` · ${i.tattooerName}`}
                       </BlockerChip>
                     ) : (
@@ -661,7 +721,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
                       <BlockerChip
                         key={i.id}
                         id={i.blockId!}
-                        canDelete={canDeleteBlock(i.tattooerId)}
+                        canDelete={canDeleteBlock(i)}
                         className={cn(
                           "absolute z-[1] overflow-hidden rounded-md border-l-4 px-1.5 py-1 text-xs leading-tight",
                           i.tone,
@@ -669,8 +729,8 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
                         style={{ ...BLOCK_TEXTURE, ...box }}
                       >
                         <span className="block truncate font-medium">
-                          <BlockTag />
-                          {i.note || "Blocker"}
+                          <BlockTag external={i.external} />
+                          {i.note || (i.external ? "Belegt" : "Blocker")}
                         </span>
                         <span className="block truncate text-ink-soft tabular-nums">
                           {formatTimeOfDay(i.startMin)}–{formatTimeOfDay(i.endMin % 1440)}

@@ -42,6 +42,12 @@ export interface CalendarClient {
   readonly mock: boolean;
   /** Busy intervals of the person (Google: all calendars; TeamUp: entries with their artist). */
   getBusy(conn: CalendarConnection, from: Date, to: Date): Promise<Interval[]>;
+  /** Busy entries with their title, for display (optional; Google only knows busy times). */
+  listBusyEntries?(
+    conn: CalendarConnection,
+    from: Date,
+    to: Date,
+  ): Promise<Array<Interval & { title: string | null }>>;
   /** Returns the id of the app-created "Studio-Termine" calendar, creating it if needed. */
   ensureConsultationCalendar(conn: CalendarConnection): Promise<string>;
   createEvent(
