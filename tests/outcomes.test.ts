@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { loadDueFollowUps, markFollowUpDone, notifyDueFollowUps } from "@/lib/outcomes/follow-up";
+import { notifyMissingOutcomes } from "@/lib/outcomes/reminders";
 import {
   addSession,
   recordOutcome,
@@ -266,5 +267,46 @@ describe("follow-up", () => {
     expect(await loadDueFollowUps(prisma, scope, new Date("2026-11-23T10:00:00Z"))).toHaveLength(1);
     await markFollowUpDone(prisma, c.id, later);
     expect(await loadDueFollowUps(prisma, scope, new Date("2026-11-23T10:00:00Z"))).toHaveLength(0);
+  });
+});
+
+describe("missing outcome reminder", () => {
+  it("pushes once in the morning while consultations from before today have no outcome", async () => {
+    const c = await consultation();
+    const stored = await prisma.consultation.findUniqueOrThrow({ where: { id: c.id } });
+    const tattooer = await prisma.tattooerProfile.findUniqueOrThrow({
+      where: { id: stored.tattooerId },
+    });
+    await prisma.pushSubscription.create({
+      data: { userId: tattooer.userId, endpoint: "https://push.test/r", p256dh: "p", auth: "a" },
+    });
+    const titles: string[] = [];
+    const push = {
+      configured: true,
+      async send(_s: unknown, p: { title: string }) {
+        titles.push(p.title);
+        return { gone: false };
+      },
+    };
+    // The consultation's day itself: not yet
+    const sameDay = new Date(stored.endsAt.getTime() + 3600_000);
+    expect(await notifyMissingOutcomes(prisma, push, sameDay)).toBe(0);
+    // Next day before 9: not yet; after 9: once
+    const nextDay = new Date(stored.startsAt.getTime() + 24 * 3600_000);
+    const early = new Date(`${nextDay.toISOString().slice(0, 10)}T06:00:00Z`); // 07:00 Berlin
+    const morning = new Date(`${nextDay.toISOString().slice(0, 10)}T08:30:00Z`); // 09:30 Berlin
+    expect(await notifyMissingOutcomes(prisma, push, early)).toBe(0);
+    expect(await notifyMissingOutcomes(prisma, push, morning)).toBe(1);
+    expect(await notifyMissingOutcomes(prisma, push, morning)).toBe(0);
+    expect(titles).toEqual(["1 Beratung ohne Ergebnis"]);
+    // Outcome entered: no reminder the day after
+    await recordOutcome(prisma, {
+      consultationId: c.id,
+      userId,
+      now: morning,
+      outcome: { outcome: "NO_SHOW" },
+    });
+    const dayAfter = new Date(morning.getTime() + 24 * 3600_000);
+    expect(await notifyMissingOutcomes(prisma, push, dayAfter)).toBe(0);
   });
 });

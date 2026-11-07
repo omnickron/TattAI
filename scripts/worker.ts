@@ -17,6 +17,7 @@ import { BOT_EVENT, processBotInbox } from "../src/lib/bot/inbox";
 import { createPushSender } from "../src/lib/push";
 import { purgeStaleLeads } from "../src/lib/leads/retention";
 import { notifyDueFollowUps } from "../src/lib/outcomes/follow-up";
+import { notifyMissingOutcomes } from "../src/lib/outcomes/reminders";
 import { refreshIntegrationSettings } from "../src/lib/integrations/store";
 import { failStaleEvalRuns, runBotEval } from "../src/lib/bot/eval/run";
 import { createMediaDownloader, downloadPendingAttachments } from "../src/lib/whatsapp/media";
@@ -135,6 +136,17 @@ async function tick() {
     if (followUps) console.info(`[worker] follow-up reminders: ${followUps}`);
   } catch (err) {
     console.error("[worker] follow-up reminders failed:", err);
+  }
+  try {
+    const outcomes = await notifyMissingOutcomes(
+      prisma,
+      push,
+      new Date(),
+      process.env.APP_TIMEZONE || "Europe/Berlin",
+    );
+    if (outcomes) console.info(`[worker] missing-outcome reminders: ${outcomes}`);
+  } catch (err) {
+    console.error("[worker] missing-outcome reminders failed:", err);
   }
   // GDPR retention: once every 6 hours
   if (Date.now() - lastRetention > 6 * 3600_000) {

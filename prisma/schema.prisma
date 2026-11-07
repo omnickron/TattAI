@@ -68,6 +68,8 @@ model TattooerProfile {
   // Own TeamUp sub-calendar of this tattooer (null = the studio's default from the settings)
   teamupSubcalendarId   String?
   teamupSubcalendarName String?
+  // Local day (YYYY-MM-DD) of the last morning push about consultations without outcome
+  outcomeReminderOn     String?
   teamupConnectedAt     DateTime?
 
   createdAt DateTime @default(now())
