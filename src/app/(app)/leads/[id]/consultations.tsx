@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { ActionForm } from "@/components/action-form";
 import { AttachmentThumbs, type ThumbAttachment } from "@/components/attachment-thumbs";
 import {
@@ -74,6 +75,13 @@ type Consultation = OutcomeConsultation & {
   tattooer: { user: { name: string } };
   attachments: ThumbAttachment[];
 };
+
+const nextDayLabel = new Intl.DateTimeFormat("de-DE", {
+  timeZone: "UTC",
+  weekday: "short",
+  day: "2-digit",
+  month: "2-digit",
+});
 
 export async function ConsultationsSection({
   user,
@@ -292,13 +300,28 @@ async function BookingForm({
     to: startOfLocalDay(addDays(day, 1), APP_TIMEZONE),
   });
   const names = new Map(tattooers.map((t) => [t.id, t.user.name]));
+  // Nothing free that day: offer the next days that have free times
+  const nextDays =
+    slots.length === 0
+      ? [
+          ...new Map(
+            (
+              await getAvailableSlots(schedulingDeps(), {
+                from: startOfLocalDay(addDays(day, 1), APP_TIMEZONE),
+                to: startOfLocalDay(addDays(day, 22), APP_TIMEZONE),
+              })
+            ).map((s) => [localDateOf(s.start, APP_TIMEZONE), s.start]),
+          ).keys(),
+        ].slice(0, 6)
+      : [];
+  const dayLink = (d: string) => `/leads/${leadId}?bookDate=${d}`;
 
   return (
     <div className="mt-4 border-t border-line pt-4">
       <h3 className="mb-1 text-sm font-semibold">Termin buchen</h3>
       <p className="mb-3 text-xs text-ink-soft">
-        Später bucht der Chatbot. Bei „automatisch“ bekommt den Termin, wer frei ist und den größten
-        Rückstand hat.
+        Normalerweise bucht der Bot im WhatsApp-Chat. Bei „Automatisch“ bekommt den Termin, wer zu
+        der Zeit frei ist und gemessen an seinem Anteil bisher am wenigsten Beratungen hatte.
       </p>
       <form className="mb-3 flex items-end gap-2">
         <Input
@@ -314,11 +337,36 @@ async function BookingForm({
         </Button>
       </form>
       {slots.length === 0 ? (
-        <p className="text-sm text-ink-soft">An diesem Tag ist niemand verfügbar.</p>
+        <div className="text-sm text-ink-soft">
+          <p>An diesem Tag ist niemand verfügbar.</p>
+          {nextDays.length > 0 ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span>Nächste freie Tage:</span>
+              {nextDays.map((d) => (
+                <Link
+                  key={d}
+                  href={dayLink(d)}
+                  scroll={false}
+                  className="rounded-lg border border-line px-2.5 py-1 text-ink hover:bg-muted"
+                >
+                  {nextDayLabel.format(new Date(`${d}T12:00:00Z`))}
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-1">
+              Auch in den nächsten drei Wochen ist nichts frei – Verfügbarkeiten der Tätowierer
+              prüfen.
+            </p>
+          )}
+        </div>
       ) : (
         <ActionForm action={bookConsultationAction.bind(null, leadId)}>
           <fieldset>
-            <legend className="mb-2 text-sm font-medium">Freie Zeiten</legend>
+            <legend className="mb-2 text-sm font-medium">
+              Freie Zeiten{" "}
+              <span className="font-normal text-ink-soft">(in Klammern: so viele sind frei)</span>
+            </legend>
             <div className="flex flex-wrap gap-2">
               {slots.map((s, i) => (
                 <label
@@ -340,21 +388,25 @@ async function BookingForm({
             </div>
           </fieldset>
           <div className="grid gap-2 sm:grid-cols-2">
-            <Select name="mode" defaultValue={modeOptions.modes[0]} aria-label="Beratungsform">
-              {modeOptions.modes.map((m) => (
-                <option key={m} value={m}>
-                  {MODE_OPTION_LABELS[m]}
-                </option>
-              ))}
-            </Select>
-            <Select name="tattooerId" defaultValue="" aria-label="Tätowierer">
-              <option value="">Automatisch (fair)</option>
-              {tattooers.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.user.name}
-                </option>
-              ))}
-            </Select>
+            <Field label="Beratungsform" htmlFor="book-mode">
+              <Select id="book-mode" name="mode" defaultValue={modeOptions.modes[0]}>
+                {modeOptions.modes.map((m) => (
+                  <option key={m} value={m}>
+                    {MODE_OPTION_LABELS[m]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Tätowierer" htmlFor="book-tattooer">
+              <Select id="book-tattooer" name="tattooerId" defaultValue="">
+                <option value="">Automatisch (fair)</option>
+                {tattooers.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.user.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
           </div>
           <Button type="submit">Termin buchen</Button>
         </ActionForm>

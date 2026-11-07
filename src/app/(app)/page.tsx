@@ -160,6 +160,21 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
         </p>
       )}
 
+      {data.sending && (
+        <Link
+          href="/admin/whatsapp"
+          className="block rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+        >
+          <span className="font-semibold">
+            {data.sending.queued} WhatsApp-Nachricht{data.sending.queued === 1 ? "" : "en"} warte
+            {data.sending.queued === 1 ? "t" : "n"} –{" "}
+            {data.sending.paused ? "der Versand ist pausiert" : "der Versand ist ausgeschaltet"}.
+          </span>{" "}
+          {data.sending.reason ? `${data.sending.reason}. ` : ""}Neue Leads werden erst
+          angeschrieben, wenn er läuft. Zu den WhatsApp-Einstellungen →
+        </Link>
+      )}
+
       {/* 0. Chats the bot handed over – only when needed */}
       {data.handovers.length > 0 && (
         <Card className="border-red-300 bg-red-50/60 dark:border-red-900 dark:bg-red-950/30">
@@ -311,11 +326,11 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
               const isCurrent = i.id === currentId;
               const isNext = i.id === nextId;
               return (
-                <li key={i.id}>
+                <li key={i.id} className="flex items-center gap-2">
                   <Link
                     href={`/leads/${i.leadId}`}
                     className={cn(
-                      "grid grid-cols-[3.75rem_1fr_auto] items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-muted/60",
+                      "grid min-w-0 flex-1 grid-cols-[3.75rem_1fr_auto] items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-muted/60",
                       past && "opacity-55",
                       isCurrent &&
                         "bg-emerald-50 ring-1 ring-emerald-200 dark:bg-emerald-950/40 dark:ring-emerald-900",
@@ -356,6 +371,15 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
                       ) : null}
                     </span>
                   </Link>
+                  {/* Phone consultations: the tattooer calls the customer */}
+                  {i.mode === "PHONE" && i.phone && !past && (
+                    <a
+                      href={`tel:${i.phone}`}
+                      className="shrink-0 rounded-lg border border-line px-3 py-1.5 text-sm hover:bg-muted"
+                    >
+                      Anrufen
+                    </a>
+                  )}
                 </li>
               );
             })}

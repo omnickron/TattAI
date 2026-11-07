@@ -46,7 +46,7 @@ export default async function ConsultationsPage({ searchParams }: PageProps<"/co
       orderBy: { startsAt: tab === "upcoming" ? "asc" : "desc" },
       take: 100,
       include: {
-        lead: { select: { id: true, name: true } },
+        lead: { select: { id: true, name: true, phoneE164: true } },
         tattooer: { include: { user: { select: { name: true } } } },
         tattooBookings: true,
       },
@@ -116,6 +116,14 @@ export default async function ConsultationsPage({ searchParams }: PageProps<"/co
                 <Badge tone={c.mode === "PHONE" ? "violet" : "gray"}>
                   {CONSULTATION_MODE_LABELS[c.mode]}
                 </Badge>
+                {c.mode === "PHONE" && c.lead.phoneE164 && (
+                  <a
+                    href={`tel:${c.lead.phoneE164}`}
+                    className="text-sm tabular-nums underline underline-offset-2"
+                  >
+                    {c.lead.phoneE164}
+                  </a>
+                )}
                 {isAdmin && (
                   <span className="ml-auto text-sm text-ink-soft">{c.tattooer.user.name}</span>
                 )}

@@ -35,24 +35,31 @@ const dayLabel = new Intl.DateTimeFormat("de-DE", {
   year: "numeric",
 });
 
-const FORM_GRID =
-  "grid grid-cols-2 items-center gap-2 space-y-0 sm:grid-cols-[10.5rem_7.5rem_7.5rem_8rem_auto]";
+// Wraps instead of fixed columns: hour/minute pickers need more room than a single field
+const FORM_GRID = "flex flex-wrap items-center gap-x-3 gap-y-2 space-y-0";
 
 function TimeInputs({ start, end }: { start?: Date | null; end?: Date | null }) {
   return (
     <>
-      <TimeSelect
-        name="start"
-        defaultValue={localTime(start ?? null)}
-        aria-label="Beginn"
-        emptyLabel="von –"
-      />
-      <TimeSelect
-        name="end"
-        defaultValue={localTime(end ?? null)}
-        aria-label="Ende"
-        emptyLabel="bis –"
-      />
+      <span className="flex items-center gap-2 text-sm">
+        <span className="text-ink-soft">von</span>
+        <TimeSelect
+          name="start"
+          defaultValue={localTime(start ?? null)}
+          aria-label="Beginn"
+          emptyLabel="–"
+        />
+      </span>
+      <span className="flex items-center gap-2 text-sm">
+        <span className="text-ink-soft">bis</span>
+        <TimeSelect
+          name="end"
+          defaultValue={localTime(end ?? null)}
+          aria-label="Ende"
+          emptyLabel="–"
+          endOfDay
+        />
+      </span>
     </>
   );
 }

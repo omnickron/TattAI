@@ -192,8 +192,23 @@ export async function loadDashboard(user: CurrentUser, now = new Date()) {
     isAdmin,
     tattooerId: user.tattooerProfile?.id ?? null,
   });
+  // Admin: automatic WhatsApp messages are switched off or paused while some are waiting
+  const sending = isAdmin
+    ? await Promise.all([
+        prisma.messagingSettings.findUnique({
+          where: { id: 1 },
+          select: { sendingEnabled: true, pausedAt: true, pausedReason: true },
+        }),
+        prisma.outboundMessage.count({ where: { status: "QUEUED" } }),
+      ]).then(([s, queued]) =>
+        queued && (!s?.sendingEnabled || s.pausedAt)
+          ? { queued, paused: Boolean(s?.pausedAt), reason: s?.pausedReason ?? null }
+          : null,
+      )
+    : null;
   return {
     isAdmin,
+    sending,
     handovers,
     followUps,
     openOutcomes,
