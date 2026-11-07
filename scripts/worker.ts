@@ -15,6 +15,7 @@ import { deliverBotEvents, deliveryConfigFromEnv } from "../src/lib/bot/deliveri
 import { brainConfigFromEnv, createBrainClient } from "../src/lib/bot/brain";
 import { BOT_EVENT, processBotInbox } from "../src/lib/bot/inbox";
 import { createPushSender } from "../src/lib/push";
+import { purgeStaleLeads } from "../src/lib/leads/retention";
 import { failStaleEvalRuns, runBotEval } from "../src/lib/bot/eval/run";
 import { createMediaDownloader, downloadPendingAttachments } from "../src/lib/whatsapp/media";
 
@@ -34,6 +35,7 @@ let stopping = false;
 // A bot test run takes minutes: it runs alongside the regular jobs
 let evalRunning = false;
 let lastLeadRetry = 0;
+let lastRetention = 0;
 
 async function tick() {
   try {
@@ -96,6 +98,16 @@ async function tick() {
     if (media.stored) console.info("[worker] stored attachments:", media.stored);
   } catch (err) {
     console.error("[worker] media download failed:", err);
+  }
+  // GDPR retention: once every 6 hours
+  if (Date.now() - lastRetention > 6 * 3600_000) {
+    lastRetention = Date.now();
+    try {
+      const purged = await purgeStaleLeads(prisma);
+      if (purged.deleted) console.info(`[worker] retention: ${purged.deleted} old leads deleted`);
+    } catch (err) {
+      console.error("[worker] retention failed:", err);
+    }
   }
   if (Date.now() - lastLeadRetry > 5 * 60_000) {
     lastLeadRetry = Date.now();

@@ -106,7 +106,8 @@ User (Rolle), TattooerProfile (Google-Verbindung, Beratungsdauer, Puffer), Avail
 - Tests für Fairness-Logik, Slot-Berechnung und Webhook-Idempotenz sind Pflicht.
 
 ## Datenschutz (DSGVO)
-- Einwilligung für WhatsApp-Kontakt speichern, Löschkonzept für Leads (Aufbewahrungsfristen festlegen, Löschfunktion im Admin).
+- Einwilligung für WhatsApp-Kontakt speichern. Löschkonzept: Leads ohne Beratung/Termin werden 10 Monate nach der letzten Aktivität automatisch gelöscht (Entscheidung vom 07.11.2026); einzelne Leads löscht der Admin von Hand.
+- Beratungsformen: vor Ort und telefonisch, in den Einstellungen pflegbar; Beratung kostenlos (Entscheidung vom 06.11.2026).
 - Auftragsverarbeitungsverträge mit Google (Workspace), Meta und dem Hosting-Anbieter.
 - Kalendereinträge enthalten Kundendaten: Zugriff nur für den zuständigen Tätowierer und den Admin.
 - Referenzbilder von Kunden sicher speichern (privater Speicher, keine öffentlichen Links).
@@ -128,10 +129,8 @@ Nach jeder Phase lauffähigen Stand liefern, bevor die nächste beginnt.
 - Warteliste, wenn keine Slots frei sind.
 
 ## Offene Punkte
-- Beratungsform (vor Ort, Video, Telefon) festlegen.
 - Zeitplan für Erstansprache und Nachfassen bei fehlender Antwort.
 - Texte der WhatsApp-Templates und Einwilligungstext im Formular.
-- Aufbewahrungsfristen für Leaddaten.
 
 ## Arbeitsweise für Claude Code
 - Vor größeren Schritten kurz den Plan nennen und auf Rückfragen hinweisen, statt bei Unklarheit zu raten.

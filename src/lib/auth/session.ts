@@ -1,12 +1,19 @@
 import { isOperator } from "./operator";
 import "server-only";
 import { cache } from "react";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
 
-export type CurrentUser = NonNullable<Awaited<ReturnType<typeof loadUser>>>;
+export type CurrentUser = NonNullable<Awaited<ReturnType<typeof loadUser>>> & {
+  /** The operator looks at the app with a tattooer's rights (own tattooer profile) */
+  viewingAsTattooer?: boolean;
+};
+
+/** Cookie of the operator's view switch ("tattooer" = tattooer rights). */
+export const VIEW_COOKIE = "needl-view";
 
 async function loadUser(id: string) {
   return prisma.user.findUnique({
@@ -28,7 +35,16 @@ export const getCurrentUser = cache(async () => {
   const id = session?.user?.id;
   if (!id) return null;
   const user = await loadUser(id);
-  return user?.active ? user : null;
+  if (!user?.active) return null;
+  // The operator can switch to a tattooer's rights; for everyone else the cookie is ignored
+  if (
+    user.role === "ADMIN" &&
+    user.tattooerProfile &&
+    isOperator(user) &&
+    (await cookies()).get(VIEW_COOKIE)?.value === "tattooer"
+  )
+    return { ...user, role: "TATTOOER" as const, viewingAsTattooer: true };
+  return user as CurrentUser;
 });
 
 export async function requireUser(): Promise<CurrentUser> {
@@ -46,7 +62,7 @@ export async function requireAdmin(): Promise<CurrentUser> {
 /** The NEEDL operator (OPERATOR_EMAIL): bot operation, costs and billing details. */
 export async function requireOperator(): Promise<CurrentUser> {
   const user = await requireUser();
-  if (!isOperator(user)) redirect("/");
+  if (!isOperator(user) || user.viewingAsTattooer) redirect("/");
   return user;
 }
 

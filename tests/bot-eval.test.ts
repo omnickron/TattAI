@@ -25,6 +25,7 @@ const msg = (content: unknown[], stop = "end_turn"): BetaMessage =>
 class FakeClaude implements BrainClient {
   customerTurns = 0;
   judged: string[] = [];
+  judgedSystem: string[] = [];
   constructor(
     private customer: string[],
     private botReply: string,
@@ -37,6 +38,7 @@ class FakeClaude implements BrainClient {
     }
     if (p.output_config?.format) {
       this.judged.push(String(p.messages[0].content));
+      this.judgedSystem.push(String(p.system));
       return msg([
         {
           type: "text",
@@ -86,6 +88,7 @@ beforeEach(async () => {
     include: { tattooerProfile: true },
   });
   calendarIdBefore = u.tattooerProfile!.consultationCalendarId;
+  await prisma.botKnowledge.create({ data: { id: 1, location: "Gärtnerstraße 22" } });
 });
 
 afterAll(() => prisma.$disconnect());
@@ -119,6 +122,12 @@ describe("bot test with AI customers", () => {
       "bot",
     ]);
     expect(claude.judged[0]).toContain("Fragt, ob ein Bot schreibt");
+    // The grader sees the studio knowledge, so facts from it are not "invented"
+    expect(claude.judgedSystem[0]).toContain(
+      "<standort>Gärtnerstraße 22</standort>"
+        .replace("<standort>", "<standort>\n")
+        .replace("</standort>", "\n</standort>"),
+    );
 
     // Nothing left behind, real calendar settings untouched
     expect(await prisma.lead.count({ where: { name: { startsWith: TEST_LEAD_PREFIX } } })).toBe(0);

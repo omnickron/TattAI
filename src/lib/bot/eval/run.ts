@@ -15,8 +15,8 @@ import { runBotTurn, type BrainClient, type BrainConfig } from "../brain";
 import { costMicros } from "../costs";
 import { mentionsPrice } from "../filters";
 import { loadConsultationOptions } from "../../consultation-options";
-import { FIXED_RULES } from "../knowledge";
-import { AI_DISCLOSURE } from "../prompt";
+import { FIXED_RULES, toKnowledge } from "../knowledge";
+import { AI_DISCLOSURE, knowledgeText } from "../prompt";
 import { PERSONAS, type Persona } from "./personas";
 
 export const TEST_LEAD_PREFIX = "[Bot-Test] ";
@@ -169,6 +169,12 @@ async function judge(
   },
 ) {
   const options = await loadConsultationOptions(deps.prisma);
+  const knowledge = toKnowledge(
+    (await deps.prisma.botKnowledge.findUnique({ where: { id: 1 } })) as Record<
+      string,
+      unknown
+    > | null,
+  );
   const durations = await deps.prisma.tattooerProfile.aggregate({
     where: { user: { active: true } },
     _min: { consultationMinutes: true },
@@ -216,7 +222,10 @@ async function judge(
     },
     system: `Du bewertest Chats des WhatsApp-Bots eines Tattoo-Studios. Ziel des Bots: Tattoo-Idee klären und zu einem Beratungstermin führen. Er duzt, schreibt kurz (höchstens 3 Sätze, eine Frage pro Nachricht) und natürlich wie ein Mensch im Chat: Er wiederholt oder fasst nicht zusammen, was der Kunde geschrieben hat, und lobt die Idee nicht in jeder Nachricht.
 
-Feststehende Fakten des Studios: ${studioFacts}
+Feststehende Fakten des Studios: ${studioFacts} Standardform ist vor Ort; telefonisch nur, wenn der Kunde nicht anreisen kann oder danach fragt.
+
+Wissen des Studios (nur was hier steht, darf der Bot als Fakt nennen):
+${knowledgeText(knowledge)}
 
 Feste Regeln:
 ${FIXED_RULES.map((r) => `- ${r}`).join("\n")}

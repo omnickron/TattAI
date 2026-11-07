@@ -65,6 +65,32 @@ function SectionTitle({
   );
 }
 
+/** Count of one kind of appointment in the week strip: coloured when there is something. */
+function CountPill({
+  count,
+  tone,
+  dim,
+}: {
+  count: number;
+  tone: "consultation" | "tattoo";
+  dim: boolean;
+}) {
+  if (!count) return <span className="text-sm leading-6 text-ink-soft/50 tabular-nums">0</span>;
+  return (
+    <span
+      className={cn(
+        "min-w-7 rounded-full px-2 text-sm leading-6 font-semibold tabular-nums",
+        tone === "consultation"
+          ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200"
+          : "bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-200",
+        dim && "opacity-70",
+      )}
+    >
+      {count}
+    </span>
+  );
+}
+
 function MoreLink({ href, children }: { href: string; children: ReactNode }) {
   return (
     <Link href={href} className="text-sm font-medium text-ink-soft hover:text-ink">
@@ -306,6 +332,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
           {data.week.days.map((d) => {
             const isToday = d.date === data.week.today;
             const isPast = d.date < data.week.today;
+            const busy = d.consultations + d.tattoos > 0;
             const label = new Date(`${d.date}T12:00:00Z`);
             return (
               <li key={d.date}>
@@ -313,30 +340,32 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
                   href={`/calendar?view=day&date=${d.date}`}
                   title={`${d.consultations} Beratungen, ${d.tattoos} Tattoo-Termine`}
                   className={cn(
-                    "block rounded-lg border px-1 py-2 text-center hover:bg-muted/60",
-                    isToday ? "border-ink" : "border-line",
-                    isPast && "opacity-55",
+                    "block rounded-lg border px-1 py-2 text-center transition-colors hover:bg-muted/60",
+                    isToday ? "border-ink" : busy ? "border-line bg-muted/50" : "border-line",
                   )}
                 >
-                  <span
-                    className={cn("block text-xs", isToday ? "font-semibold" : "text-ink-soft")}
-                  >
-                    {shortDay.format(label)}
+                  {/* Past days: only the date is dimmed, the appointments stay recognisable */}
+                  <span className={cn(isPast && !isToday && "opacity-55")}>
+                    <span
+                      className={cn("block text-xs", isToday ? "font-semibold" : "text-ink-soft")}
+                    >
+                      {shortDay.format(label)}
+                    </span>
+                    <span className="block text-[11px] text-ink-soft tabular-nums">
+                      {dayNum.format(label)}
+                    </span>
                   </span>
-                  <span className="block text-[11px] text-ink-soft tabular-nums">
-                    {dayNum.format(label)}
+                  <span className="mt-1.5 flex flex-col items-center gap-1">
+                    <CountPill count={d.consultations} tone="consultation" dim={isPast} />
+                    <CountPill count={d.tattoos} tone="tattoo" dim={isPast} />
                   </span>
-                  <span className="mt-1.5 block text-sm font-semibold tabular-nums">
-                    {d.consultations}
-                  </span>
-                  <span className="block text-sm tabular-nums text-ink-soft">{d.tattoos}</span>
                 </Link>
               </li>
             );
           })}
         </ol>
         <p className="mt-2 text-xs text-ink-soft">
-          Pro Tag: oben Beratungen, darunter Tattoo-Termine.
+          Pro Tag: oben Beratungen (blau), darunter Tattoo-Termine (lila).
         </p>
       </Card>
 
