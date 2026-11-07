@@ -14,6 +14,7 @@ import { requireAdmin } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { formatDateTime } from "@/lib/format";
 import { loadConsultationOptions } from "@/lib/consultation-options";
+import { LEAD_RETENTION_MONTHS } from "@/lib/leads/retention";
 import { updateConsentSettings, updateConsultationSettings, updateStudioSettings } from "./actions";
 import { TeamupCard } from "./teamup-card";
 
@@ -124,6 +125,16 @@ export default async function SettingsPage() {
             </label>
             <Button type="submit">Speichern</Button>
           </ActionForm>
+        </Card>
+
+        <Card>
+          <CardTitle>Datenschutz</CardTitle>
+          <p className="text-sm text-ink-soft">
+            Leads ohne Beratung oder Termin werden {LEAD_RETENTION_MONTHS} Monate nach der letzten
+            Aktivität (Anlage, Nachricht, Statusänderung) automatisch mit Chat, Notizen und Bildern
+            gelöscht. Kunden mit Termin bleiben erhalten. Einzelne Leads löscht ihr auf der
+            Lead-Seite.
+          </p>
         </Card>
 
         <TeamupCard />
