@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { Button, Card, cn, Select } from "@/components/ui";
+import { Button, Card, Select } from "@/components/ui";
 import { isDevLoginEnabled } from "@/lib/auth/dev-login";
 import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
-import { logoFont } from "../fonts";
+import { Logo } from "@/components/logo";
 import { signInAsDevUser, signInWithGoogle } from "./actions";
 
 export const metadata: Metadata = { title: "Anmelden" };
@@ -34,7 +34,9 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
     <main className="flex min-h-dvh items-center justify-center px-4 py-10">
       <div className="w-full max-w-sm space-y-6">
         <div className="text-center">
-          <h1 className={cn(logoFont.className, "text-4xl leading-none tracking-wide")}>NEEDL</h1>
+          <h1 className="text-4xl">
+            <Logo />
+          </h1>
           <p className="mt-2 text-sm text-ink-soft">Leads und Beratungstermine</p>
         </div>
 

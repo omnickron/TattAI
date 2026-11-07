@@ -7,7 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Leads und Beratungstermine für das Tattoo-Studio",
     start_url: "/",
     display: "standalone",
-    background_color: "#f6f7f9",
+    // Native splash on Android (icon on this colour) – matches the in-app splash screen
+    background_color: "#18181b",
     theme_color: "#18181b",
     lang: "de",
     icons: [

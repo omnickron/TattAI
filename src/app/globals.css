@@ -67,3 +67,104 @@ h3 {
     margin: 18mm;
   }
 }
+
+/* ------------------------------------------------------------------ splash screen */
+/* Only in the installed app (home screen), once per start – see splash-screen.tsx */
+.splash {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.25rem;
+  background: #18181b;
+  color: #fff;
+  animation: splash-out 0.45s ease 1.45s forwards;
+}
+@media (display-mode: standalone) {
+  .splash {
+    display: flex;
+  }
+}
+html[data-splash-done] .splash {
+  display: none;
+}
+.splash-mark {
+  width: 7.5rem;
+  height: 7.5rem;
+}
+.splash-ring {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: splash-draw 0.7s cubic-bezier(0.65, 0, 0.35, 1) 0.05s forwards;
+}
+.splash-n {
+  opacity: 0;
+  transform-origin: 50px 50px;
+  animation: splash-pop 0.35s ease-out 0.35s forwards;
+}
+.splash-needle {
+  opacity: 0;
+  transform: translateX(-60px);
+  animation: splash-pierce 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) 0.6s forwards;
+}
+.splash-word {
+  font-size: 1.6rem;
+  letter-spacing: 0.3em;
+  padding-left: 0.3em;
+  opacity: 0;
+  animation: splash-rise 0.4s ease-out 0.9s forwards;
+}
+@keyframes splash-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes splash-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes splash-pierce {
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes splash-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes splash-out {
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .splash-ring,
+  .splash-n,
+  .splash-needle,
+  .splash-word {
+    animation: none;
+    opacity: 1;
+    transform: none;
+    stroke-dashoffset: 0;
+  }
+  .splash {
+    animation: splash-out 0.3s ease 0.6s forwards;
+  }
+}

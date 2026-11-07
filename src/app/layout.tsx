@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
+import { SplashScreen } from "@/components/splash-screen";
 import { logoFont } from "./fonts";
 import "./globals.css";
 
@@ -22,8 +23,11 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="de" className={`h-full antialiased ${logoFont.variable}`}>
-      <body className="min-h-full font-sans">{children}</body>
+    <html lang="de" suppressHydrationWarning className={`h-full antialiased ${logoFont.variable}`}>
+      <body className="min-h-full font-sans">
+        <SplashScreen />
+        {children}
+      </body>
     </html>
   );
 }
