@@ -122,9 +122,9 @@ export default async function AvailabilityPage({ searchParams }: PageProps<"/ava
           )}
           <ActionForm
             action={addAvailabilityRule}
-            className="grid grid-cols-2 items-end gap-2 space-y-0 sm:grid-cols-3"
+            className="flex flex-wrap items-end gap-3 space-y-0"
           >
-            <div className="col-span-2 sm:col-span-1">
+            <div className="w-full">
               <Field label="Wochentag" htmlFor="weekday">
                 <Select id="weekday" name="weekday" defaultValue="1">
                   {Object.entries(WEEKDAY_LABELS).map(([n, label]) => (
@@ -141,7 +141,7 @@ export default async function AvailabilityPage({ searchParams }: PageProps<"/ava
             <Field label="Bis" htmlFor="to">
               <TimeSelect id="to" name="to" defaultValue="18:00" endOfDay required />
             </Field>
-            <div className="col-span-2 sm:col-span-3">
+            <div className="w-full">
               <Button type="submit" variant="secondary">
                 Zeitfenster hinzufügen
               </Button>

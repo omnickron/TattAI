@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import type { ActionState } from "@/lib/action-state";
+import { DatePicker } from "./date-picker";
 import { Button, Input, Textarea, TimeSelect, cn } from "./ui";
 
 type Outcome = "HELD" | "NO_SHOW" | "CANCELLED";
@@ -138,36 +139,16 @@ export function OutcomeForm({
 
       {outcome === "HELD" && tattoo === "OPEN" && (
         <div className="space-y-2 rounded-lg bg-muted/50 p-3">
-          <label htmlFor="followUpDate" className="block text-sm font-medium">
+          <p className="block text-sm font-medium">
             Wann soll der Kunde wieder kontaktiert werden?
-          </label>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="w-44">
-              <Input
-                id="followUpDate"
-                name="followUpDate"
-                type="date"
-                required
-                min={inDays(1)}
-                value={followUp}
-                onChange={(e) => setFollowUp(e.target.value)}
-              />
-            </span>
-            {[
-              [3, "in 3 Tagen"],
-              [7, "in 1 Woche"],
-              [14, "in 2 Wochen"],
-            ].map(([days, label]) => (
-              <Button
-                key={days}
-                type="button"
-                variant="secondary"
-                onClick={() => setFollowUp(inDays(days as number))}
-              >
-                {label}
-              </Button>
-            ))}
-          </div>
+          </p>
+          <DatePicker
+            name="followUpDate"
+            value={followUp}
+            onChange={setFollowUp}
+            min={inDays(1)}
+            label="Tag für das Follow-up"
+          />
           <p className="text-xs text-ink-soft">
             An diesem Tag um 9 Uhr kommt eine Erinnerung aufs Handy, und der Kunde steht auf der
             Übersicht unter „Heute nachfassen“. Den Grund (z. B. Motiv noch unsicher, Termin passt
