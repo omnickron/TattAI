@@ -866,3 +866,29 @@ model BotEvalRun {
 
   @@index([createdAt])
 }
+
+// Access data of integrations (TeamUp, WhatsApp, Meta) maintained by the operator in the
+// app. Secrets are AES-256-GCM encrypted (TOKEN_ENCRYPTION_KEY); the .env is the fallback.
+model IntegrationSetting {
+  // Name of the setting, same as the environment variable (e.g. WHATSAPP_ACCESS_TOKEN)
+  key         String   @id
+  // Encrypted for secrets, plain for IDs and modes
+  value       String
+  // Last characters of a secret, to recognise it without showing it
+  hint        String?
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+}
+
+// Who changed which access data when (never the value itself)
+model IntegrationSettingLog {
+  id        String   @id @default(cuid())
+  key       String
+  // set | cleared
+  action    String
+  userId    String?
+  userName  String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}

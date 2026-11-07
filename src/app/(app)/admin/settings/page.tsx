@@ -17,6 +17,7 @@ import { loadConsultationOptions } from "@/lib/consultation-options";
 import { LEAD_RETENTION_MONTHS } from "@/lib/leads/retention";
 import { updateConsentSettings, updateConsultationSettings, updateStudioSettings } from "./actions";
 import { TeamupCard } from "./teamup-card";
+import { setting } from "@/lib/integrations/store";
 
 export const metadata: Metadata = { title: "Einstellungen" };
 
@@ -30,7 +31,7 @@ export default async function SettingsPage() {
       take: 20,
     }),
   ]);
-  const mockMode = process.env.META_GRAPH_MOCK === "true";
+  const mockMode = setting("META_GRAPH_MOCK") === "true";
   const consultation = await loadConsultationOptions(prisma);
 
   return (

@@ -100,7 +100,7 @@ User (Rolle), TattooerProfile (Google-Verbindung, Beratungsdauer, Puffer), Avail
 ## Technische Leitplanken
 - Vorschlag: TypeScript durchgängig, Next.js (App Router) mit PostgreSQL und Prisma, Hintergrundjobs für Erinnerungen und Retries. Alternativen sind in Ordnung, wenn sie begründet werden.
 - Hosting in der EU (DSGVO).
-- Secrets (Meta, WhatsApp, Google Tokens) nur in Umgebungsvariablen. Google-Refresh-Tokens verschlüsselt speichern.
+- Secrets: Grundlagen (Datenbank, Anmelde-Geheimnis, Verschlüsselungs-Schlüssel, Google-Login, Anthropic, Push) nur in Umgebungsvariablen. Zugänge von TeamUp, WhatsApp und Meta pflegt der Betreiber in der App (Betreiber → Zugänge): verschlüsselt gespeichert (AES-256-GCM), nie wieder angezeigt, Änderungen protokolliert, .env als Rückfall (Entscheidung vom 07.11.2026). Google-Refresh-Tokens verschlüsselt speichern.
 - Alle Webhooks: Signatur prüfen, idempotent verarbeiten, Fehler protokollieren, Retries.
 - Zeitzone: Europe/Berlin, in der Datenbank UTC speichern. Sommer-/Winterzeit in Tests abdecken.
 - Tests für Fairness-Logik, Slot-Berechnung und Webhook-Idempotenz sind Pflicht.

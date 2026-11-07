@@ -21,6 +21,7 @@ import {
   type CalendarConnection,
   type CalendarEventInput,
 } from "../google/calendar";
+import { setting } from "@/lib/integrations/store";
 
 export const TEAMUP_API = "https://api.teamup.com";
 
@@ -535,5 +536,5 @@ export class MockTeamupClient implements CalendarClient {
 }
 
 export function isTeamupMock(): boolean {
-  return process.env.TEAMUP_MOCK === "true";
+  return setting("TEAMUP_MOCK") === "true";
 }

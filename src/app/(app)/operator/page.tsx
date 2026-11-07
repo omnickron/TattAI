@@ -4,6 +4,7 @@ import { requireOperator } from "@/lib/auth/session";
 import { AdminsCard } from "./admins-card";
 import { BillingCard } from "./billing-card";
 import { EvalCard } from "./eval-card";
+import { IntegrationsCard } from "./integrations-card";
 import { OperationsCard } from "./operations-card";
 
 export const metadata: Metadata = { title: "Betreiber" };
@@ -18,6 +19,7 @@ export default async function OperatorPage() {
         description="Nur für dich als Betreiber von NEEDL sichtbar – das Studio sieht diese Seite nicht."
       />
       <AdminsCard currentUserId={user.id} />
+      <IntegrationsCard />
       <OperationsCard />
       <EvalCard />
       <BillingCard />

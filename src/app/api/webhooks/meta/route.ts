@@ -4,11 +4,12 @@ import { ingestDeps } from "@/lib/leads/ingest-deps";
 import { processWebhookEvent, recordLeadgenEvents } from "@/lib/leads/meta-ingest";
 import { verifyMetaSignature } from "@/lib/meta/signature";
 import type { MetaWebhookPayload } from "@/lib/meta/types";
+import { setting } from "@/lib/integrations/store";
 
 /** Subscription verification handshake from Meta. */
 export function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
-  const verifyToken = process.env.META_VERIFY_TOKEN;
+  const verifyToken = setting("META_VERIFY_TOKEN");
   if (
     verifyToken &&
     params.get("hub.mode") === "subscribe" &&
@@ -27,7 +28,7 @@ export function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const rawBody = await request.text();
   const signature = request.headers.get("x-hub-signature-256");
-  if (!verifyMetaSignature(rawBody, signature, process.env.META_APP_SECRET ?? "")) {
+  if (!verifyMetaSignature(rawBody, signature, setting("META_APP_SECRET") ?? "")) {
     console.warn("[meta-webhook] rejected request with invalid signature");
     return new Response("Invalid signature", { status: 401 });
   }

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { setting } from "@/lib/integrations/store";
 
 export interface SendTemplateInput {
   /** E.164 number, e.g. "+4915112345678" */
@@ -224,14 +225,14 @@ export class MockWhatsAppClient implements WhatsAppClient {
 }
 
 export function isWhatsAppMock(): boolean {
-  return process.env.WHATSAPP_MOCK === "true";
+  return setting("WHATSAPP_MOCK") === "true";
 }
 
 export function createWhatsAppClient(): WhatsAppClient {
   if (isWhatsAppMock()) return new MockWhatsAppClient();
-  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-  const businessAccountId = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
+  const accessToken = setting("WHATSAPP_ACCESS_TOKEN");
+  const phoneNumberId = setting("WHATSAPP_PHONE_NUMBER_ID");
+  const businessAccountId = setting("WHATSAPP_BUSINESS_ACCOUNT_ID");
   if (!accessToken || !phoneNumberId || !businessAccountId) {
     throw new Error(
       "WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_BUSINESS_ACCOUNT_ID must be set",
