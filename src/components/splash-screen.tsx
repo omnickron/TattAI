@@ -12,6 +12,8 @@ const NEEDLE = "M-47 0 L-28 -1.5 L38 -1.5 Q42 0 38 1.5 L-28 1.5 Z";
 export function SplashScreen() {
   return (
     <>
+      {/* Only rendered from the root layout, where beforeInteractive is supported (App Router) */}
+      {/* eslint-disable-next-line @next/next/no-before-interactive-script-outside-document */}
       <Script id="needl-splash" strategy="beforeInteractive">
         {
           "try{if(sessionStorage.getItem('needl-splash'))document.documentElement.dataset.splashDone='1';else sessionStorage.setItem('needl-splash','1')}catch(e){}"
