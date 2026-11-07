@@ -1,7 +1,7 @@
 /**
  * Follow-ups: after a consultation the customer is interested but undecided; the tattooer
  * picks a day to contact them again. On that day (09:00) they get a push and the customer
- * shows up under "Heute nachfassen" until a new outcome is entered or it is marked done.
+ * shows up under "Heute nachfassen" until someone confirms it with "Erledigt".
  */
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { pushToUsers, type PushSender } from "../push";
@@ -14,16 +14,11 @@ export function dueFollowUpWhere(
   tz = DEFAULT_TIME_ZONE,
 ): Prisma.ConsultationWhereInput {
   const endOfToday = startOfLocalDay(addDays(localDateOf(now, tz), 1), tz);
+  // Stays until confirmed with "Erledigt" – a new outcome or booking does not remove it
   return {
-    status: "HELD",
-    tattooBooked: null,
     followUpAt: { lt: endOfToday },
     followUpDoneAt: null,
-    // Nothing to do when the customer has booked again in the meantime
-    lead: {
-      isTest: false,
-      consultations: { none: { status: "SCHEDULED", endsAt: { gt: now } } },
-    },
+    lead: { isTest: false },
     ...(scope.isAdmin ? {} : { tattooerId: scope.tattooerId ?? "__none__" }),
   };
 }
@@ -67,15 +62,10 @@ export async function notifyDueFollowUps(
 ) {
   const due = await prisma.consultation.findMany({
     where: {
-      status: "HELD",
-      tattooBooked: null,
       followUpAt: { lte: now },
       followUpDoneAt: null,
       followUpNotifiedAt: null,
-      lead: {
-        isTest: false,
-        consultations: { none: { status: "SCHEDULED", endsAt: { gt: now } } },
-      },
+      lead: { isTest: false },
     },
     take: 50,
     select: {

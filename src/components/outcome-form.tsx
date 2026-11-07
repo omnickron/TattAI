@@ -151,8 +151,8 @@ export function OutcomeForm({
           />
           <p className="text-xs text-ink-soft">
             An diesem Tag um 9 Uhr kommt eine Erinnerung aufs Handy, und der Kunde steht auf der
-            Übersicht unter „Heute nachfassen“. Den Grund (z. B. Motiv noch unsicher, Termin passt
-            erst später) bitte unten als Notiz eintragen.
+            Übersicht unter „Heute nachfassen“, bis jemand „Erledigt“ tippt. Den Grund (z. B. Motiv
+            noch unsicher, Termin passt erst später) bitte unten als Notiz eintragen.
           </p>
         </div>
       )}

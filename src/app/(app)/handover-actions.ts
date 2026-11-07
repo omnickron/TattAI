@@ -7,28 +7,28 @@ import { prisma } from "@/lib/db";
 import { markFollowUpDone } from "@/lib/outcomes/follow-up";
 
 /**
- * A person took care of a chat the bot handed over (e.g. called the customer): it leaves
- * the "Braucht euch" list, the bot stays off, and a note records who did it.
+ * A person confirms that a chat the bot handed over was dealt with: only this removes it
+ * from "Braucht euch". The bot's state in the chat is not touched; a note records who.
  */
 export async function resolveHandover(leadId: string): Promise<ActionState> {
   const user = await requireUser();
   const lead = await prisma.lead.findFirst({
     where: { AND: [leadScope(user), { id: leadId }] },
-    select: { id: true, botEnabled: true, botDisabledReason: true, botHandoverNote: true },
+    select: { id: true, botHandoverAt: true, botHandoverResolvedAt: true, botHandoverNote: true },
   });
   if (!lead) return { ok: false, message: "Kunde nicht gefunden." };
-  if (lead.botEnabled || lead.botDisabledReason !== "BOT_HANDOVER")
+  if (!lead.botHandoverAt || lead.botHandoverResolvedAt)
     return { ok: true, message: "Schon erledigt." };
   await prisma.$transaction([
     prisma.lead.update({
       where: { id: lead.id },
-      data: { botDisabledReason: "HUMAN_TAKEOVER", botDisabledById: user.id },
+      data: { botHandoverResolvedAt: new Date(), botHandoverResolvedById: user.id },
     }),
     prisma.leadNote.create({
       data: {
         leadId: lead.id,
         authorId: user.id,
-        body: `Übergabe vom Bot erledigt${lead.botHandoverNote ? ` (${lead.botHandoverNote})` : ""}. Der Bot bleibt in diesem Chat aus.`,
+        body: `Übergabe vom Bot erledigt${lead.botHandoverNote ? ` (${lead.botHandoverNote})` : ""}.`,
       },
     }),
   ]);

@@ -165,8 +165,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
         <Card className="border-red-300 bg-red-50/60 dark:border-red-900 dark:bg-red-950/30">
           <SectionTitle count={data.handovers.length}>Braucht euch</SectionTitle>
           <p className="-mt-1 mb-3 text-sm text-ink-soft">
-            Der Bot hat diese Chats an euch übergeben. Sie bleiben hier, bis ihr im Chat antwortet,
-            den Bot wieder einschaltet oder sie als erledigt markiert (z. B. nach einem Anruf).
+            Der Bot hat diese Chats an euch übergeben. Sie bleiben hier, bis jemand mit „Erledigt“
+            bestätigt, dass sich darum gekümmert wurde.
           </p>
           <ul className="space-y-2">
             {data.handovers.map((h) => (
@@ -205,8 +205,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
         <Card className="border-sky-300 bg-sky-50/60 dark:border-sky-900 dark:bg-sky-950/30">
           <SectionTitle count={data.followUps.length}>Heute nachfassen</SectionTitle>
           <p className="-mt-1 mb-3 text-sm text-ink-soft">
-            Diese Kunden wollten es sich noch überlegen. Bitte melden – danach das neue Ergebnis
-            eintragen oder auf „Erledigt“ tippen.
+            Diese Kunden wollten es sich noch überlegen. Bitte melden – sie bleiben hier, bis jemand
+            mit „Erledigt“ bestätigt.
           </p>
           <ul className="space-y-2">
             {data.followUps.map((f) => {

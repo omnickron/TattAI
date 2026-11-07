@@ -256,13 +256,15 @@ describe("follow-up", () => {
     });
     expect(await loadDueFollowUps(prisma, scope, new Date("2026-11-23T10:00:00Z"))).toHaveLength(1);
 
-    // Tattoo booked: no follow-up any more
+    // A new decision does not remove it – only the button does
     await recordOutcome(prisma, {
       consultationId: c.id,
       userId,
       now: later,
       outcome: { outcome: "HELD", tattoo: "NO" },
     });
+    expect(await loadDueFollowUps(prisma, scope, new Date("2026-11-23T10:00:00Z"))).toHaveLength(1);
+    await markFollowUpDone(prisma, c.id, later);
     expect(await loadDueFollowUps(prisma, scope, new Date("2026-11-23T10:00:00Z"))).toHaveLength(0);
   });
 });

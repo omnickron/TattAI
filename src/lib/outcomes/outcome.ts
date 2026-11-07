@@ -238,7 +238,13 @@ export async function recordOutcome(
   const keepFollowUp =
     c?.followUpAt && input.outcome.followUpDate === localDateOf(c.followUpAt, tz);
   const v = validateOutcome(input.outcome, keepFollowUp ? undefined : localDateOf(now, tz));
-  const followUpAt = v.followUpDate ? zonedTimeToUtc(v.followUpDate, FOLLOW_UP_MINUTE, tz) : null;
+  // A follow-up that is not confirmed yet stays when the decision changes (only "Erledigt"
+  // removes it); a new date replaces it
+  const followUpAt = v.followUpDate
+    ? zonedTimeToUtc(v.followUpDate, FOLLOW_UP_MINUTE, tz)
+    : c?.followUpAt && !c.followUpDoneAt
+      ? c.followUpAt
+      : null;
   const followUpChanged = followUpAt?.getTime() !== c?.followUpAt?.getTime();
   if (!c) throw new OutcomeError("Termin nicht gefunden.");
   if (c.startsAt > now) {

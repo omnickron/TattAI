@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { Logo } from "@/components/logo";
 import { dueFollowUpWhere } from "@/lib/outcomes/follow-up";
+import { openHandoverWhere } from "@/lib/bot/handover";
 import { APP_TIMEZONE } from "@/lib/format";
 import { ViewSwitch } from "@/components/view-switch";
 import { PushToggle } from "@/components/push-toggle";
@@ -26,14 +27,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   });
   // Chats the bot handed over that nobody has picked up yet
   const handovers = await prisma.lead.count({
-    where: {
-      isTest: false,
-      botEnabled: false,
-      botDisabledReason: "BOT_HANDOVER",
-      ...(isAdmin
-        ? {}
-        : { consultations: { some: { tattooerId: user.tattooerProfile?.id ?? "__none__" } } }),
-    },
+    where: openHandoverWhere({ isAdmin, tattooerId: user.tattooerProfile?.id ?? null }),
   });
   const followUps = await prisma.consultation.count({
     where: dueFollowUpWhere(

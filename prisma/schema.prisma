@@ -190,10 +190,13 @@ model Lead {
   tattooSummary Json?
 
   // Short memory the built-in bot keeps about the chat (max. 400 characters)
-  botMemory       String?
+  botMemory               String?
   // Why the bot handed the chat over to a person (shown in the app)
-  botHandoverNote String?
-  botHandoverAt   DateTime?
+  botHandoverNote         String?
+  botHandoverAt           DateTime?
+  // Someone confirmed with the button that the handover was dealt with (list entry gone)
+  botHandoverResolvedAt   DateTime?
+  botHandoverResolvedById String?
 
   // Created by the bot test (AI test customers); hidden everywhere, deleted after the run
   isTest Boolean @default(false)
