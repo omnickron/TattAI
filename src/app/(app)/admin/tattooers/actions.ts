@@ -6,6 +6,7 @@ import { Prisma } from "@/generated/prisma/client";
 import type { ActionState } from "@/lib/action-state";
 import { requireAdmin } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
+import { isColor } from "@/lib/tattooer-colors";
 
 const tattooerSchema = z.object({
   name: z.string().trim().min(1, "Name fehlt.").max(200),
@@ -57,14 +58,33 @@ export async function updateTattooer(
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message };
   const domainError = workspaceDomainError(parsed.data.email);
   if (domainError) return { ok: false, message: domainError };
+  // Calendar color: hex from the palette / color picker, "" = automatic
+  const rawColor = String(formData.get("calendarColor") ?? "").trim().toLowerCase();
+  if (rawColor && !isColor(rawColor)) return { ok: false, message: "Farbe ist ungültig." };
 
   try {
-    await prisma.user.update({ where: { id: userId, role: "TATTOOER" }, data: parsed.data });
+    await prisma.user.update({
+      where: { id: userId, role: "TATTOOER" },
+      data: {
+        ...parsed.data,
+        ...(formData.has("calendarColor")
+          ? {
+              tattooerProfile: {
+                upsert: {
+                  create: { calendarColor: rawColor || null, fairnessShare: { create: { weight: 1 } } },
+                  update: { calendarColor: rawColor || null },
+                },
+              },
+            }
+          : {}),
+      },
+    });
   } catch (err) {
     if (isUniqueViolation(err)) return { ok: false, message: "Diese E-Mail ist bereits vergeben." };
     throw err;
   }
   revalidatePath("/admin/tattooers");
+  revalidatePath("/calendar");
   return { ok: true, message: "Gespeichert." };
 }
 
