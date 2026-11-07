@@ -7,6 +7,7 @@ import { APP_TIMEZONE } from "@/lib/format";
 import { formatEuro } from "@/lib/outcomes/money";
 import { CONSULTATION_MODE_LABELS, summaryLines } from "@/lib/scheduling/event-content";
 import { EntryChip, type EntryDetail } from "./entry-detail";
+import { tattooerColor, textColorOn } from "@/lib/tattooer-colors";
 import { loadConsultationOptions } from "@/lib/consultation-options";
 import { AddEntryButton, BlockerChip, ClickLayer, NewEntryProvider } from "./new-entry";
 import {
@@ -21,16 +22,6 @@ import {
 
 export const metadata: Metadata = { title: "Kalender" };
 
-/** Solid, per-tattooer colors (like TeamUp): readable at a glance even in narrow mobile columns. */
-const TONES = [
-  "bg-blue-600 text-white",
-  "bg-violet-500 text-white",
-  "bg-amber-400 text-zinc-900",
-  "bg-emerald-600 text-white",
-  "bg-rose-500 text-white",
-  "bg-cyan-400 text-zinc-900",
-  "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900",
-];
 
 const dayHeader = new Intl.DateTimeFormat("de-DE", {
   timeZone: "UTC",
@@ -91,6 +82,8 @@ type Item = {
   leadName: string;
   tattooerName: string;
   tone: string;
+  /** Background of consultations and tattoo sessions (tattooer's calendar color). */
+  color?: string;
   status: string;
   mode: "ON_SITE" | "PHONE" | null;
   day: string;
@@ -230,7 +223,15 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
     orderBy: [{ startsAt: "asc" }, { date: "asc" }],
   });
 
-  const toneIndex = new Map(tattooers.map((t, i) => [t.id, i]));
+  // Calendar colors per tattooer (set by the admin, otherwise by order of creation)
+  const colorProfiles = await prisma.tattooerProfile.findMany({
+    select: { id: true, calendarColor: true },
+    orderBy: { createdAt: "asc" },
+  });
+  const colors = new Map(colorProfiles.map((p, i) => [p.id, tattooerColor(p.calendarColor, i)]));
+  const colorFor = (tattooerId: string) => colors.get(tattooerId) ?? tattooerColor(null, 0);
+  const colorStyle = (i: Item) =>
+    i.color ? { backgroundColor: i.color, color: textColorOn(i.color) } : {};
   const items: Item[] = consultations.map((c) => {
     const startMin = localMinuteOf(c.startsAt, APP_TIMEZONE);
     const day = localDateOf(c.startsAt, APP_TIMEZONE);
@@ -241,7 +242,8 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
       leadId: c.lead.id,
       leadName: c.lead.name,
       tattooerName: c.tattooer.user.name,
-      tone: TONES[(toneIndex.get(c.tattooer.id) ?? 0) % TONES.length],
+      tone: "",
+      color: colorFor(c.tattooer.id),
       status: c.status,
       mode: c.mode,
       detail: {
@@ -287,7 +289,8 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
       leadId: sn.consultation.lead.id,
       leadName: sn.consultation.lead.name,
       tattooerName: t.user.name,
-      tone: TONES[(toneIndex.get(t.id) ?? 0) % TONES.length],
+      tone: "",
+      color: colorFor(t.id),
       status: "TATTOO",
       mode: null,
       lane: 0,
@@ -559,7 +562,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
                           "block w-full truncate rounded-md px-1 py-1 text-xs font-medium",
                           i.tone,
                         )}
-                        style={TATTOO_TEXTURE}
+                        style={{ ...TATTOO_TEXTURE, ...colorStyle(i) }}
                       >
                         {i.leadName}
                       </EntryChip>
@@ -639,7 +642,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
                         WRAP,
                         i.tone,
                       )}
-                      style={{ ...(i.kind === "TATTOO" ? TATTOO_TEXTURE : {}), ...box }}
+                      style={{ ...(i.kind === "TATTOO" ? TATTOO_TEXTURE : {}), ...colorStyle(i), ...box }}
                     >
                       <span className="block font-medium">
                         {i.kind === "TATTOO" ? "Tattoo: " : "Beratung: "}
