@@ -4,6 +4,7 @@ import { AppNav, type NavGroup } from "@/components/app-nav";
 import { requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { Logo } from "@/components/logo";
+import { ViewSwitch } from "@/components/view-switch";
 import { PushToggle } from "@/components/push-toggle";
 import { isOperator } from "@/lib/auth/operator";
 import { vapidPublicKey } from "@/lib/push";
@@ -61,7 +62,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           },
         ]
       : []),
-    ...(isOperator(user)
+    ...(isOperator(user) && !user.viewingAsTattooer
       ? [
           {
             label: "Betreiber",
@@ -81,7 +82,15 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           </Link>
         }
         userName={user.name}
-        userRole={isAdmin ? "Admin" : "Tätowierer"}
+        userRole={
+          isOperator(user) && user.tattooerProfile ? (
+            <ViewSwitch current={user.viewingAsTattooer ? "tattooer" : "admin"} />
+          ) : isAdmin ? (
+            "Admin"
+          ) : (
+            "Tätowierer"
+          )
+        }
         signOut={
           <div className="flex items-center">
             <PushToggle publicKey={vapidPublicKey()} />

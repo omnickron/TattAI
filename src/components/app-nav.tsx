@@ -158,22 +158,27 @@ function NavList({ groups, onNavigate }: { groups: NavGroup[]; onNavigate?: () =
   );
 }
 
-function UserBox({ name, role, signOut }: { name: string; role: string; signOut: ReactNode }) {
+function UserBox({ name, role, signOut }: { name: string; role: ReactNode; signOut: ReactNode }) {
+  const switchRow = typeof role !== "string";
   return (
-    <div className="flex items-center gap-3 border-t border-line px-3 pt-4">
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-ink">
-        {name
-          .split(/\s+/)
-          .map((p) => p[0])
-          .join("")
-          .slice(0, 2)
-          .toUpperCase()}
-      </span>
-      <span className="min-w-0 flex-1 leading-tight">
-        <span className="block truncate text-sm font-medium">{name}</span>
-        <span className="block text-xs text-ink-soft">{role}</span>
-      </span>
-      {signOut}
+    <div className="border-t border-line px-3 pt-4">
+      <div className="flex items-center gap-3">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-ink">
+          {name
+            .split(/\s+/)
+            .map((p) => p[0])
+            .join("")
+            .slice(0, 2)
+            .toUpperCase()}
+        </span>
+        <span className="min-w-0 flex-1 leading-tight">
+          <span className="block truncate text-sm font-medium">{name}</span>
+          {!switchRow && <span className="block text-xs text-ink-soft">{role}</span>}
+        </span>
+        {signOut}
+      </div>
+      {/* Operator: view switch on its own line, so it never collides with the buttons */}
+      {switchRow && <div className="mt-2 pl-11">{role}</div>}
     </div>
   );
 }
@@ -189,7 +194,7 @@ export function AppNav({
   groups: NavGroup[];
   logo: ReactNode;
   userName: string;
-  userRole: string;
+  userRole: ReactNode;
   signOut: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
