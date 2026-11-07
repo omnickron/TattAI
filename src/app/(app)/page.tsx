@@ -6,11 +6,11 @@ import { OutcomePanel } from "@/components/outcome-panel";
 import { Badge, Card, cn } from "@/components/ui";
 import { requireUser } from "@/lib/auth/session";
 import { ActionButton } from "./admin/billing/buttons";
-import { resolveHandover } from "./handover-actions";
+import { completeFollowUp, resolveHandover } from "./handover-actions";
 import { loadDashboard } from "@/lib/dashboard";
 import { APP_TIMEZONE, formatRelative } from "@/lib/format";
 import { CONSULTATION_MODE_LABELS } from "@/lib/scheduling/event-content";
-import { formatTimeOfDay, localMinuteOf } from "@/lib/time";
+import { formatTimeOfDay, localDateOf, localMinuteOf } from "@/lib/time";
 
 export const metadata: Metadata = { title: "Übersicht" };
 
@@ -130,6 +130,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
   const data = await loadDashboard(user, now);
   const firstName = user.name.split(/\s+/)[0];
   const { items, currentId, nextId } = data.today;
+  const today = localDateOf(now, APP_TIMEZONE);
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -195,6 +196,55 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
                 </ActionButton>
               </li>
             ))}
+          </ul>
+        </Card>
+      )}
+
+      {/* Follow-ups due today (or overdue) */}
+      {data.followUps.length > 0 && (
+        <Card className="border-sky-300 bg-sky-50/60 dark:border-sky-900 dark:bg-sky-950/30">
+          <SectionTitle count={data.followUps.length}>Heute nachfassen</SectionTitle>
+          <p className="-mt-1 mb-3 text-sm text-ink-soft">
+            Diese Kunden wollten es sich noch überlegen. Bitte melden – danach das neue Ergebnis
+            eintragen oder auf „Erledigt“ tippen.
+          </p>
+          <ul className="space-y-2">
+            {data.followUps.map((f) => {
+              const overdue = f.followUpAt && localDateOf(f.followUpAt, APP_TIMEZONE) < today;
+              return (
+                <li key={f.id} className="flex items-center gap-2 rounded-lg bg-surface pr-3">
+                  <Link
+                    href={`/leads/${f.lead.id}`}
+                    className="flex min-w-0 flex-1 items-center gap-3 rounded-lg p-3 hover:bg-muted"
+                  >
+                    <Initials name={f.lead.name} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium">
+                        {f.lead.name}
+                        {overdue && (
+                          <span className="ml-2 text-xs font-normal text-amber-700">
+                            überfällig
+                          </span>
+                        )}
+                      </span>
+                      <span className="block truncate text-xs text-ink-soft">
+                        {f.outcomeNote ?? "Kunde überlegt noch"}
+                        {data.isAdmin && ` · ${f.tattooer.user.name}`}
+                      </span>
+                    </span>
+                  </Link>
+                  {f.lead.phoneE164 && (
+                    <a
+                      href={`tel:${f.lead.phoneE164}`}
+                      className="shrink-0 rounded-lg border border-line px-3 py-1.5 text-sm hover:bg-muted"
+                    >
+                      Anrufen
+                    </a>
+                  )}
+                  <ActionButton action={completeFollowUp.bind(null, f.id)}>Erledigt</ActionButton>
+                </li>
+              );
+            })}
           </ul>
         </Card>
       )}

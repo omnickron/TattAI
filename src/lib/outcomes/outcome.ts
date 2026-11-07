@@ -6,6 +6,7 @@ import type { LeadStatus, PrismaClient } from "@/generated/prisma/client";
 import {
   DEFAULT_TIME_ZONE,
   isLocalDate,
+  localDateOf,
   isQuarterHour,
   parseTimeOfDay,
   zonedTimeToUtc,
@@ -26,7 +27,12 @@ export interface OutcomeInput {
   /** start/end: optional local times "HH:MM" */
   sessions?: Array<{ date: string; amount?: string; start?: string; end?: string }>;
   note?: string;
+  /** Tattoo still open ("Follow-up"): local date "YYYY-MM-DD" to contact the customer again */
+  followUpDate?: string;
 }
+
+/** Time of day the follow-up reminder is due (local). */
+export const FOLLOW_UP_MINUTE = 9 * 60;
 
 export interface ValidOutcome {
   outcome: OutcomeKind;
@@ -40,12 +46,13 @@ export interface ValidOutcome {
     end: string | null;
   }>;
   note: string | null;
+  followUpDate: string | null;
 }
 
 export class OutcomeError extends Error {}
 
 /** Checks the combination of answers; returns normalised values or throws OutcomeError (German message). */
-export function validateOutcome(input: OutcomeInput): ValidOutcome {
+export function validateOutcome(input: OutcomeInput, today?: string): ValidOutcome {
   const note = input.note?.trim().slice(0, 2000) || null;
   if (!["HELD", "NO_SHOW", "CANCELLED"].includes(input.outcome))
     throw new OutcomeError("Bitte ein Ergebnis wählen.");
@@ -57,12 +64,21 @@ export function validateOutcome(input: OutcomeInput): ValidOutcome {
       furtherScheduled: null,
       sessions: [],
       note,
+      followUpDate: null,
     };
   }
   if (!input.tattoo || !["YES", "NO", "OPEN"].includes(input.tattoo)) {
     throw new OutcomeError("Bitte angeben, ob ein Tattoo-Termin vereinbart wurde.");
   }
   if (input.tattoo !== "YES") {
+    let followUpDate: string | null = null;
+    if (input.tattoo === "OPEN") {
+      followUpDate = input.followUpDate?.trim() ?? "";
+      if (!isLocalDate(followUpDate))
+        throw new OutcomeError("Bitte angeben, wann der Kunde wieder kontaktiert werden soll.");
+      if (today && followUpDate <= today)
+        throw new OutcomeError("Das Follow-up muss in der Zukunft liegen (ab morgen).");
+    }
     return {
       outcome: "HELD",
       tattoo: input.tattoo,
@@ -70,6 +86,7 @@ export function validateOutcome(input: OutcomeInput): ValidOutcome {
       furtherScheduled: null,
       sessions: [],
       note,
+      followUpDate,
     };
   }
   if (input.sessionPlan !== "SINGLE" && input.sessionPlan !== "MULTIPLE") {
@@ -114,6 +131,7 @@ export function validateOutcome(input: OutcomeInput): ValidOutcome {
     furtherScheduled: further,
     sessions,
     note,
+    followUpDate: null,
   };
 }
 
@@ -214,8 +232,14 @@ export async function recordOutcome(
   },
 ) {
   const now = input.now ?? new Date();
-  const v = validateOutcome(input.outcome);
+  const tz = input.timeZone ?? DEFAULT_TIME_ZONE;
   const c = await prisma.consultation.findUnique({ where: { id: input.consultationId } });
+  // A follow-up date that is already set may stay as it is (e.g. when correcting the note)
+  const keepFollowUp =
+    c?.followUpAt && input.outcome.followUpDate === localDateOf(c.followUpAt, tz);
+  const v = validateOutcome(input.outcome, keepFollowUp ? undefined : localDateOf(now, tz));
+  const followUpAt = v.followUpDate ? zonedTimeToUtc(v.followUpDate, FOLLOW_UP_MINUTE, tz) : null;
+  const followUpChanged = followUpAt?.getTime() !== c?.followUpAt?.getTime();
   if (!c) throw new OutcomeError("Termin nicht gefunden.");
   if (c.startsAt > now) {
     throw new OutcomeError(
@@ -237,6 +261,8 @@ export async function recordOutcome(
         outcomeNote: v.note,
         outcomeRecordedAt: now,
         outcomeRecordedById: input.userId,
+        followUpAt,
+        ...(followUpChanged ? { followUpDoneAt: null, followUpNotifiedAt: null } : {}),
       },
     });
     await tx.tattooBooking.deleteMany({ where: { consultationId: c.id } });

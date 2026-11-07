@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import type { ActionState } from "@/lib/action-state";
 import { leadScope, requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
+import { markFollowUpDone } from "@/lib/outcomes/follow-up";
 
 /**
  * A person took care of a chat the bot handed over (e.g. called the customer): it leaves
@@ -33,5 +34,21 @@ export async function resolveHandover(leadId: string): Promise<ActionState> {
   ]);
   revalidatePath("/");
   revalidatePath(`/leads/${lead.id}`);
+  return { ok: true, message: "Erledigt." };
+}
+
+/** The tattooer contacted the customer of a follow-up (without a new outcome yet). */
+export async function completeFollowUp(consultationId: string): Promise<ActionState> {
+  const user = await requireUser();
+  const c = await prisma.consultation.findFirst({
+    where: {
+      id: consultationId,
+      ...(user.role === "ADMIN" ? {} : { tattooerId: user.tattooerProfile?.id ?? "__none__" }),
+    },
+    select: { id: true },
+  });
+  if (!c) return { ok: false, message: "Beratung nicht gefunden." };
+  await markFollowUpDone(prisma, c.id);
+  revalidatePath("/");
   return { ok: true, message: "Erledigt." };
 }

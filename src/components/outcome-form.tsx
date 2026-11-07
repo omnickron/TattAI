@@ -15,6 +15,15 @@ export interface OutcomeDefaults {
   furtherScheduled?: boolean | null;
   sessions?: Array<{ date: string; amount: string; start?: string; end?: string }>;
   note?: string | null;
+  /** Follow-up day "YYYY-MM-DD" */
+  followUpDate?: string | null;
+}
+
+/** "YYYY-MM-DD" in local time, `days` from today. */
+function inDays(days: number) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function Choice<T extends string>({
@@ -79,6 +88,7 @@ export function OutcomeForm({
   const [further, setFurther] = useState<"yes" | "no" | null>(
     defaults.furtherScheduled === true ? "yes" : defaults.furtherScheduled === false ? "no" : null,
   );
+  const [followUp, setFollowUp] = useState(defaults.followUpDate ?? "");
   const [sessions, setSessions] = useState(
     defaults.sessions?.length ? defaults.sessions : [{ date: "", amount: "", start: "", end: "" }],
   );
@@ -121,9 +131,49 @@ export function OutcomeForm({
             Nein
           </Choice>
           <Choice name="tattoo" value="OPEN" current={tattoo} onChange={setTattoo}>
-            Noch offen (Kunde überlegt)
+            Follow-up (Kunde überlegt noch)
           </Choice>
         </Question>
+      )}
+
+      {outcome === "HELD" && tattoo === "OPEN" && (
+        <div className="space-y-2 rounded-lg bg-muted/50 p-3">
+          <label htmlFor="followUpDate" className="block text-sm font-medium">
+            Wann soll der Kunde wieder kontaktiert werden?
+          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="w-44">
+              <Input
+                id="followUpDate"
+                name="followUpDate"
+                type="date"
+                required
+                min={inDays(1)}
+                value={followUp}
+                onChange={(e) => setFollowUp(e.target.value)}
+              />
+            </span>
+            {[
+              [3, "in 3 Tagen"],
+              [7, "in 1 Woche"],
+              [14, "in 2 Wochen"],
+            ].map(([days, label]) => (
+              <Button
+                key={days}
+                type="button"
+                variant="secondary"
+                onClick={() => setFollowUp(inDays(days as number))}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
+          <p className="text-xs text-ink-soft">
+            An diesem Tag um 9 Uhr kommt eine Erinnerung aufs Handy, und der Kunde steht auf der
+            Übersicht unter „Heute nachfassen“. Den Grund (z. B. Motiv noch unsicher, Termin passt
+            erst später) bitte unten als Notiz eintragen.
+          </p>
+        </div>
       )}
 
       {outcome === "HELD" && tattoo === "YES" && (

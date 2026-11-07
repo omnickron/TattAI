@@ -16,6 +16,7 @@ import { brainConfigFromEnv, createBrainClient } from "../src/lib/bot/brain";
 import { BOT_EVENT, processBotInbox } from "../src/lib/bot/inbox";
 import { createPushSender } from "../src/lib/push";
 import { purgeStaleLeads } from "../src/lib/leads/retention";
+import { notifyDueFollowUps } from "../src/lib/outcomes/follow-up";
 import { refreshIntegrationSettings } from "../src/lib/integrations/store";
 import { failStaleEvalRuns, runBotEval } from "../src/lib/bot/eval/run";
 import { createMediaDownloader, downloadPendingAttachments } from "../src/lib/whatsapp/media";
@@ -128,6 +129,12 @@ async function tick() {
     if (media.stored) console.info("[worker] stored attachments:", media.stored);
   } catch (err) {
     console.error("[worker] media download failed:", err);
+  }
+  try {
+    const followUps = await notifyDueFollowUps(prisma, push);
+    if (followUps) console.info(`[worker] follow-up reminders: ${followUps}`);
+  } catch (err) {
+    console.error("[worker] follow-up reminders failed:", err);
   }
   // GDPR retention: once every 6 hours
   if (Date.now() - lastRetention > 6 * 3600_000) {

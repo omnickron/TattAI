@@ -15,10 +15,18 @@ export type OutcomeConsultation = {
   furtherSessionsScheduled: boolean | null;
   outcomeNote: string | null;
   outcomeRecordedAt: Date | null;
+  followUpAt?: Date | null;
+  followUpDoneAt?: Date | null;
   tattooBookings: TattooSession[];
 };
 
 const localDate = (d: Date) => localDateOf(d, APP_TIMEZONE);
+const followUpLabel = new Intl.DateTimeFormat("de-DE", {
+  timeZone: APP_TIMEZONE,
+  weekday: "short",
+  day: "2-digit",
+  month: "2-digit",
+});
 const localTime = (d: Date | null) => (d ? formatTimeOfDay(localMinuteOf(d, APP_TIMEZONE)) : "");
 
 export function outcomeSummary(c: OutcomeConsultation): string {
@@ -26,7 +34,10 @@ export function outcomeSummary(c: OutcomeConsultation): string {
   if (c.status === "CANCELLED") return "Abgesagt";
   if (c.status !== "HELD") return "";
   if (c.tattooBooked === false) return "Stattgefunden · kein Tattoo";
-  if (c.tattooBooked === null) return "Stattgefunden · Kunde überlegt noch";
+  if (c.tattooBooked === null)
+    return c.followUpAt
+      ? `Stattgefunden · Follow-up am ${followUpLabel.format(c.followUpAt)}${c.followUpDoneAt ? " (erledigt)" : ""}`
+      : "Stattgefunden · Kunde überlegt noch";
   if (c.sessionPlan === "SINGLE") return "Stattgefunden · Tattoo gebucht (ein Termin)";
   return c.furtherSessionsScheduled
     ? "Stattgefunden · Tattoo gebucht (mehrere Termine, weitere vergeben)"
@@ -67,6 +78,7 @@ export function OutcomePanel({
         : null,
     sessionPlan: c.sessionPlan,
     furtherScheduled: c.furtherSessionsScheduled,
+    followUpDate: c.followUpAt ? localDate(c.followUpAt) : null,
     sessions: sessions
       .filter((s) => !s.cancelled)
       .map((s) => ({

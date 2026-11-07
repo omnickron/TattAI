@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { loadDueFollowUps, markFollowUpDone, notifyDueFollowUps } from "@/lib/outcomes/follow-up";
 import {
   addSession,
   recordOutcome,
@@ -117,7 +118,7 @@ describe("recordOutcome", () => {
       recordOutcome(prisma, { consultationId: c.id, userId, now: NOW, outcome });
     await record({ outcome: "NO_SHOW" });
     expect(await leadStatus(c.id)).toBe("NO_SHOW");
-    await record({ outcome: "HELD", tattoo: "OPEN" });
+    await record({ outcome: "HELD", tattoo: "OPEN", followUpDate: "2026-11-16" });
     expect(await leadStatus(c.id)).toBe("CONSULTATION_DONE");
     await record({ outcome: "HELD", tattoo: "NO" });
     expect(await leadStatus(c.id)).toBe("NO_TATTOO");
@@ -191,5 +192,77 @@ describe("session times", () => {
     await updateSession(prisma, { sessionId: winter.id, date: "2026-12-02", amount: "500" });
     const updated = await prisma.tattooBooking.findUniqueOrThrow({ where: { id: winter.id } });
     expect(updated.startsAt).toBeNull();
+  });
+});
+
+describe("follow-up", () => {
+  it("reminds the tattooer once on the day and lists the customer until it is done", async () => {
+    const c = await consultation();
+    await recordOutcome(prisma, {
+      consultationId: c.id,
+      userId,
+      now: NOW,
+      timeZone: "Europe/Berlin",
+      outcome: {
+        outcome: "HELD",
+        tattoo: "OPEN",
+        followUpDate: "2026-11-16",
+        note: "Motiv unsicher",
+      },
+    });
+    const stored = await prisma.consultation.findUniqueOrThrow({ where: { id: c.id } });
+    // 09:00 Berlin = 08:00 UTC in November
+    expect(stored.followUpAt?.toISOString()).toBe("2026-11-16T08:00:00.000Z");
+
+    const scope = { isAdmin: true, tattooerId: null };
+    const before = new Date("2026-11-15T20:00:00Z");
+    const onTheDay = new Date("2026-11-16T07:30:00Z"); // 08:30 Berlin: listed, push not yet due
+    const later = new Date("2026-11-16T08:05:00Z");
+    expect(await loadDueFollowUps(prisma, scope, before)).toHaveLength(0);
+    expect(await loadDueFollowUps(prisma, scope, onTheDay)).toHaveLength(1);
+
+    const sent: string[] = [];
+    const push = {
+      configured: true,
+      async send(_s: unknown, p: { title: string }) {
+        sent.push(p.title);
+        return { gone: false };
+      },
+    };
+    const tattooer = await prisma.tattooerProfile.findUniqueOrThrow({
+      where: { id: stored.tattooerId },
+    });
+    await prisma.pushSubscription.create({
+      data: { userId: tattooer.userId, endpoint: "https://push.test/x", p256dh: "p", auth: "a" },
+    });
+    expect(await notifyDueFollowUps(prisma, push, onTheDay)).toBe(0);
+    expect(await notifyDueFollowUps(prisma, push, later)).toBe(1);
+    expect(await notifyDueFollowUps(prisma, push, later)).toBe(0);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatch(/^Heute nachfassen: /);
+
+    // Overdue ones stay listed until done
+    expect(await loadDueFollowUps(prisma, scope, new Date("2026-11-18T10:00:00Z"))).toHaveLength(1);
+    await markFollowUpDone(prisma, c.id, later);
+    expect(await loadDueFollowUps(prisma, scope, new Date("2026-11-18T10:00:00Z"))).toHaveLength(0);
+
+    // A new date brings it back
+    await recordOutcome(prisma, {
+      consultationId: c.id,
+      userId,
+      now: later,
+      timeZone: "Europe/Berlin",
+      outcome: { outcome: "HELD", tattoo: "OPEN", followUpDate: "2026-11-23" },
+    });
+    expect(await loadDueFollowUps(prisma, scope, new Date("2026-11-23T10:00:00Z"))).toHaveLength(1);
+
+    // Tattoo booked: no follow-up any more
+    await recordOutcome(prisma, {
+      consultationId: c.id,
+      userId,
+      now: later,
+      outcome: { outcome: "HELD", tattoo: "NO" },
+    });
+    expect(await loadDueFollowUps(prisma, scope, new Date("2026-11-23T10:00:00Z"))).toHaveLength(0);
   });
 });

@@ -315,6 +315,10 @@ model Consultation {
   furtherSessionsScheduled Boolean?
   outcomeRecordedAt        DateTime?
   outcomeRecordedById      String?
+  // Follow-up: customer is interested but undecided – contact again on this day (09:00 local)
+  followUpAt               DateTime?
+  followUpDoneAt           DateTime?
+  followUpNotifiedAt       DateTime?
   createdAt                DateTime           @default(now())
   updatedAt                DateTime           @updatedAt
 

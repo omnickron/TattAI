@@ -67,6 +67,7 @@ export async function recordOutcomeAction(
     furtherScheduled: further === null ? undefined : further === "yes",
     sessions,
     note: String(formData.get("note") ?? ""),
+    followUpDate: String(formData.get("followUpDate") ?? "") || undefined,
   };
   try {
     await recordOutcome(prisma, {

@@ -1,4 +1,5 @@
 import { loadHandovers } from "./bot/handover";
+import { loadDueFollowUps } from "./outcomes/follow-up";
 import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 import { leadScope, type CurrentUser } from "./auth/session";
@@ -181,6 +182,12 @@ export async function loadDashboard(user: CurrentUser, now = new Date()) {
     .map((id) => contactLeads.find((l) => l.id === id))
     .filter((l): l is NonNullable<typeof l> => Boolean(l));
 
+  const followUps = await loadDueFollowUps(
+    prisma,
+    { isAdmin, tattooerId: user.tattooerProfile?.id ?? null },
+    now,
+    APP_TIMEZONE,
+  );
   const handovers = await loadHandovers(prisma, {
     isAdmin,
     tattooerId: user.tattooerProfile?.id ?? null,
@@ -188,6 +195,7 @@ export async function loadDashboard(user: CurrentUser, now = new Date()) {
   return {
     isAdmin,
     handovers,
+    followUps,
     openOutcomes,
     openCount,
     today: { items, currentId, nextId, dayStart },
