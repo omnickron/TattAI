@@ -1,10 +1,9 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { AppNav, type NavGroup } from "@/components/app-nav";
-import { cn } from "@/components/ui";
 import { requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
-import { logoFont } from "../fonts";
+import { Logo } from "@/components/logo";
 import { PushToggle } from "@/components/push-toggle";
 import { isOperator } from "@/lib/auth/operator";
 import { vapidPublicKey } from "@/lib/push";
@@ -77,8 +76,8 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       <AppNav
         groups={groups}
         logo={
-          <Link href="/" className={cn(logoFont.className, "text-xl leading-none tracking-wide")}>
-            NEEDL
+          <Link href="/" className="text-xl" aria-label="NEEDL – Übersicht">
+            <Logo />
           </Link>
         }
         userName={user.name}
