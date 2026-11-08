@@ -189,6 +189,7 @@ export default async function InvoicePage({ params }: PageProps<"/admin/billing/
                     <td className="py-1.5">{l.tattooerName}</td>
                     <td className="py-1.5 text-right tabular-nums">
                       {l.amountCents === null ? "–" : formatEuro(l.amountCents)}
+                      {l.attendance === "NO_SHOW" && " (Anzahlung, nicht erschienen)"}
                     </td>
                   </tr>
                 ))}

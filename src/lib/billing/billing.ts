@@ -4,6 +4,7 @@
  * × commission rate, plus VAT. Other customers (manual, walk-ins without ad) are shown but
  * not billed. Invoices freeze the numbers at creation.
  */
+import { sessionRevenueCents } from "../outcomes/session-revenue";
 import type { PrismaClient } from "@/generated/prisma/client";
 import { DEFAULT_TIME_ZONE, localDateOf, startOfLocalDay } from "../time";
 
@@ -91,7 +92,10 @@ export interface BillingLine {
   date: string;
   leadName: string;
   tattooerName: string;
+  /** Final price once the customer showed up, kept deposit after a no-show, else planned */
   amountCents: number | null;
+  /** Missing in invoices created before attendance was recorded */
+  attendance?: "ATTENDED" | "NO_SHOW" | null;
   walkIn: boolean;
 }
 
@@ -113,6 +117,10 @@ export async function loadMonthRevenue(
       id: true,
       date: true,
       amountCents: true,
+      depositCents: true,
+      finalAmountCents: true,
+      attendance: true,
+      cancelled: true,
       consultation: {
         select: {
           walkIn: true,
@@ -130,14 +138,15 @@ export async function loadMonthRevenue(
     date: localDateOf(s.date, timeZone),
     leadName: s.consultation.lead.name,
     tattooerName: s.consultation.tattooer.user.name,
-    amountCents: s.amountCents,
+    amountCents: sessionRevenueCents(s),
+    attendance: s.attendance,
     walkIn: s.consultation.walkIn,
   }));
   const byTattooer = new Map<string, { name: string; revenueCents: number; sessions: number }>();
   for (const s of billable) {
     const t = s.consultation.tattooer;
     const row = byTattooer.get(t.id) ?? { name: t.user.name, revenueCents: 0, sessions: 0 };
-    row.revenueCents += s.amountCents ?? 0;
+    row.revenueCents += sessionRevenueCents(s) ?? 0;
     row.sessions++;
     byTattooer.set(t.id, row);
   }
@@ -150,7 +159,7 @@ export async function loadMonthRevenue(
     byTattooer: [...byTattooer.values()].sort((a, b) => b.revenueCents - a.revenueCents),
     /** Not billed: customers that did not come from Meta ads */
     other: {
-      revenueCents: other.reduce((sum, s) => sum + (s.amountCents ?? 0), 0),
+      revenueCents: other.reduce((sum, s) => sum + (sessionRevenueCents(s) ?? 0), 0),
       sessionCount: other.length,
     },
   };

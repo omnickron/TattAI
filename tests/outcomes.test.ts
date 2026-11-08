@@ -1,8 +1,11 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { loadDueFollowUps, markFollowUpDone, notifyDueFollowUps } from "@/lib/outcomes/follow-up";
 import { notifyMissingOutcomes } from "@/lib/outcomes/reminders";
+import { sessionRevenueCents } from "@/lib/outcomes/session-revenue";
+import { loadMonthRevenue } from "@/lib/billing/billing";
 import {
   addSession,
+  recordAttendance,
   recordOutcome,
   setSessionCancelled,
   updateSession,
@@ -308,5 +311,144 @@ describe("missing outcome reminder", () => {
     });
     const dayAfter = new Date(morning.getTime() + 24 * 3600_000);
     expect(await notifyMissingOutcomes(prisma, push, dayAfter)).toBe(0);
+  });
+});
+
+describe("deposit, attendance and final price", () => {
+  async function bookedSession(date = "2026-11-10", deposit = "100") {
+    const c = await consultation();
+    await recordOutcome(prisma, {
+      consultationId: c.id,
+      userId,
+      now: NOW,
+      outcome: {
+        outcome: "HELD",
+        tattoo: "YES",
+        sessionPlan: "SINGLE",
+        sessions: [{ date, amount: "450", deposit, start: "12:00", end: "15:00" }],
+      },
+    });
+    return {
+      c,
+      session: await prisma.tattooBooking.findFirstOrThrow({ where: { consultationId: c.id } }),
+    };
+  }
+
+  it("stores the deposit and refuses one above the price", async () => {
+    const { session } = await bookedSession();
+    expect(session.depositCents).toBe(10000);
+    const c = await consultation(new Date("2026-11-08T09:00:00Z"));
+    await expect(
+      recordOutcome(prisma, {
+        consultationId: c.id,
+        userId,
+        now: NOW,
+        outcome: {
+          outcome: "HELD",
+          tattoo: "YES",
+          sessionPlan: "SINGLE",
+          sessions: [{ date: "2026-11-10", amount: "100", deposit: "200" }],
+        },
+      }),
+    ).rejects.toThrow("Anzahlung ist höher");
+    await addSession(prisma, {
+      consultationId: session.consultationId,
+      date: "2026-12-01",
+      deposit: "50",
+    });
+    const added = await prisma.tattooBooking.findFirstOrThrow({ where: { sessionNumber: 2 } });
+    expect(added.depositCents).toBe(5000);
+  });
+
+  it("records attendance with the final price only after the session started", async () => {
+    const { session } = await bookedSession();
+    await expect(
+      recordAttendance(prisma, {
+        sessionId: session.id,
+        attendance: "ATTENDED",
+        finalAmount: "500",
+        now: NOW,
+      }),
+    ).rejects.toThrow("begonnen");
+    const after = new Date("2026-11-10T15:00:00Z");
+    await expect(
+      recordAttendance(prisma, { sessionId: session.id, attendance: "ATTENDED", now: after }),
+    ).rejects.toThrow("Endpreis");
+    await recordAttendance(prisma, {
+      sessionId: session.id,
+      attendance: "ATTENDED",
+      finalAmount: "520",
+      now: after,
+    });
+    const s = await prisma.tattooBooking.findUniqueOrThrow({ where: { id: session.id } });
+    expect(s).toMatchObject({
+      attendance: "ATTENDED",
+      finalAmountCents: 52000,
+      amountCents: 45000,
+    });
+    expect(sessionRevenueCents(s)).toBe(52000);
+  });
+
+  it("counts the deposit after a no-show and keeps attendance when the outcome is corrected", async () => {
+    const { c, session } = await bookedSession();
+    const after = new Date("2026-11-10T15:00:00Z");
+    await recordAttendance(prisma, { sessionId: session.id, attendance: "NO_SHOW", now: after });
+    let s = await prisma.tattooBooking.findUniqueOrThrow({ where: { id: session.id } });
+    expect(sessionRevenueCents(s)).toBe(10000);
+    // Correcting the note keeps the recorded attendance
+    await recordOutcome(prisma, {
+      consultationId: c.id,
+      userId,
+      now: after,
+      outcome: {
+        outcome: "HELD",
+        tattoo: "YES",
+        sessionPlan: "SINGLE",
+        sessions: [
+          { date: "2026-11-10", amount: "450", deposit: "100", start: "12:00", end: "15:00" },
+        ],
+        note: "korrigiert",
+      },
+    });
+    s = await prisma.tattooBooking.findFirstOrThrow({ where: { consultationId: c.id } });
+    expect(s.attendance).toBe("NO_SHOW");
+    // Billing counts the kept deposit (only Meta leads are billed)
+    await prisma.lead.update({ where: { id: c.leadId }, data: { source: "META_LEAD_AD" } });
+    const revenue = await loadMonthRevenue(prisma, "2026-11");
+    expect(revenue.revenueCents).toBe(10000);
+    expect(revenue.lines[0].attendance).toBe("NO_SHOW");
+    // Reset
+    await recordAttendance(prisma, { sessionId: s.id, attendance: null });
+    s = await prisma.tattooBooking.findUniqueOrThrow({ where: { id: s.id } });
+    expect(s.attendance).toBeNull();
+    expect(sessionRevenueCents(s)).toBe(45000);
+  });
+
+  it("reminds about sessions from yesterday without attendance", async () => {
+    const { c, session } = await bookedSession();
+    await prisma.consultation.update({ where: { id: c.id }, data: {} });
+    const tattooer = await prisma.tattooerProfile.findUniqueOrThrow({ where: { id: tattooerId } });
+    await prisma.pushSubscription.create({
+      data: { userId: tattooer.userId, endpoint: "https://push.test/s", p256dh: "p", auth: "a" },
+    });
+    const titles: string[] = [];
+    const push = {
+      configured: true,
+      async send(_s: unknown, p: { title: string }) {
+        titles.push(p.title);
+        return { gone: false };
+      },
+    };
+    // Same day after the session: not yet (only from the next morning)
+    expect(await notifyMissingOutcomes(prisma, push, new Date("2026-11-10T16:00:00Z"))).toBe(0);
+    expect(await notifyMissingOutcomes(prisma, push, new Date("2026-11-11T08:30:00Z"))).toBe(1);
+    expect(titles).toEqual(["1 Tattoo-Termin ohne Ergebnis"]);
+    await recordAttendance(prisma, {
+      sessionId: session.id,
+      attendance: "ATTENDED",
+      finalAmount: "450",
+      now: new Date("2026-11-11T08:30:00Z"),
+    });
+    expect(await notifyMissingOutcomes(prisma, push, new Date("2026-11-12T08:30:00Z"))).toBe(0);
   });
 });

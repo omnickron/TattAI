@@ -117,8 +117,8 @@ describe("validateOutcome", () => {
       sessions: [s("2026-12-01", "600"), s("2027-01-12"), s("", "")],
     });
     expect(many.sessions).toEqual([
-      { date: "2026-12-01", amountCents: 60000, start: null, end: null },
-      { date: "2027-01-12", amountCents: null, start: null, end: null },
+      { date: "2026-12-01", amountCents: 60000, depositCents: null, start: null, end: null },
+      { date: "2027-01-12", amountCents: null, depositCents: null, start: null, end: null },
     ]);
   });
 
@@ -138,7 +138,7 @@ describe("validateOutcome", () => {
         sessionPlan: "SINGLE",
         sessions: [s("2026-12-01", "viel")],
       }),
-    ).toThrow("Betrag");
+    ).toThrow("Preis");
   });
 });
 

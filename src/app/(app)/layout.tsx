@@ -1,3 +1,4 @@
+import { missingAttendanceWhere } from "@/lib/outcomes/attendance";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { AppNav, type NavGroup } from "@/components/app-nav";
@@ -25,6 +26,13 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       ...(isAdmin ? {} : { tattooerId: user.tattooerProfile?.id ?? "__none__" }),
     },
   });
+  // Tattoo sessions that are over without "erschienen / nicht erschienen"
+  const openAttendance = await prisma.tattooBooking.count({
+    where: missingAttendanceWhere(
+      new Date(),
+      isAdmin ? null : (user.tattooerProfile?.id ?? "__none__"),
+    ),
+  });
   // Chats the bot handed over that nobody has picked up yet
   const handovers = await prisma.lead.count({
     where: openHandoverWhere({ isAdmin, tattooerId: user.tattooerProfile?.id ?? null }),
@@ -42,7 +50,12 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         { href: "/", label: "Übersicht", icon: "home", badge: handovers + followUps },
         { href: "/leads", label: "Leads", icon: "leads" },
         { href: "/calendar", label: "Kalender", icon: "calendar" },
-        { href: "/consultations", label: "Beratungen", icon: "consultations", badge: openOutcomes },
+        {
+          href: "/consultations",
+          label: "Beratungen",
+          icon: "consultations",
+          badge: openOutcomes + openAttendance,
+        },
         ...(user.tattooerProfile
           ? [{ href: "/availability", label: "Verfügbarkeit", icon: "availability" as const }]
           : []),

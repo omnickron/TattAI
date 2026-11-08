@@ -275,9 +275,9 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin/
         />
         <Tile
           label="Offene Punkte"
-          value={t.open + t.missingAmounts}
-          sub={`${t.open} Ergebnisse fehlen · ${t.missingAmounts} Beträge fehlen`}
-          tone={t.open + t.missingAmounts > 0 ? "warn" : undefined}
+          value={t.open + t.missingAttendance + t.missingAmounts}
+          sub={`${t.open} Ergebnisse fehlen · ${t.missingAttendance} Erscheinen offen · ${t.missingAmounts} Beträge fehlen`}
+          tone={t.open + t.missingAttendance + t.missingAmounts > 0 ? "warn" : undefined}
         />
       </div>
       {t.open > 0 && (

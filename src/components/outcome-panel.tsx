@@ -84,6 +84,7 @@ export function OutcomePanel({
       .map((s) => ({
         date: localDate(s.date),
         amount: centsToInput(s.amountCents),
+        deposit: centsToInput(s.depositCents),
         start: localTime(s.startsAt),
         end: localTime(s.endsAt),
       })),

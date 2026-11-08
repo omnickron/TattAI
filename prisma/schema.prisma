@@ -335,6 +335,11 @@ model Consultation {
   @@index([leadId])
 }
 
+enum SessionAttendance {
+  ATTENDED
+  NO_SHOW
+}
+
 model TattooBooking {
   id                    String       @id @default(cuid())
   consultationId        String
@@ -355,8 +360,14 @@ model TattooBooking {
   // Automatic retries back off (1, 2, 4 … min, max. 60 min); a manual retry ignores this
   calendarSyncAttempts  Int          @default(0)
   calendarNextAttemptAt DateTime?
-  // Entered manually; may be added later
+  // Planned price, entered when booking; may be added later
   amountCents           Int?
+  // Deposit the customer paid in advance
+  depositCents          Int?
+  // After the session: did the customer show up, and what did the tattoo really cost
+  attendance            SessionAttendance?
+  attendanceRecordedAt  DateTime?
+  finalAmountCents      Int?
   currency              String       @default("EUR")
   cancelled             Boolean      @default(false)
   note                  String?

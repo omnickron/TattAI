@@ -127,8 +127,8 @@ export default async function BillingPage({ searchParams }: PageProps<"/admin/bi
           )}
           {revenue.missingAmounts > 0 && (
             <p className="mt-3 rounded-lg bg-amber-50 p-2 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-              Bei {revenue.missingAmounts} Tattoo-Termin(en) fehlt noch der Betrag – sie zählen
-              erst, wenn er eingetragen ist.
+              Bei {revenue.missingAmounts} Tattoo-Termin(en) fehlt noch der Preis – sie zählen erst,
+              wenn er eingetragen ist.
             </p>
           )}
           {!finished && (
@@ -176,6 +176,7 @@ export default async function BillingPage({ searchParams }: PageProps<"/admin/bi
                         {" "}
                         · {l.tattooerName}
                         {l.walkIn && " · Laufkunde"}
+                        {l.attendance === "NO_SHOW" && " · nicht erschienen (Anzahlung)"}
                       </span>
                     </span>
                     <span className="tabular-nums">

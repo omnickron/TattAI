@@ -43,7 +43,17 @@ export async function loadReport(
           endsAt: true,
           tattooBooked: true,
           walkIn: true,
-          tattooBookings: { select: { date: true, amountCents: true, cancelled: true } },
+          tattooBookings: {
+            select: {
+              date: true,
+              endsAt: true,
+              amountCents: true,
+              depositCents: true,
+              finalAmountCents: true,
+              attendance: true,
+              cancelled: true,
+            },
+          },
         },
       },
     },

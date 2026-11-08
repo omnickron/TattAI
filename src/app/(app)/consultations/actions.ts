@@ -11,6 +11,7 @@ import { retrySessionSync, syncConsultationSessions } from "@/lib/scheduling/ses
 import {
   addSession,
   OutcomeError,
+  recordAttendance,
   recordOutcome,
   setSessionCancelled,
   updateSession,
@@ -55,6 +56,7 @@ export async function recordOutcomeAction(
     sessions.push({
       date: String(date),
       amount: String(formData.get(`session_amount_${i}`) ?? ""),
+      deposit: String(formData.get(`session_deposit_${i}`) ?? ""),
       start: String(formData.get(`session_start_${i}`) ?? ""),
       end: String(formData.get(`session_end_${i}`) ?? ""),
     });
@@ -104,6 +106,7 @@ export async function addSessionAction(
       consultationId,
       date: String(formData.get("date") ?? ""),
       amount: String(formData.get("amount") ?? ""),
+      deposit: String(formData.get("deposit") ?? ""),
       start: String(formData.get("start") ?? ""),
       end: String(formData.get("end") ?? ""),
       timeZone: APP_TIMEZONE,
@@ -137,6 +140,7 @@ export async function updateSessionAction(
       sessionId,
       date: String(formData.get("date") ?? ""),
       amount: String(formData.get("amount") ?? ""),
+      deposit: String(formData.get("deposit") ?? ""),
       start: String(formData.get("start") ?? ""),
       end: String(formData.get("end") ?? ""),
       timeZone: APP_TIMEZONE,
@@ -171,4 +175,35 @@ export async function retrySessionSyncAction(sessionId: string): Promise<ActionS
   // On success the client shows the confirmation first and refreshes itself shortly after.
   if (!result.ok) revalidate(access.consultation.leadId);
   return result;
+}
+
+/** After a tattoo session: customer showed up (with final price) or not; "reset" undoes it. */
+export async function recordAttendanceAction(
+  sessionId: string,
+  attendance: "ATTENDED" | "NO_SHOW" | null,
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const access = await sessionAccess(sessionId);
+  if (!access) return { ok: false, message: "Kein Zugriff." };
+  try {
+    await recordAttendance(prisma, {
+      sessionId,
+      attendance,
+      finalAmount: String(formData.get("finalAmount") ?? ""),
+    });
+  } catch (err) {
+    return fail(err);
+  }
+  revalidate(access.consultation.leadId);
+  revalidatePath("/");
+  return {
+    ok: true,
+    message:
+      attendance === "ATTENDED"
+        ? "Gespeichert: erschienen."
+        : attendance === "NO_SHOW"
+          ? "Gespeichert: nicht erschienen."
+          : "Zurückgesetzt.",
+  };
 }

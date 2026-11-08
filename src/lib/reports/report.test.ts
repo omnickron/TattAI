@@ -107,6 +107,7 @@ describe("buildReport", () => {
       revenueCents: 120000,
       revenueRealizedCents: 60000,
       missingAmounts: 1,
+      missingAttendance: 1,
     });
   });
 

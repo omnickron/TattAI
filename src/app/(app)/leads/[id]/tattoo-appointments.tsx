@@ -3,6 +3,7 @@ import { Badge, Card, CardTitle } from "@/components/ui";
 import type { CurrentUser } from "@/lib/auth/session";
 import { formatDate } from "@/lib/format";
 import { formatEuro } from "@/lib/outcomes/money";
+import { sessionRevenueCents } from "@/lib/outcomes/session-revenue";
 
 type Project = {
   id: string;
@@ -42,7 +43,7 @@ export function TattooAppointments({
   const total = projects
     .flatMap((p) => p.tattooBookings)
     .filter((s) => !s.cancelled)
-    .reduce((sum, s) => sum + (s.amountCents ?? 0), 0);
+    .reduce((sum, s) => sum + (sessionRevenueCents(s) ?? 0), 0);
 
   return (
     <Card id="tattoo-termine">

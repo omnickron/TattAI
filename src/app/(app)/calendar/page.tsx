@@ -1,3 +1,4 @@
+import { sessionRevenueCents } from "@/lib/outcomes/session-revenue";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ButtonLink, cn, EmptyState, PageHeader, Select, Button } from "@/components/ui";
@@ -224,7 +225,16 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
         select: {
           lead: { select: { id: true, name: true, phoneE164: true, tattooSummary: true } },
           tattooer: { select: { id: true, user: { select: { name: true } } } },
-          tattooBookings: { where: { cancelled: false }, select: { amountCents: true } },
+          tattooBookings: {
+            where: { cancelled: false },
+            select: {
+              amountCents: true,
+              depositCents: true,
+              finalAmountCents: true,
+              attendance: true,
+              cancelled: true,
+            },
+          },
           attachments: {
             where: { status: { in: ["STORED", "PENDING"] } },
             orderBy: { createdAt: "asc" },
@@ -314,11 +324,14 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
           (l) => !l.startsWith("Motiv:") && !l.startsWith("Referenzbilder"),
         ),
         images: sn.consultation.attachments,
-        amount: sn.amountCents != null ? formatEuro(sn.amountCents) : null,
+        amount: sessionRevenueCents(sn) != null ? formatEuro(sessionRevenueCents(sn)) : null,
         total:
           sn.consultation.tattooBookings.length > 1
             ? formatEuro(
-                sn.consultation.tattooBookings.reduce((sum, b) => sum + (b.amountCents ?? 0), 0),
+                sn.consultation.tattooBookings.reduce(
+                  (sum, b) => sum + (sessionRevenueCents(b) ?? 0),
+                  0,
+                ),
               )
             : null,
         note: sn.note,

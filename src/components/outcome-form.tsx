@@ -14,7 +14,13 @@ export interface OutcomeDefaults {
   tattoo?: Tattoo | null;
   sessionPlan?: Plan | null;
   furtherScheduled?: boolean | null;
-  sessions?: Array<{ date: string; amount: string; start?: string; end?: string }>;
+  sessions?: Array<{
+    date: string;
+    amount: string;
+    deposit?: string;
+    start?: string;
+    end?: string;
+  }>;
   note?: string | null;
   /** Follow-up day "YYYY-MM-DD" */
   followUpDate?: string | null;
@@ -98,7 +104,9 @@ export function OutcomeForm({
   );
   const [followUp, setFollowUp] = useState(defaults.followUpDate ?? "");
   const [sessions, setSessions] = useState(
-    defaults.sessions?.length ? defaults.sessions : [{ date: "", amount: "", start: "", end: "" }],
+    defaults.sessions?.length
+      ? defaults.sessions
+      : [{ date: "", amount: "", deposit: "", start: "", end: "" }],
   );
 
   const showSessions =
@@ -108,11 +116,11 @@ export function OutcomeForm({
   const multipleRows = plan === "MULTIPLE" && further === "yes";
   const rows = multipleRows
     ? sessions.length < 2
-      ? [...sessions, { date: "", amount: "", start: "", end: "" }]
+      ? [...sessions, { date: "", amount: "", deposit: "", start: "", end: "" }]
       : sessions
     : sessions.slice(0, 1);
 
-  const update = (i: number, key: "date" | "amount" | "start" | "end", value: string) =>
+  const update = (i: number, key: "date" | "amount" | "deposit" | "start" | "end", value: string) =>
     setSessions(
       rows.map((r, j) => {
         if (j !== i) return r;
@@ -240,19 +248,34 @@ export function OutcomeForm({
                     />
                   </span>
                 </div>
-                <label className="flex items-center gap-2 text-sm">
-                  <span className="text-ink-soft">Betrag</span>
-                  <Input
-                    name={`session_amount_${i}`}
-                    value={row.amount}
-                    onChange={(e) => update(i, "amount", e.target.value)}
-                    placeholder="z. B. 450"
-                    inputMode="decimal"
-                    aria-label={`Betrag Termin ${i + 1}`}
-                    className="w-32"
-                  />
-                  <span className="text-ink-soft">€</span>
-                </label>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+                  <label className="flex items-center gap-2">
+                    <span className="w-16 text-ink-soft">Preis</span>
+                    <Input
+                      name={`session_amount_${i}`}
+                      value={row.amount}
+                      onChange={(e) => update(i, "amount", e.target.value)}
+                      placeholder="z. B. 450"
+                      inputMode="decimal"
+                      aria-label={`Preis Termin ${i + 1}`}
+                      className="w-28"
+                    />
+                    <span className="text-ink-soft">€</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <span className="w-16 text-ink-soft">Anzahlung</span>
+                    <Input
+                      name={`session_deposit_${i}`}
+                      value={row.deposit ?? ""}
+                      onChange={(e) => update(i, "deposit", e.target.value)}
+                      placeholder="z. B. 100"
+                      inputMode="decimal"
+                      aria-label={`Anzahlung Termin ${i + 1}`}
+                      className="w-28"
+                    />
+                    <span className="text-ink-soft">€</span>
+                  </label>
+                </div>
               </div>
               {multipleRows && rows.length > 2 ? (
                 <Button
@@ -273,15 +296,18 @@ export function OutcomeForm({
             <Button
               type="button"
               variant="secondary"
-              onClick={() => setSessions([...rows, { date: "", amount: "", start: "", end: "" }])}
+              onClick={() =>
+                setSessions([...rows, { date: "", amount: "", deposit: "", start: "", end: "" }])
+              }
             >
               + Weiterer Termin
             </Button>
           )}
           <p className="text-xs text-ink-soft">
-            Uhrzeit und Betrag sind optional und können später ergänzt werden. Beim Beginn schlägt
-            NEEDL drei Stunden Dauer vor. Mit Uhrzeit erscheint der Termin im Kalender und blockiert
-            Beratungen.
+            Uhrzeit, Preis und Anzahlung sind optional und können später ergänzt werden. Nach dem
+            Termin tragt ihr ein, ob der Kunde erschienen ist und was das Tattoo am Ende gekostet
+            hat. Beim Beginn schlägt NEEDL drei Stunden Dauer vor. Mit Uhrzeit erscheint der Termin
+            im Kalender und blockiert Beratungen.
             {plan === "MULTIPLE" &&
               further === "no" &&
               " Weitere Termine lassen sich später ergänzen."}
