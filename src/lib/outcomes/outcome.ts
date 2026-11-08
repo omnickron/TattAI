@@ -407,14 +407,24 @@ export async function updateSession(
   });
 }
 
+/** Cancels or restores a session; on a cancellation the studio may keep the deposit. */
 export async function setSessionCancelled(
   prisma: PrismaClient,
   sessionId: string,
   cancelled: boolean,
+  depositKept = false,
 ) {
   await prisma.tattooBooking.update({
     where: { id: sessionId },
-    data: { cancelled, calendarSyncPending: true },
+    data: {
+      cancelled,
+      depositKept: cancelled && depositKept,
+      // A cancelled session has no attendance
+      ...(cancelled
+        ? { attendance: null, attendanceRecordedAt: null, finalAmountCents: null }
+        : {}),
+      calendarSyncPending: true,
+    },
   });
 }
 

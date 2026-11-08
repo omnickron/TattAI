@@ -23,6 +23,7 @@ export type TattooSession = {
   attendance: "ATTENDED" | "NO_SHOW" | null;
   finalAmountCents: number | null;
   cancelled: boolean;
+  depositKept: boolean;
   startsAt: Date | null;
   endsAt: Date | null;
   calendarEventId: string | null;
@@ -81,6 +82,13 @@ function sessionState(s: TattooSession, now: Date) {
 /** Price part of the row: planned price + deposit, after the session the final price. */
 export function PriceInfo({ s }: { s: TattooSession }) {
   const deposit = s.depositCents ? ` · Anzahlung ${formatEuro(s.depositCents)}` : "";
+  if (s.cancelled) {
+    return s.depositKept && s.depositCents ? (
+      <span className="tabular-nums">Anzahlung {formatEuro(s.depositCents)} einbehalten</span>
+    ) : (
+      <span className="tabular-nums text-ink-soft">{s.depositCents ? "Anzahlung zurück" : ""}</span>
+    );
+  }
   if (s.attendance === "ATTENDED" && s.finalAmountCents !== null) {
     const changed = s.amountCents !== null && s.amountCents !== s.finalAmountCents;
     return (
@@ -137,6 +145,31 @@ function EuroInput({
   );
 }
 
+/** Cancel a session; with a deposit, the tattooer says whether the studio keeps it. */
+function CancelSession({ s }: { s: TattooSession }) {
+  const button = (kept: boolean, label: string) => (
+    <ActionForm
+      action={setSessionCancelledAction.bind(null, s.id, true, kept)}
+      confirm={
+        s.depositCents
+          ? `Termin absagen – ${kept ? "Anzahlung wird einbehalten und zählt als Umsatz" : "Anzahlung geht zurück"}?`
+          : "Termin als abgesagt markieren?"
+      }
+    >
+      <Button type="submit" variant="ghost" className="px-2 py-1 text-xs text-red-600">
+        {label}
+      </Button>
+    </ActionForm>
+  );
+  if (!s.depositCents) return button(false, "Termin absagen");
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      {button(true, "Absagen – Anzahlung einbehalten")}
+      {button(false, "Absagen – Anzahlung zurück")}
+    </div>
+  );
+}
+
 /** Asked once the session is over: did the customer come, and what was the final price? */
 export function AttendanceForm({ s }: { s: TattooSession }) {
   return (
@@ -167,7 +200,8 @@ export function AttendanceForm({ s }: { s: TattooSession }) {
         </ActionForm>
       </div>
       <p className="text-xs text-ink-soft">
-        Der Endpreis ist das, was das Tattoo am Ende wirklich gekostet hat (inklusive Anzahlung).
+        Der Endpreis ist das, was diese Sitzung am Ende wirklich gekostet hat (inklusive Anzahlung).
+        Preise gelten immer pro Sitzung.
         {s.depositCents
           ? ` Bei „nicht erschienen“ zählt die Anzahlung von ${formatEuro(s.depositCents)} als Umsatz.`
           : ""}
@@ -196,7 +230,7 @@ export function TattooSessions({
 }) {
   const sessions = [...unsorted].sort((a, b) => a.sessionNumber - b.sessionNumber);
   const active = sessions.filter((s) => !s.cancelled);
-  const total = active.reduce((sum, s) => sum + (sessionRevenueCents(s) ?? 0), 0);
+  const total = sessions.reduce((sum, s) => sum + (sessionRevenueCents(s) ?? 0), 0);
   const missingAmounts = active.filter((s) => sessionRevenueCents(s) === null).length;
 
   return (
@@ -239,7 +273,9 @@ export function TattooSessions({
                   {canEdit && (
                     <div className="mt-3 space-y-2 border-t border-line pt-3">
                       {s.cancelled ? (
-                        <ActionForm action={setSessionCancelledAction.bind(null, s.id, false)}>
+                        <ActionForm
+                          action={setSessionCancelledAction.bind(null, s.id, false, false)}
+                        >
                           <Button type="submit" variant="secondary" className="px-3 py-1.5 text-xs">
                             Termin wiederherstellen
                           </Button>
@@ -301,18 +337,7 @@ export function TattooSessions({
                               </Button>
                             </ActionForm>
                           )}
-                          <ActionForm
-                            action={setSessionCancelledAction.bind(null, s.id, true)}
-                            confirm={`Termin ${s.sessionNumber} als abgesagt markieren?`}
-                          >
-                            <Button
-                              type="submit"
-                              variant="ghost"
-                              className="px-2 py-1 text-xs text-red-600"
-                            >
-                              Termin absagen
-                            </Button>
-                          </ActionForm>
+                          <CancelSession s={s} />
                         </>
                       )}
                     </div>

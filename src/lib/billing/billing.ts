@@ -4,7 +4,7 @@
  * × commission rate, plus VAT. Other customers (manual, walk-ins without ad) are shown but
  * not billed. Invoices freeze the numbers at creation.
  */
-import { sessionRevenueCents } from "../outcomes/session-revenue";
+import { priceFinal, sessionRevenueCents } from "../outcomes/session-revenue";
 import type { PrismaClient } from "@/generated/prisma/client";
 import { DEFAULT_TIME_ZONE, localDateOf, startOfLocalDay } from "../time";
 
@@ -96,6 +96,10 @@ export interface BillingLine {
   amountCents: number | null;
   /** Missing in invoices created before attendance was recorded */
   attendance?: "ATTENDED" | "NO_SHOW" | null;
+  /** Cancelled with kept deposit */
+  cancelled?: boolean;
+  /** Attendance and final price recorded – required before the invoice */
+  priceFinal?: boolean;
   walkIn: boolean;
 }
 
@@ -108,7 +112,8 @@ export async function loadMonthRevenue(
   const { start, end } = monthRange(month, timeZone);
   const sessions = await prisma.tattooBooking.findMany({
     where: {
-      cancelled: false,
+      // Cancelled sessions only count with a kept deposit
+      OR: [{ cancelled: false }, { depositKept: true, depositCents: { gt: 0 } }],
       date: { gte: start, lt: end },
       consultation: { status: "HELD", tattooBooked: true },
     },
@@ -121,6 +126,9 @@ export async function loadMonthRevenue(
       finalAmountCents: true,
       attendance: true,
       cancelled: true,
+      depositKept: true,
+      startsAt: true,
+      endsAt: true,
       consultation: {
         select: {
           walkIn: true,
@@ -140,6 +148,8 @@ export async function loadMonthRevenue(
     tattooerName: s.consultation.tattooer.user.name,
     amountCents: sessionRevenueCents(s),
     attendance: s.attendance,
+    cancelled: s.cancelled,
+    priceFinal: priceFinal(s),
     walkIn: s.consultation.walkIn,
   }));
   const byTattooer = new Map<string, { name: string; revenueCents: number; sessions: number }>();
@@ -156,6 +166,8 @@ export async function loadMonthRevenue(
     revenueCents: lines.reduce((sum, l) => sum + (l.amountCents ?? 0), 0),
     sessionCount: lines.length,
     missingAmounts: lines.filter((l) => l.amountCents === null).length,
+    /** Billable sessions whose price is not final yet (attendance / final price missing) */
+    openLines: lines.filter((l) => !l.priceFinal),
     byTattooer: [...byTattooer.values()].sort((a, b) => b.revenueCents - a.revenueCents),
     /** Not billed: customers that did not come from Meta ads */
     other: {
@@ -197,6 +209,10 @@ export async function createInvoice(
     );
 
   const revenue = await loadMonthRevenue(prisma, input.month, tz);
+  if (revenue.openLines.length)
+    throw new BillingError(
+      `Bei ${revenue.openLines.length === 1 ? "einem Tattoo-Termin" : `${revenue.openLines.length} Tattoo-Terminen`} fehlt noch „erschienen / nicht erschienen“ mit Endpreis. Erst danach lässt sich die Rechnung erstellen.`,
+    );
   if (revenue.revenueCents <= 0)
     throw new BillingError(
       `Im ${monthLabel(input.month)} gab es keinen Tattoo-Umsatz – keine Rechnung nötig.`,

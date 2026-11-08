@@ -304,10 +304,10 @@ export function OutcomeForm({
             </Button>
           )}
           <p className="text-xs text-ink-soft">
-            Uhrzeit, Preis und Anzahlung sind optional und können später ergänzt werden. Nach dem
-            Termin tragt ihr ein, ob der Kunde erschienen ist und was das Tattoo am Ende gekostet
-            hat. Beim Beginn schlägt NEEDL drei Stunden Dauer vor. Mit Uhrzeit erscheint der Termin
-            im Kalender und blockiert Beratungen.
+            Preise gelten immer pro Sitzung. Uhrzeit, Preis und Anzahlung sind optional und können
+            später ergänzt werden. Nach dem Termin tragt ihr ein, ob der Kunde erschienen ist und
+            was das Tattoo am Ende gekostet hat. Beim Beginn schlägt NEEDL drei Stunden Dauer vor.
+            Mit Uhrzeit erscheint der Termin im Kalender und blockiert Beratungen.
             {plan === "MULTIPLE" &&
               further === "no" &&
               " Weitere Termine lassen sich später ergänzen."}

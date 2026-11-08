@@ -17,6 +17,8 @@ import {
 import { prisma } from "@/lib/db";
 import { APP_TIMEZONE, formatDate } from "@/lib/format";
 import { formatEuro } from "@/lib/outcomes/money";
+import { attendanceMissing } from "@/lib/outcomes/session-revenue";
+import { AttendanceForm, PriceInfo } from "@/components/tattoo-sessions";
 import { INVOICE_STATUS } from "@/lib/billing/labels";
 import { ActionButton } from "./buttons";
 import { cancelInvoiceAction, createInvoiceAction, setPaidAction } from "./actions";
@@ -47,6 +49,21 @@ export default async function BillingPage({ searchParams }: PageProps<"/admin/bi
   const finished = monthRange(month, APP_TIMEZONE).end <= now;
   const invoice = invoices.find((i) => i.period === month && i.status !== "CANCELLED");
   const drift = invoice ? revenue.revenueCents - invoice.revenueCents : 0;
+  // Sessions that are over without attendance / final price: listed here to fill in
+  const openSessions = (
+    await prisma.tattooBooking.findMany({
+      where: { id: { in: revenue.openLines.map((l) => l.sessionId) } },
+      orderBy: [{ date: "asc" }, { startsAt: "asc" }],
+      include: {
+        consultation: {
+          select: {
+            lead: { select: { id: true, name: true } },
+            tattooer: { select: { user: { select: { name: true } } } },
+          },
+        },
+      },
+    })
+  ).filter((s) => attendanceMissing(s, now));
 
   return (
     <>
@@ -54,6 +71,33 @@ export default async function BillingPage({ searchParams }: PageProps<"/admin/bi
         title="Abrechnung"
         description={`Tattoo-Umsatz mit Kunden aus Meta-Anzeigen pro Monat und die Provisionsrechnungen (${pct(cfg.commissionBps)}).`}
       />
+
+      {openSessions.length > 0 && (
+        <Card className="mb-4 space-y-3 border-amber-300">
+          <CardTitle>Vor der Rechnung offen: {openSessions.length} Tattoo-Termin(e)</CardTitle>
+          <p className="text-sm text-ink-soft">
+            Bei diesen Terminen fehlt noch „erschienen / nicht erschienen“ mit Endpreis. Die
+            Rechnung für {monthLabel(month)} lässt sich erst erstellen, wenn alle eingetragen sind.
+            Der zuständige Tätowierer wird jeden Morgen erinnert; du kannst es auch hier eintragen.
+          </p>
+          {openSessions.map((s) => (
+            <div key={s.id} className="border-t border-line pt-3">
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="font-medium tabular-nums">{formatDate(s.date)}</span>
+                <Link
+                  href={`/leads/${s.consultation.lead.id}#tattoo-termine`}
+                  className="font-medium underline-offset-2 hover:underline"
+                >
+                  {s.consultation.lead.name}
+                </Link>
+                <span className="text-ink-soft">{s.consultation.tattooer.user.name}</span>
+                <PriceInfo s={s} />
+              </div>
+              <AttendanceForm s={s} />
+            </div>
+          ))}
+        </Card>
+      )}
 
       <div className="mb-4 flex items-center gap-2">
         <Link
@@ -177,6 +221,8 @@ export default async function BillingPage({ searchParams }: PageProps<"/admin/bi
                         · {l.tattooerName}
                         {l.walkIn && " · Laufkunde"}
                         {l.attendance === "NO_SHOW" && " · nicht erschienen (Anzahlung)"}
+                        {l.cancelled && " · abgesagt (Anzahlung einbehalten)"}
+                        {!l.priceFinal && !l.cancelled && " · Endpreis offen"}
                       </span>
                     </span>
                     <span className="tabular-nums">
@@ -218,6 +264,11 @@ export default async function BillingPage({ searchParams }: PageProps<"/admin/bi
           ) : !finished ? (
             <p className="text-sm text-ink-soft">
               Die Rechnung kann erstellt werden, sobald der Monat vorbei ist.
+            </p>
+          ) : revenue.openLines.length > 0 ? (
+            <p className="rounded-lg bg-amber-50 p-2 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+              Noch nicht möglich: Bei {revenue.openLines.length} Tattoo-Termin(en) fehlt „erschienen
+              / nicht erschienen“ mit Endpreis (siehe oben).
             </p>
           ) : !operator ? (
             <p className="text-sm text-ink-soft">

@@ -42,7 +42,6 @@ export function TattooAppointments({
   const now = new Date();
   const total = projects
     .flatMap((p) => p.tattooBookings)
-    .filter((s) => !s.cancelled)
     .reduce((sum, s) => sum + (sessionRevenueCents(s) ?? 0), 0);
 
   return (

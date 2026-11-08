@@ -128,7 +128,13 @@ function addLead(m: Metrics, lead: ReportLead, now: Date) {
   for (const c of all) {
     if (!(c.status === "HELD" && c.tattooBooked)) continue;
     for (const s of c.sessions) {
-      if (s.cancelled) continue;
+      if (s.cancelled) {
+        // Kept deposit of a cancelled session is revenue, but no session
+        const kept = sessionRevenueCents(s) ?? 0;
+        m.revenueCents += kept;
+        if (s.date <= now) m.revenueRealizedCents += kept;
+        continue;
+      }
       m.sessions++;
       const revenue = sessionRevenueCents(s);
       if (revenue === null) m.missingAmounts++;

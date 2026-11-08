@@ -424,6 +424,19 @@ describe("deposit, attendance and final price", () => {
     expect(sessionRevenueCents(s)).toBe(45000);
   });
 
+  it("keeps the deposit of a cancelled session only when chosen", async () => {
+    const { session } = await bookedSession();
+    await setSessionCancelled(prisma, session.id, true, true);
+    let s = await prisma.tattooBooking.findUniqueOrThrow({ where: { id: session.id } });
+    expect(sessionRevenueCents(s)).toBe(10000);
+    await setSessionCancelled(prisma, session.id, false);
+    s = await prisma.tattooBooking.findUniqueOrThrow({ where: { id: session.id } });
+    expect(s.depositKept).toBe(false);
+    await setSessionCancelled(prisma, session.id, true);
+    s = await prisma.tattooBooking.findUniqueOrThrow({ where: { id: session.id } });
+    expect(sessionRevenueCents(s)).toBe(0);
+  });
+
   it("reminds about sessions from yesterday without attendance", async () => {
     const { c, session } = await bookedSession();
     await prisma.consultation.update({ where: { id: c.id }, data: {} });

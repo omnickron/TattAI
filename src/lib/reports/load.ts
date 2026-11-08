@@ -52,6 +52,7 @@ export async function loadReport(
               finalAmountCents: true,
               attendance: true,
               cancelled: true,
+              depositKept: true,
             },
           },
         },

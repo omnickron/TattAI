@@ -368,6 +368,8 @@ model TattooBooking {
   attendance            SessionAttendance?
   attendanceRecordedAt  DateTime?
   finalAmountCents      Int?
+  // Cancelled at short notice and the studio kept the deposit: it counts as revenue
+  depositKept           Boolean      @default(false)
   currency              String       @default("EUR")
   cancelled             Boolean      @default(false)
   note                  String?

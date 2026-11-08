@@ -32,6 +32,7 @@ async function requireConsultationAccess(consultationId: string) {
 function revalidate(leadId: string) {
   revalidatePath(`/leads/${leadId}`);
   revalidatePath("/consultations");
+  revalidatePath("/admin/billing");
   revalidatePath("/admin/dashboard");
 }
 
@@ -157,10 +158,11 @@ export async function updateSessionAction(
 export async function setSessionCancelledAction(
   sessionId: string,
   cancelled: boolean,
+  depositKept: boolean,
 ): Promise<ActionState> {
   const access = await sessionAccess(sessionId);
   if (!access) return { ok: false, message: "Kein Zugriff." };
-  await setSessionCancelled(prisma, sessionId, cancelled);
+  await setSessionCancelled(prisma, sessionId, cancelled, depositKept);
   // Calendar sync is best effort; failures stay pending and are retried by the worker.
   await syncConsultationSessions(schedulingDeps(), access.consultation.id);
   revalidate(access.consultation.leadId);

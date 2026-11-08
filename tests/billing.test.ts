@@ -34,13 +34,22 @@ const config: BillingConfig = {
 let tattooerId: string;
 let consultationId: string;
 
-async function session(date: string, amount: number | null, opts: { cancelled?: boolean } = {}) {
+/** By default the customer showed up and paid the planned price (price final). */
+async function session(
+  date: string,
+  amount: number | null,
+  opts: { cancelled?: boolean; open?: boolean; deposit?: number; depositKept?: boolean } = {},
+) {
+  const settled = !opts.open && !opts.cancelled && amount !== null;
   return prisma.tattooBooking.create({
     data: {
       consultationId,
       date: sessionDate(date, TZ),
       amountCents: amount,
+      depositCents: opts.deposit ?? null,
+      depositKept: opts.depositKept ?? false,
       cancelled: opts.cancelled ?? false,
+      ...(settled ? { attendance: "ATTENDED" as const, finalAmountCents: amount } : {}),
     },
   });
 }
@@ -170,6 +179,39 @@ describe("invoices", () => {
 
     await setInvoicePaid(prisma, second.id, true, now);
     await expect(cancelInvoice(prisma, second.id, now)).rejects.toThrow(/Bezahlte/);
+  });
+
+  it("waits until every session of the month has attendance and final price", async () => {
+    await session("2026-10-12", 80000);
+    const open = await session("2026-10-20", 30000, { open: true });
+    const now = new Date("2026-11-05T10:00:00Z");
+    const r = await loadMonthRevenue(prisma, "2026-10", TZ);
+    expect(r.openLines.map((l) => l.sessionId)).toEqual([open.id]);
+    await expect(
+      createInvoice(prisma, { month: "2026-10", config, now, timeZone: TZ }),
+    ).rejects.toThrow(/einem Tattoo-Termin fehlt noch/);
+    await prisma.tattooBooking.update({
+      where: { id: open.id },
+      data: { attendance: "ATTENDED", finalAmountCents: 35000 },
+    });
+    const inv = await createInvoice(prisma, { month: "2026-10", config, now, timeZone: TZ });
+    expect(inv.revenueCents).toBe(115000);
+  });
+
+  it("bills kept deposits of no-shows and short-notice cancellations", async () => {
+    const noShow = await session("2026-10-05", 50000, { open: true, deposit: 10000 });
+    await prisma.tattooBooking.update({
+      where: { id: noShow.id },
+      data: { attendance: "NO_SHOW" },
+    });
+    await session("2026-10-06", 40000, { cancelled: true, deposit: 8000, depositKept: true });
+    await session("2026-10-07", 40000, { cancelled: true, deposit: 8000 }); // returned
+    const r = await loadMonthRevenue(prisma, "2026-10", TZ);
+    expect(r).toMatchObject({ revenueCents: 18000, sessionCount: 2, openLines: [] });
+    expect(r.lines.map((l) => [l.amountCents, l.attendance ?? null, l.cancelled])).toEqual([
+      [10000, "NO_SHOW", false],
+      [8000, null, true],
+    ]);
   });
 
   it("refuses running months, months without revenue and missing issuer data", async () => {
