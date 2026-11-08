@@ -10,8 +10,10 @@ import {
   clearIntegrationSetting,
   saveIntegration,
   registerMetaWebhook,
+  registerWhatsAppWebhook,
   setIntegrationLive,
   subscribeMetaPage,
+  subscribeWhatsAppAccount,
   testIntegration,
 } from "./integration-actions";
 
@@ -62,6 +64,16 @@ export async function IntegrationsCard() {
                   <ActionButton action={testIntegration.bind(null, g.id)}>
                     Verbindung testen
                   </ActionButton>
+                  {g.id === "whatsapp" && (
+                    <>
+                      <ActionButton action={registerWhatsAppWebhook}>
+                        Webhook bei Meta eintragen
+                      </ActionButton>
+                      <ActionButton action={subscribeWhatsAppAccount}>
+                        WhatsApp-Konto verbinden
+                      </ActionButton>
+                    </>
+                  )}
                   {g.id === "meta" && (
                     <>
                       <ActionButton action={registerMetaWebhook}>
