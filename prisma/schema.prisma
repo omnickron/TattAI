@@ -48,6 +48,8 @@ model TattooerProfile {
   user                User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   consultationMinutes Int    @default(30)
   bufferMinutes       Int    @default(0)
+  // Color in the app calendar (hex, e.g. "#2563eb"); null = default by order of creation
+  calendarColor       String?
 
   // Google Calendar connection (phase 2). Refresh token is stored encrypted.
   googleAccountEmail       String?

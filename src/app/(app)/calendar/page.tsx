@@ -1,7 +1,7 @@
 import { sessionRevenueCents } from "@/lib/outcomes/session-revenue";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ButtonLink, cn, EmptyState, PageHeader, Select, Button } from "@/components/ui";
+import { ButtonLink, cn, PageHeader, Select, Button } from "@/components/ui";
 import { requireUser } from "@/lib/auth/session";
 import { loadExternalEntries } from "@/lib/calendar/external";
 import { createCalendarClient } from "@/lib/google/client";
@@ -10,6 +10,7 @@ import { APP_TIMEZONE } from "@/lib/format";
 import { formatEuro } from "@/lib/outcomes/money";
 import { CONSULTATION_MODE_LABELS, summaryLines } from "@/lib/scheduling/event-content";
 import { EntryChip, type EntryDetail } from "./entry-detail";
+import { tattooerColor, textColorOn } from "@/lib/tattooer-colors";
 import { loadConsultationOptions } from "@/lib/consultation-options";
 import { AddEntryButton, BlockerChip, ClickLayer, NewEntryProvider } from "./new-entry";
 import {
@@ -24,22 +25,13 @@ import {
 
 export const metadata: Metadata = { title: "Kalender" };
 
-const TONES = [
-  "border-l-blue-500 bg-blue-50 dark:bg-blue-950/60",
-  "border-l-emerald-500 bg-emerald-50 dark:bg-emerald-950/60",
-  "border-l-amber-500 bg-amber-50 dark:bg-amber-950/60",
-  "border-l-violet-500 bg-violet-50 dark:bg-violet-950/60",
-  "border-l-rose-500 bg-rose-50 dark:bg-rose-950/60",
-  "border-l-cyan-500 bg-cyan-50 dark:bg-cyan-950/60",
-  "border-l-lime-500 bg-lime-50 dark:bg-lime-950/60",
-];
-
 const dayHeader = new Intl.DateTimeFormat("de-DE", {
   timeZone: "UTC",
   weekday: "short",
   day: "2-digit",
   month: "2-digit",
 });
+const weekdayShort = new Intl.DateTimeFormat("de-DE", { timeZone: "UTC", weekday: "short" });
 const longDay = new Intl.DateTimeFormat("de-DE", {
   timeZone: "UTC",
   weekday: "long",
@@ -56,6 +48,18 @@ const asUtcDate = (localDate: string) => new Date(`${localDate}T12:00:00Z`);
 
 const PX_PER_MIN = 1.1;
 
+/** ISO 8601 calendar week of a local date (YYYY-MM-DD). */
+function isoWeek(localDate: string): number {
+  const d = asUtcDate(localDate);
+  const thursday = new Date(d);
+  thursday.setUTCDate(d.getUTCDate() + 3 - ((d.getUTCDay() + 6) % 7));
+  const jan1 = Date.UTC(thursday.getUTCFullYear(), 0, 1);
+  return 1 + Math.floor((thursday.getTime() - jan1) / 86_400_000 / 7);
+}
+
+/** Lets long names wrap even inside very narrow columns (mobile week view). */
+const WRAP = "break-words [overflow-wrap:anywhere] hyphens-auto";
+
 /** Tattoo sessions get a diagonal texture so they differ from consultations without relying on color. */
 const TATTOO_TEXTURE = {
   backgroundImage:
@@ -68,22 +72,6 @@ const BLOCK_TEXTURE = {
   backgroundImage:
     "repeating-linear-gradient(45deg, transparent 0 5px, color-mix(in srgb, currentColor 10%, transparent) 5px 10px)",
 };
-
-function BlockTag({ external }: { external?: string }) {
-  return (
-    <span className="mr-1 rounded bg-zinc-500 px-1 py-px text-[10px] font-semibold uppercase tracking-wide text-white">
-      {external ?? "Blocker"}
-    </span>
-  );
-}
-
-function TattooTag({ n }: { n?: number }) {
-  return (
-    <span className="mr-1 rounded bg-ink/80 px-1 py-px text-[10px] font-semibold uppercase tracking-wide text-paper">
-      Tattoo{n ? ` ${n}` : ""}
-    </span>
-  );
-}
 
 type Item = {
   id: string;
@@ -98,6 +86,8 @@ type Item = {
   leadName: string;
   tattooerName: string;
   tone: string;
+  /** Background of consultations and tattoo sessions (tattooer's calendar color). */
+  color?: string;
   status: string;
   mode: "ON_SITE" | "PHONE" | null;
   day: string;
@@ -246,7 +236,15 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
     orderBy: [{ startsAt: "asc" }, { date: "asc" }],
   });
 
-  const toneIndex = new Map(tattooers.map((t, i) => [t.id, i]));
+  // Calendar colors per tattooer (set by the admin, otherwise by order of creation)
+  const colorProfiles = await prisma.tattooerProfile.findMany({
+    select: { id: true, calendarColor: true },
+    orderBy: { createdAt: "asc" },
+  });
+  const colors = new Map(colorProfiles.map((p, i) => [p.id, tattooerColor(p.calendarColor, i)]));
+  const colorFor = (tattooerId: string) => colors.get(tattooerId) ?? tattooerColor(null, 0);
+  const colorStyle = (i: Item) =>
+    i.color ? { backgroundColor: i.color, color: textColorOn(i.color) } : {};
   const items: Item[] = consultations.map((c) => {
     const startMin = localMinuteOf(c.startsAt, APP_TIMEZONE);
     const day = localDateOf(c.startsAt, APP_TIMEZONE);
@@ -257,7 +255,8 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
       leadId: c.lead.id,
       leadName: c.lead.name,
       tattooerName: c.tattooer.user.name,
-      tone: TONES[(toneIndex.get(c.tattooer.id) ?? 0) % TONES.length],
+      tone: "",
+      color: colorFor(c.tattooer.id),
       status: c.status,
       mode: c.mode,
       detail: {
@@ -303,7 +302,8 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
       leadId: sn.consultation.lead.id,
       leadName: sn.consultation.lead.name,
       tattooerName: t.user.name,
-      tone: TONES[(toneIndex.get(t.id) ?? 0) % TONES.length],
+      tone: "",
+      color: colorFor(t.id),
       status: "TATTOO",
       mode: null,
       lane: 0,
@@ -460,6 +460,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
 
   const startHour = Math.min(8, ...items.map((i) => Math.floor(i.startMin / 60)));
   const endHour = Math.max(20, ...items.map((i) => Math.ceil(i.endMin / 60)));
+  const nowMin = localMinuteOf(now, APP_TIMEZONE);
   const hours = Array.from({ length: endHour - startHour }, (_, i) => startHour + i);
 
   const href = (next: Partial<{ view: string; date: string; tattooer: string | null }>) => {
@@ -499,7 +500,9 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {canCreate && (
-          <AddEntryButton date={date < today ? today : date} className="order-last sm:order-none" />
+          <span className="hidden md:block">
+            <AddEntryButton date={date < today ? today : date} />
+          </span>
         )}
         <div className="flex gap-1">
           <ButtonLink
@@ -560,98 +563,47 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
         )}
       </div>
 
-      {/* Mobile: agenda */}
-      <div className="space-y-4 md:hidden">
-        {items.length + allDay.length === 0 && (
-          <EmptyState>Keine Termine in diesem Zeitraum.</EmptyState>
-        )}
-        {days.map((d) => {
-          const dayItems = [
-            ...allDay.filter((i) => i.day === d),
-            ...items.filter((i) => i.day === d),
-          ];
-          if (!dayItems.length) return null;
-          return (
-            <section key={d}>
-              <h3 className={cn("mb-2 text-sm font-semibold", d === today && "text-accent")}>
-                {longDay.format(asUtcDate(d))}
-              </h3>
-              <ul className="space-y-2">
-                {dayItems.map((i) => (
-                  <li key={i.id}>
-                    {i.kind === "BLOCKER" ? (
-                      <BlockerChip
-                        id={i.blockId!}
-                        canDelete={canDeleteBlock(i)}
-                        className={cn("block w-full rounded-lg border-l-4 px-3 py-2", i.tone)}
-                        style={BLOCK_TEXTURE}
-                      >
-                        <span className="block text-sm font-medium">
-                          <BlockTag external={i.external} />
-                          {i.note || (i.external ? "Belegt" : "Blocker")}
-                        </span>
-                        <span className="block text-xs text-ink-soft tabular-nums">
-                          {i.endMin === 0
-                            ? "ganztägig"
-                            : `${formatTimeOfDay(i.startMin)}–${formatTimeOfDay(i.endMin % 1440)}`}
-                          {isAdmin && ` · ${i.tattooerName}`}
-                        </span>
-                      </BlockerChip>
-                    ) : (
-                      <EntryChip
-                        detail={i.detail!}
-                        className={cn("block w-full rounded-lg border-l-4 px-3 py-2", i.tone)}
-                        style={i.kind === "TATTOO" ? TATTOO_TEXTURE : undefined}
-                      >
-                        <span className="block text-sm font-medium">
-                          {i.kind === "TATTOO" && <TattooTag n={i.sessionNumber} />}
-                          {i.leadName}
-                        </span>
-                        <span className="block text-xs text-ink-soft tabular-nums">
-                          {i.kind === "TATTOO" && i.endMin === 0
-                            ? "ganztägig / ohne Uhrzeit"
-                            : `${formatTimeOfDay(i.startMin)}–${formatTimeOfDay(i.endMin % 1440)}`}
-                          {i.mode && ` · ${CONSULTATION_MODE_LABELS[i.mode]}`}
-                          {isAdmin && ` · ${i.tattooerName}`}
-                        </span>
-                      </EntryChip>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          );
-        })}
-      </div>
-
-      {/* Desktop: time grid */}
-      <div className="hidden overflow-hidden rounded-xl border border-line bg-surface md:block">
+      {/* Time grid (TeamUp-like): also used on mobile with narrow day columns */}
+      <div className="-mx-4 overflow-hidden border-y border-line bg-surface [--tc:2.6rem] sm:mx-0 sm:rounded-xl sm:border md:[--tc:3.5rem]">
         <div
           className="grid border-b border-line"
-          style={{ gridTemplateColumns: `3.5rem repeat(${dayCount}, minmax(0, 1fr))` }}
+          style={{ gridTemplateColumns: `var(--tc) repeat(${dayCount}, minmax(0, 1fr))` }}
         >
-          <div />
+          <div className="flex items-center justify-center text-[11px] font-medium text-ink-soft">
+            KW{isoWeek(first)}
+          </div>
           {days.map((d) => (
             <Link
               key={d}
               href={href({ view: "day", date: d })}
+              aria-current={d === today ? "date" : undefined}
               className={cn(
-                "border-l border-line px-2 py-2 text-center text-sm font-medium hover:bg-muted",
-                d === today && "text-accent",
+                "flex flex-col items-center border-l border-line px-0.5 py-1.5 leading-tight hover:bg-muted",
+                d === today ? "bg-muted/60 text-accent" : "text-ink",
               )}
             >
-              {view === "week" ? dayHeader.format(asUtcDate(d)) : longDay.format(asUtcDate(d))}
+              <span className="text-lg font-semibold tabular-nums md:text-xl">
+                {Number(d.slice(8))}
+              </span>
+              <span className={cn("text-[11px]", d === today ? "text-accent" : "text-ink-soft")}>
+                {view === "week"
+                  ? weekdayShort.format(asUtcDate(d)).replace(".", "")
+                  : longDay.format(asUtcDate(d))}
+              </span>
             </Link>
           ))}
         </div>
         {allDay.length > 0 && (
           <div
             className="grid border-b border-line"
-            style={{ gridTemplateColumns: `3.5rem repeat(${dayCount}, minmax(0, 1fr))` }}
+            style={{ gridTemplateColumns: `var(--tc) repeat(${dayCount}, minmax(0, 1fr))` }}
           >
-            <div className="pr-2 pt-1.5 text-right text-[11px] text-ink-soft">ganztägig</div>
+            <div />
             {days.map((d) => (
-              <div key={d} className="space-y-1 border-l border-line p-1">
+              <div
+                key={d}
+                className={cn("space-y-1 border-l border-line p-0.5", d === today && "bg-muted/60")}
+              >
                 {allDay
                   .filter((i) => i.day === d)
                   .map((i) =>
@@ -661,14 +613,15 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
                         id={i.blockId!}
                         canDelete={canDeleteBlock(i)}
                         className={cn(
-                          "block w-full truncate rounded-md border-l-4 px-1.5 py-0.5 text-xs",
+                          "block w-full truncate rounded-md border-l-4 px-1 py-1 text-xs font-medium",
                           i.tone,
                         )}
                         style={BLOCK_TEXTURE}
                       >
-                        <BlockTag external={i.external} />
                         {i.note || (i.external ? "Belegt" : "Blocker")}
-                        {isAdmin && ` · ${i.tattooerName}`}
+                        {isAdmin && (
+                          <span className="hidden md:inline">{` · ${i.tattooerName}`}</span>
+                        )}
                       </BlockerChip>
                     ) : (
                       <EntryChip
@@ -676,12 +629,11 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
                         detail={i.detail!}
                         title={`Tattoo-Termin ${i.sessionNumber} · ${i.leadName} · ${i.tattooerName} (ohne Uhrzeit)`}
                         className={cn(
-                          "block w-full truncate rounded-md border-l-4 px-1.5 py-0.5 text-xs",
+                          "block w-full truncate rounded-md px-1 py-1 text-xs font-medium",
                           i.tone,
                         )}
-                        style={TATTOO_TEXTURE}
+                        style={{ ...TATTOO_TEXTURE, ...colorStyle(i) }}
                       >
-                        <TattooTag n={i.sessionNumber} />
                         {i.leadName}
                       </EntryChip>
                     ),
@@ -692,13 +644,13 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
         )}
         <div
           className="grid"
-          style={{ gridTemplateColumns: `3.5rem repeat(${dayCount}, minmax(0, 1fr))` }}
+          style={{ gridTemplateColumns: `var(--tc) repeat(${dayCount}, minmax(0, 1fr))` }}
         >
           <div className="relative">
             {hours.map((h) => (
               <div
                 key={h}
-                className="pr-2 text-right text-[11px] text-ink-soft"
+                className="pr-1 text-right text-[11px] text-ink-soft tabular-nums md:pr-2"
                 style={{ height: 60 * PX_PER_MIN }}
               >
                 <span className="relative -top-2">
@@ -710,7 +662,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
           {days.map((d) => (
             <div
               key={d}
-              className={cn("relative border-l border-line", d === today && "bg-muted/40")}
+              className={cn("relative border-l border-line", d === today && "bg-muted/60")}
             >
               {hours.map((h) => (
                 <div
@@ -736,16 +688,16 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
                         id={i.blockId!}
                         canDelete={canDeleteBlock(i)}
                         className={cn(
-                          "absolute z-[1] overflow-hidden rounded-md border-l-4 px-1.5 py-1 text-xs leading-tight",
+                          "absolute z-[1] overflow-hidden rounded-md border-l-4 px-1 py-1 text-xs leading-tight",
+                          WRAP,
                           i.tone,
                         )}
                         style={{ ...BLOCK_TEXTURE, ...box }}
                       >
-                        <span className="block truncate font-medium">
-                          <BlockTag external={i.external} />
+                        <span className="block font-medium">
                           {i.note || (i.external ? "Belegt" : "Blocker")}
                         </span>
-                        <span className="block truncate text-ink-soft tabular-nums">
+                        <span className="hidden opacity-80 tabular-nums md:block">
                           {formatTimeOfDay(i.startMin)}–{formatTimeOfDay(i.endMin % 1440)}
                           {isAdmin && ` · ${i.tattooerName}`}
                         </span>
@@ -758,33 +710,44 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
                       detail={i.detail!}
                       title={`${i.kind === "TATTOO" ? `Tattoo-Termin ${i.sessionNumber}` : "Beratung"} · ${i.leadName} · ${i.tattooerName}`}
                       className={cn(
-                        "absolute z-[1] overflow-hidden rounded-md border-l-4 px-1.5 py-1 text-xs leading-tight shadow-sm hover:z-10 hover:shadow",
+                        "absolute z-[1] overflow-hidden rounded-md px-1 py-1 text-left text-xs leading-tight shadow-sm hover:z-10 hover:shadow md:text-[13px]",
+                        WRAP,
                         i.tone,
                       )}
                       style={{
                         ...(i.kind === "TATTOO" ? TATTOO_TEXTURE : {}),
-                        top: (i.startMin - startHour * 60) * PX_PER_MIN,
-                        height: Math.max(22, (i.endMin - i.startMin) * PX_PER_MIN - 2),
-                        left: `calc(${(i.lane / i.lanes) * 100}% + 2px)`,
-                        width: `calc(${100 / i.lanes}% - 4px)`,
+                        ...colorStyle(i),
+                        ...box,
                       }}
                     >
-                      <span className="block truncate font-medium">
-                        {i.kind === "TATTOO" && <TattooTag n={i.sessionNumber} />}
+                      <span className="block font-medium">
+                        {i.kind === "TATTOO" ? "Tattoo: " : "Beratung: "}
                         {i.mode === "PHONE" && "☎ "}
                         {i.leadName}
+                        {isAdmin && !filter && ` (${i.tattooerName})`}
                       </span>
-                      <span className="block truncate text-ink-soft tabular-nums">
-                        {formatTimeOfDay(i.startMin)}
-                        {isAdmin && ` · ${i.tattooerName}`}
+                      <span className="hidden opacity-80 tabular-nums md:block">
+                        {formatTimeOfDay(i.startMin)}–{formatTimeOfDay(i.endMin % 1440)}
                       </span>
                     </EntryChip>
                   );
                 })}
+              {d === today && nowMin >= startHour * 60 && nowMin <= endHour * 60 && (
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute inset-x-0 z-[5] h-0.5 bg-accent"
+                  style={{ top: (nowMin - startHour * 60) * PX_PER_MIN }}
+                >
+                  <span className="absolute -top-[5px] -left-[6px] size-3 rounded-full bg-accent" />
+                </div>
+              )}
             </div>
           ))}
         </div>
       </div>
+      {canCreate && (
+        <AddEntryButton variant="fab" date={date < today ? today : date} className="md:hidden" />
+      )}
     </NewEntryProvider>
   );
 }

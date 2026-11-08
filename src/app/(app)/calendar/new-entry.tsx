@@ -117,17 +117,38 @@ export function ClickLayer({
 }
 
 /** "+ Termin" button (mobile, and as an alternative to clicking the grid). */
-export function AddEntryButton({ date, className }: { date: string; className?: string }) {
+export function AddEntryButton({
+  date,
+  className,
+  variant = "button",
+}: {
+  date: string;
+  className?: string;
+  /** "fab": round floating button in the bottom right corner (mobile). */
+  variant?: "button" | "fab";
+}) {
   const { open } = useNewEntry();
+  const onClick = () => {
+    const now = new Date();
+    open({ date, minute: roundQuarter(now.getHours() * 60 + now.getMinutes() + 15) });
+  };
+  if (variant === "fab") {
+    return (
+      <button
+        type="button"
+        aria-label="Neuen Termin anlegen"
+        onClick={onClick}
+        className={cn(
+          "fixed right-5 bottom-[calc(1.25rem+env(safe-area-inset-bottom))] z-30 flex size-14 items-center justify-center rounded-full bg-accent text-3xl leading-none text-white shadow-lg active:scale-95",
+          className,
+        )}
+      >
+        +
+      </button>
+    );
+  }
   return (
-    <Button
-      type="button"
-      className={className}
-      onClick={() => {
-        const now = new Date();
-        open({ date, minute: roundQuarter(now.getHours() * 60 + now.getMinutes() + 15) });
-      }}
-    >
+    <Button type="button" className={className} onClick={onClick}>
       + Termin
     </Button>
   );
