@@ -28,7 +28,7 @@ export async function saveIntegration(
     await saveIntegrationSetting(prisma, def.key, value, user);
     changed++;
   }
-  revalidatePath("/operator");
+  revalidatePath("/operator", "layout");
   return changed
     ? {
         ok: true,
@@ -42,7 +42,7 @@ export async function clearIntegrationSetting(key: string): Promise<ActionState>
   const user = await requireOperator();
   if (!SETTINGS.some((s) => s.key === key)) return { ok: false, message: "Unbekannt." };
   await saveIntegrationSetting(prisma, key, null, user);
-  revalidatePath("/operator");
+  revalidatePath("/operator", "layout");
   return { ok: true, message: "Entfernt." };
 }
 
@@ -55,7 +55,7 @@ export async function setIntegrationLive(
   const g = groupOf(group);
   if (!g) return { ok: false, message: "Unbekannter Bereich." };
   await saveIntegrationSetting(prisma, g.modeKey, live ? "false" : "true", user);
-  revalidatePath("/operator");
+  revalidatePath("/operator", "layout");
   return {
     ok: true,
     message: live ? `${g.title} ist jetzt live.` : `${g.title} läuft im Testmodus.`,

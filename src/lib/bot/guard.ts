@@ -167,7 +167,7 @@ export async function alertAdminsOnce(
     await pushToUsers(prisma, push, await operatorUserIds(prisma), {
       title: "NEEDL-Bot",
       body: body.slice(0, 160),
-      url: "/operator",
+      url: "/operator/bot",
       tag: "bot-alert",
     });
   return true;
