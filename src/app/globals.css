@@ -211,3 +211,134 @@ html[data-splash-done] .splash {
 .legal a:hover {
   color: var(--accent);
 }
+
+/* ================================================================== public website */
+/* Brand palette of the website (fixed light look with dark sections, like the brand CI).
+   :root:has() also colours the page behind the wrapper (overscroll) and beats the dark-mode
+   variables of the app. */
+:root:has(.site) {
+  color-scheme: light;
+  --paper: #f1f1ed;
+  --surface: #ffffff;
+  --muted: #e6e6df;
+  --line: #d9d7d0;
+  --ink: #17181a;
+  --ink-soft: #55575d;
+  --accent: #b4532a;
+  --night: #0f0f10;
+  --night-soft: #a5a59e;
+  --night-line: #2a2b2e;
+}
+
+.site {
+  font-family: var(--font-body), system-ui, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+.site h1,
+.site h2,
+.site h3,
+.site .font-display {
+  font-family: var(--font-display), var(--font-logo), system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.site .eyebrow {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.site .night {
+  background: var(--night);
+  color: var(--paper);
+  --ink-soft: var(--night-soft);
+  --line: var(--night-line);
+}
+.site .text-balance {
+  text-wrap: balance;
+}
+
+/* Glass header */
+.site-header {
+  background: color-mix(in srgb, var(--paper) 78%, transparent);
+  -webkit-backdrop-filter: saturate(180%) blur(18px);
+  backdrop-filter: saturate(180%) blur(18px);
+}
+
+/* Ticker: two identical rows, moved by half its width */
+.ticker {
+  display: flex;
+  width: max-content;
+  animation: ticker 40s linear infinite;
+}
+@keyframes ticker {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* Scroll reveal without JavaScript (scroll-driven animations; static where unsupported) */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .reveal {
+      animation: reveal linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 40%;
+    }
+  }
+  @keyframes reveal {
+    from {
+      opacity: 0;
+      transform: translateY(28px) scale(0.985);
+    }
+  }
+  .hero-in {
+    animation: hero-in 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  .hero-in-late {
+    animation: hero-in 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) 0.15s both;
+  }
+  @keyframes hero-in {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+  }
+  .typing span {
+    animation: typing 1.2s ease-in-out infinite;
+  }
+  .typing span:nth-child(2) {
+    animation-delay: 0.15s;
+  }
+  .typing span:nth-child(3) {
+    animation-delay: 0.3s;
+  }
+  @keyframes typing {
+    50% {
+      opacity: 0.25;
+    }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ticker {
+    animation: none;
+  }
+}
+
+/* FAQ disclosure */
+.faq summary {
+  list-style: none;
+  cursor: pointer;
+}
+.faq summary::-webkit-details-marker {
+  display: none;
+}
+.faq summary .faq-icon {
+  transition: transform 0.25s ease;
+}
+.faq details[open] .faq-icon {
+  transform: rotate(45deg);
+}
