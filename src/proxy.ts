@@ -1,17 +1,32 @@
 import NextAuth from "next-auth";
-import { NextResponse } from "next/server";
+import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server";
 import { authConfig } from "./auth.config";
 import { decideRoute } from "./lib/site/routing";
 
 const { auth } = NextAuth(authConfig);
 
 /**
- * 1. Host switch: the website domain (SITE_DOMAIN and www) shows the public website,
- *    every other host the app (see src/lib/site/routing.ts).
- * 2. Optimistic check only: unauthenticated visitors of app routes are sent to /login.
- *    Authorisation (active account, role, data scope) is enforced server-side.
+ * Optimistic check only: unauthenticated visitors of app routes are sent to /login.
+ * Authorisation (active account, role, data scope) is enforced server-side.
  */
-export const proxy = auth((request) => {
+const requireSession = auth((request) => {
+  if (!request.auth) {
+    const url = new URL("/login", request.nextUrl);
+    if (request.nextUrl.pathname !== "/")
+      url.searchParams.set("callbackUrl", request.nextUrl.pathname);
+    return NextResponse.redirect(url);
+  }
+});
+
+/**
+ * Host switch first: the website domain (SITE_DOMAIN and www) shows the public website,
+ * every other host the app (see src/lib/site/routing.ts). Only app routes go through Auth.js.
+ *
+ * The switch must run on the raw request, not inside auth(): Auth.js replaces the request's
+ * origin with AUTH_URL (the app domain), which turned the website's rewrite of "/" into a
+ * rewrite to the app domain – and that redirected back to the website (redirect loop).
+ */
+export function proxy(request: NextRequest, event: NextFetchEvent) {
   const decision = decideRoute(
     {
       // The Host header survives Caddy; request.url may carry the container-internal host
@@ -24,9 +39,13 @@ export const proxy = auth((request) => {
 
   switch (decision.kind) {
     case "next":
-      return;
-    case "rewrite":
-      return NextResponse.rewrite(new URL(decision.path, request.nextUrl));
+      return NextResponse.next();
+    case "rewrite": {
+      // Same origin as the incoming request, so Next serves the route itself
+      const url = request.nextUrl.clone();
+      url.pathname = decision.path;
+      return NextResponse.rewrite(url);
+    }
     case "redirect":
       return NextResponse.redirect(
         decision.url.startsWith("/") ? new URL(decision.url, siteOrigin(request)) : decision.url,
@@ -35,14 +54,10 @@ export const proxy = auth((request) => {
     case "not-found":
       return new NextResponse("Not Found", { status: 404 });
     case "auth":
-      if (!request.auth) {
-        const url = new URL("/login", request.nextUrl);
-        if (request.nextUrl.pathname !== "/")
-          url.searchParams.set("callbackUrl", request.nextUrl.pathname);
-        return NextResponse.redirect(url);
-      }
+      // auth() only passes the second argument through to our callback, which ignores it
+      return requireSession(request, event as unknown as Parameters<typeof requireSession>[1]);
   }
-});
+}
 
 /** Public origin of the current request (for same-host redirects behind the reverse proxy). */
 function siteOrigin(request: { headers: Headers; nextUrl: URL }): string {
