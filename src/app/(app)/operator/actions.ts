@@ -63,7 +63,7 @@ export async function updateBillingSettings(
     update: data,
     create: { id: 1, ...data },
   });
-  revalidatePath("/operator");
+  revalidatePath("/operator", "layout");
   revalidatePath("/admin/billing");
   return { ok: true, message: "Rechnungsdaten gespeichert. Gilt für neue Rechnungen." };
 }
@@ -101,7 +101,7 @@ export async function updateBotSettings(
   if (valid.dailyBudgetCents > valid.monthlyBudgetCents)
     return { ok: false, message: "Das Tageslimit darf nicht über dem Monatslimit liegen." };
   await prisma.botSettings.upsert({ where: { id: 1 }, update: valid, create: { id: 1, ...valid } });
-  revalidatePath("/operator");
+  revalidatePath("/operator", "layout");
   revalidatePath("/admin/bot");
   return { ok: true, message: "Grenzen gespeichert." };
 }
@@ -113,7 +113,7 @@ export async function setBotPaused(paused: boolean): Promise<void> {
     ? { pausedAt: new Date(), pausedReason: `von Hand (${user.name})` }
     : { pausedAt: null, pausedReason: null };
   await prisma.botSettings.upsert({ where: { id: 1 }, update: data, create: { id: 1, ...data } });
-  revalidatePath("/operator");
+  revalidatePath("/operator", "layout");
   revalidatePath("/admin/bot");
 }
 
@@ -127,7 +127,7 @@ export async function startBotEval(): Promise<ActionState> {
   });
   if (open) return { ok: false, message: "Es läuft schon ein Test." };
   await prisma.botEvalRun.create({ data: { requestedBy: user.name } });
-  revalidatePath("/operator");
+  revalidatePath("/operator", "layout");
   return { ok: true, message: "Test gestartet – das dauert etwa 5–10 Minuten." };
 }
 
@@ -164,7 +164,7 @@ export async function createStudioAdmin(
       where: { id: existing.id },
       data: { role: "ADMIN", active: true },
     });
-    revalidatePath("/operator");
+    revalidatePath("/operator", "layout");
     return { ok: true, message: `${existing.name} ist jetzt Admin (bleibt auch Tätowierer).` };
   }
   await prisma.user.create({
@@ -177,7 +177,7 @@ export async function createStudioAdmin(
         : {}),
     },
   });
-  revalidatePath("/operator");
+  revalidatePath("/operator", "layout");
   revalidatePath("/admin/tattooers");
   return {
     ok: true,
@@ -190,6 +190,6 @@ export async function setStudioAdminActive(userId: string, active: boolean): Pro
   const user = await requireOperator();
   if (userId === user.id) return { ok: false, message: "Dich selbst kannst du nicht sperren." };
   await prisma.user.update({ where: { id: userId, role: "ADMIN" }, data: { active } });
-  revalidatePath("/operator");
+  revalidatePath("/operator", "layout");
   return { ok: true, message: active ? "Wieder aktiviert." : "Deaktiviert, Anmeldung gesperrt." };
 }

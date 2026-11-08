@@ -28,7 +28,7 @@ export async function saveIntegration(
     await saveIntegrationSetting(prisma, def.key, value, user);
     changed++;
   }
-  revalidatePath("/operator");
+  revalidatePath("/operator", "layout");
   return changed
     ? {
         ok: true,
@@ -42,7 +42,7 @@ export async function clearIntegrationSetting(key: string): Promise<ActionState>
   const user = await requireOperator();
   if (!SETTINGS.some((s) => s.key === key)) return { ok: false, message: "Unbekannt." };
   await saveIntegrationSetting(prisma, key, null, user);
-  revalidatePath("/operator");
+  revalidatePath("/operator", "layout");
   return { ok: true, message: "Entfernt." };
 }
 
@@ -55,7 +55,7 @@ export async function setIntegrationLive(
   const g = groupOf(group);
   if (!g) return { ok: false, message: "Unbekannter Bereich." };
   await saveIntegrationSetting(prisma, g.modeKey, live ? "false" : "true", user);
-  revalidatePath("/operator");
+  revalidatePath("/operator", "layout");
   return {
     ok: true,
     message: live ? `${g.title} ist jetzt live.` : `${g.title} läuft im Testmodus.`,
@@ -93,6 +93,25 @@ export async function testIntegration(group: IntegrationGroup): Promise<ActionSt
       const phoneId = setting("WHATSAPP_PHONE_NUMBER_ID");
       if (!token || !phoneId) return { ok: false, message: "Token oder Telefonnummer-ID fehlt." };
       const info = await graphGet(`/${phoneId}?fields=display_phone_number,verified_name`, token);
+      const waba = setting("WHATSAPP_BUSINESS_ACCOUNT_ID");
+      if (waba) {
+        const apps = (await graphGet(`/${waba}/subscribed_apps`, token)) as { data?: unknown[] };
+        if (!apps.data?.length)
+          return {
+            ok: false,
+            message: `Nummer ${info.display_phone_number ?? "?"} erreichbar, aber das WhatsApp-Konto ist mit keiner App verbunden – „WhatsApp-Konto verbinden“ drücken.`,
+          };
+      }
+      const hook = await appWebhook(
+        "whatsapp_business_account",
+        "/api/webhooks/whatsapp",
+        "messages",
+      ).catch(() => null);
+      if (hook === false)
+        return {
+          ok: false,
+          message: `Nummer ${info.display_phone_number ?? "?"} erreichbar, aber der Webhook fehlt – „Webhook bei Meta eintragen“ drücken.`,
+        };
       return {
         ok: true,
         message: `WhatsApp erreichbar – Nummer ${info.display_phone_number ?? "?"} (${info.verified_name ?? "ohne Namen"}).`,
@@ -106,8 +125,8 @@ export async function testIntegration(group: IntegrationGroup): Promise<ActionSt
       data?: Array<{ name?: string; subscribed_fields?: string[] }>;
     };
     const leadgen = (apps.data ?? []).filter((a) => a.subscribed_fields?.includes("leadgen"));
-    const appWebhook = await appLeadgenWebhook().catch(() => null);
-    if (appWebhook === false)
+    const leadHook = await appLeadgenWebhook().catch(() => null);
+    if (leadHook === false)
       return {
         ok: false,
         message: `Seite „${me.name ?? "?"}“ erreichbar, aber der Webhook der App hat „leadgen“ noch nicht abonniert – „Webhook bei Meta eintragen“ drücken.`,
@@ -181,8 +200,18 @@ function appToken() {
   return id && secret ? { id, token: `${id}|${secret}` } : null;
 }
 
-/** true/false = app webhook for Page.leadgen points to NEEDL or not; null = App-ID missing. */
-async function appLeadgenWebhook(): Promise<boolean | null> {
+const WA_FIELDS = [
+  "messages",
+  "message_template_status_update",
+  "phone_number_quality_update",
+  "account_update",
+];
+
+/**
+ * true/false = the app's webhook for `object` points to NEEDL (`path`) with `field`;
+ * null = App-ID or App-Geheimnis missing.
+ */
+async function appWebhook(object: string, path: string, field: string): Promise<boolean | null> {
   const app = appToken();
   if (!app) return null;
   const subs = (await graphGet(`/${app.id}/subscriptions`, app.token)) as {
@@ -193,58 +222,106 @@ async function appLeadgenWebhook(): Promise<boolean | null> {
       fields?: Array<{ name?: string }>;
     }>;
   };
-  const url = appUrl("/api/webhooks/meta").toString();
+  const url = appUrl(path).toString();
   return (subs.data ?? []).some(
     (s) =>
-      s.object === "page" &&
+      s.object === object &&
       s.active !== false &&
       s.callback_url === url &&
-      (s.fields ?? []).some((f) => f.name === "leadgen"),
+      (s.fields ?? []).some((f) => f.name === field),
   );
 }
 
+const appLeadgenWebhook = () => appWebhook("page", "/api/webhooks/meta", "leadgen");
+
+const failed = (prefix: string, err: unknown) => ({
+  ok: false as const,
+  message: `${prefix}: ${err instanceof Error ? err.message : String(err)}`.slice(0, 300),
+});
+
+/** POST to the Graph API; returns Meta's error text on failure. */
+async function graphPost(path: string, params: Record<string, string>) {
+  const res = await fetch(`${GRAPH()}${path}`, {
+    method: "POST",
+    body: new URLSearchParams(params),
+    signal: AbortSignal.timeout(20_000),
+  });
+  const json = (await res.json().catch(() => ({}))) as {
+    success?: boolean;
+    error?: { message?: string };
+  };
+  if (!res.ok || !json.success) throw new Error(json.error?.message ?? `HTTP ${res.status}`);
+}
+
 /**
- * Registers NEEDL's webhook for Page.leadgen at the app (instead of the Meta developer UI).
- * Meta calls the verification handshake right away, so the verify token must be stored.
+ * Registers a NEEDL webhook at the app (instead of the Meta developer UI). Meta calls the
+ * verification handshake right away, so the verify token must already be stored.
  */
+async function registerAppWebhook(
+  object: string,
+  path: string,
+  fields: string[],
+  verifyToken: string | undefined,
+) {
+  const app = appToken();
+  if (!app) throw new Error("App-ID (bei Meta-Leads) oder App-Geheimnis fehlt");
+  if (!verifyToken) throw new Error("Verify-Token fehlt");
+  await graphPost(`/${app.id}/subscriptions`, {
+    object,
+    callback_url: appUrl(path).toString(),
+    fields: fields.join(","),
+    include_values: "true",
+    verify_token: verifyToken,
+    access_token: app.token,
+  });
+}
+
+/** Webhook for Page.leadgen. */
 export async function registerMetaWebhook(): Promise<ActionState> {
   await requireOperator();
-  const app = appToken();
-  if (!app) return { ok: false, message: "App-ID oder App-Geheimnis fehlt." };
-  const verifyToken = setting("META_VERIFY_TOKEN");
-  if (!verifyToken) return { ok: false, message: "Verify-Token fehlt." };
   try {
-    const url = new URL(`${GRAPH()}/${app.id}/subscriptions`);
-    const body = new URLSearchParams({
-      object: "page",
-      callback_url: appUrl("/api/webhooks/meta").toString(),
-      fields: "leadgen",
-      include_values: "true",
-      verify_token: verifyToken,
-      access_token: app.token,
-    });
-    const res = await fetch(url, { method: "POST", body, signal: AbortSignal.timeout(20_000) });
-    const json = (await res.json().catch(() => ({}))) as {
-      success?: boolean;
-      error?: { message?: string };
-    };
-    if (!res.ok || !json.success)
-      return {
-        ok: false,
-        message: `Eintragen fehlgeschlagen: ${json.error?.message ?? `HTTP ${res.status}`}`.slice(
-          0,
-          300,
-        ),
-      };
+    await registerAppWebhook(
+      "page",
+      "/api/webhooks/meta",
+      ["leadgen"],
+      setting("META_VERIFY_TOKEN"),
+    );
     return { ok: true, message: "Webhook eingetragen – Meta meldet neue Leads jetzt an NEEDL." };
   } catch (err) {
+    return failed("Eintragen fehlgeschlagen", err);
+  }
+}
+
+/** Webhook for the WhatsApp Business Account (messages, template reviews, quality, account). */
+export async function registerWhatsAppWebhook(): Promise<ActionState> {
+  await requireOperator();
+  try {
+    await registerAppWebhook(
+      "whatsapp_business_account",
+      "/api/webhooks/whatsapp",
+      WA_FIELDS,
+      setting("WHATSAPP_VERIFY_TOKEN"),
+    );
     return {
-      ok: false,
-      message:
-        `Eintragen fehlgeschlagen: ${err instanceof Error ? err.message : String(err)}`.slice(
-          0,
-          300,
-        ),
+      ok: true,
+      message: "Webhook eingetragen – Nachrichten und Template-Prüfungen gehen jetzt an NEEDL.",
     };
+  } catch (err) {
+    return failed("Eintragen fehlgeschlagen", err);
+  }
+}
+
+/** Connects the WhatsApp Business Account to the app; otherwise Meta sends it no events. */
+export async function subscribeWhatsAppAccount(): Promise<ActionState> {
+  await requireOperator();
+  const token = setting("WHATSAPP_ACCESS_TOKEN");
+  const waba = setting("WHATSAPP_BUSINESS_ACCOUNT_ID");
+  if (!token || !waba)
+    return { ok: false, message: "Token oder WhatsApp-Business-Konto-ID fehlt." };
+  try {
+    await graphPost(`/${waba}/subscribed_apps`, { access_token: token });
+    return { ok: true, message: "WhatsApp-Konto mit der App verbunden." };
+  } catch (err) {
+    return failed("Verbinden fehlgeschlagen", err);
   }
 }

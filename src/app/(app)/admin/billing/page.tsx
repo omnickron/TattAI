@@ -277,7 +277,7 @@ export default async function BillingPage({ searchParams }: PageProps<"/admin/bi
             </p>
           ) : !issuerComplete(cfg) ? (
             <p className="text-sm text-ink-soft">
-              Für Rechnungen fehlen noch die Rechnungsdaten (Betreiber → Bot &amp; Abrechnung).
+              Für Rechnungen fehlen noch die Rechnungsdaten (Betreiber → Rechnungsdaten).
             </p>
           ) : (
             <div className="space-y-3 text-sm">

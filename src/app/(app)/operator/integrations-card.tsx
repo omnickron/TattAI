@@ -1,5 +1,5 @@
 import { ActionForm } from "@/components/action-form";
-import { Badge, Button, Card, CardTitle, Field, Input } from "@/components/ui";
+import { Badge, Button, Card, Field, Input } from "@/components/ui";
 import { appUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/db";
 import { formatDateTime } from "@/lib/format";
@@ -10,8 +10,10 @@ import {
   clearIntegrationSetting,
   saveIntegration,
   registerMetaWebhook,
+  registerWhatsAppWebhook,
   setIntegrationLive,
   subscribeMetaPage,
+  subscribeWhatsAppAccount,
   testIntegration,
 } from "./integration-actions";
 
@@ -33,7 +35,6 @@ export async function IntegrationsCard() {
 
   return (
     <Card className="mb-4" id="zugaenge">
-      <CardTitle>Zugänge</CardTitle>
       <p className="mb-4 text-sm text-ink-soft">
         Schlüssel und Tokens werden verschlüsselt gespeichert und nach dem Speichern nie wieder
         angezeigt – nur die letzten Zeichen. Leere Felder bleiben unverändert. Was hier fehlt, kommt
@@ -62,6 +63,16 @@ export async function IntegrationsCard() {
                   <ActionButton action={testIntegration.bind(null, g.id)}>
                     Verbindung testen
                   </ActionButton>
+                  {g.id === "whatsapp" && (
+                    <>
+                      <ActionButton action={registerWhatsAppWebhook}>
+                        Webhook bei Meta eintragen
+                      </ActionButton>
+                      <ActionButton action={subscribeWhatsAppAccount}>
+                        WhatsApp-Konto verbinden
+                      </ActionButton>
+                    </>
+                  )}
                   {g.id === "meta" && (
                     <>
                       <ActionButton action={registerMetaWebhook}>
