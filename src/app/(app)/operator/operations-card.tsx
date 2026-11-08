@@ -92,6 +92,12 @@ export async function OperationsCard() {
             cents={monthCents}
             limit={settings.monthlyBudgetCents}
           />
+          {spend.evalMonthMicros > 0 && (
+            <p className="text-xs text-ink-soft">
+              Davon Bot-Tests: heute {formatEuro(microsToCents(spend.evalDayMicros))}, diesen Monat{" "}
+              {formatEuro(microsToCents(spend.evalMonthMicros))}.
+            </p>
+          )}
           <dl className="grid grid-cols-3 gap-2 text-center">
             {[
               ["Antworten heute", replies],

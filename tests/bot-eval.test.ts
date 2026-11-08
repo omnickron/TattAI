@@ -6,6 +6,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { BrainClient } from "@/lib/bot/brain";
 import { PERSONAS } from "@/lib/bot/eval/personas";
 import { hardChecks, runBotEval, TEST_LEAD_PREFIX } from "@/lib/bot/eval/run";
+import { botSpend } from "@/lib/bot/guard";
 import { createTestPrisma, resetDatabase } from "./db";
 
 const prisma = createTestPrisma();
@@ -133,6 +134,12 @@ describe("bot test with AI customers", () => {
     expect(await prisma.lead.count({ where: { name: { startsWith: TEST_LEAD_PREFIX } } })).toBe(0);
     const profile = await prisma.tattooerProfile.findFirstOrThrow();
     expect(profile.consultationCalendarId).toBe(calendarIdBefore);
+
+    // The test's cost stays in the bot costs although its test leads are gone
+    const spend = await botSpend(prisma, new Date());
+    expect(spend.dayMicros).toBe(done.costMicros);
+    expect(spend.monthMicros).toBe(done.costMicros);
+    expect(spend.evalDayMicros).toBe(done.costMicros);
   });
 
   it("checks the hard rules itself", () => {

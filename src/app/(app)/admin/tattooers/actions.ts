@@ -59,7 +59,9 @@ export async function updateTattooer(
   const domainError = workspaceDomainError(parsed.data.email);
   if (domainError) return { ok: false, message: domainError };
   // Calendar color: hex from the palette / color picker, "" = automatic
-  const rawColor = String(formData.get("calendarColor") ?? "").trim().toLowerCase();
+  const rawColor = String(formData.get("calendarColor") ?? "")
+    .trim()
+    .toLowerCase();
   if (rawColor && !isColor(rawColor)) return { ok: false, message: "Farbe ist ungültig." };
 
   try {
@@ -71,7 +73,10 @@ export async function updateTattooer(
           ? {
               tattooerProfile: {
                 upsert: {
-                  create: { calendarColor: rawColor || null, fairnessShare: { create: { weight: 1 } } },
+                  create: {
+                    calendarColor: rawColor || null,
+                    fairnessShare: { create: { weight: 1 } },
+                  },
                   update: { calendarColor: rawColor || null },
                 },
               },

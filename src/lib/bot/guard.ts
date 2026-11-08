@@ -19,7 +19,10 @@ export const ERROR_PAUSE_COUNT = 5;
 export const ERROR_WINDOW_MS = 30 * 60_000;
 const HOUR = 3600_000;
 
-type Db = Pick<PrismaClient, "botSettings" | "botTurn" | "message" | "user" | "pushSubscription">;
+type Db = Pick<
+  PrismaClient,
+  "botSettings" | "botTurn" | "botEvalRun" | "message" | "user" | "pushSubscription"
+>;
 
 export async function loadBotSettings(prisma: Pick<PrismaClient, "botSettings">) {
   return (
@@ -34,29 +37,46 @@ export async function loadBotSettings(prisma: Pick<PrismaClient, "botSettings">)
   );
 }
 
-/** Bot spend (micro-dollars) since the start of today and of this month. */
+/**
+ * Bot spend (micro-dollars) since the start of today and of this month: customer chats plus
+ * bot tests. Test runs delete their test customers (and with them their turns), so their
+ * cost is taken from the test run itself.
+ */
 export async function botSpend(
-  prisma: Pick<PrismaClient, "botTurn">,
+  prisma: Pick<PrismaClient, "botTurn" | "botEvalRun">,
   now: Date,
   tz = DEFAULT_TIME_ZONE,
 ) {
   const today = localDateOf(now, tz);
   const dayStart = startOfLocalDay(today, tz);
   const monthStart = startOfLocalDay(`${today.slice(0, 7)}-01`, tz);
-  const [day, month] = await Promise.all([
+  // Turns of test customers are counted via their test run (a running test's turns are
+  // only counted once the run has finished and stored its total)
+  const chats = { createdAt: { gte: dayStart }, lead: { isTest: false } };
+  const [day, month, evalDay, evalMonth] = await Promise.all([
+    prisma.botTurn.aggregate({ where: chats, _sum: { costMicros: true } }),
     prisma.botTurn.aggregate({
+      where: { ...chats, createdAt: { gte: monthStart } },
+      _sum: { costMicros: true },
+    }),
+    prisma.botEvalRun.aggregate({
       where: { createdAt: { gte: dayStart } },
       _sum: { costMicros: true },
     }),
-    prisma.botTurn.aggregate({
+    prisma.botEvalRun.aggregate({
       where: { createdAt: { gte: monthStart } },
       _sum: { costMicros: true },
     }),
   ]);
+  const evalDayMicros = evalDay._sum.costMicros ?? 0;
+  const evalMonthMicros = evalMonth._sum.costMicros ?? 0;
   return {
     today,
-    dayMicros: day._sum.costMicros ?? 0,
-    monthMicros: month._sum.costMicros ?? 0,
+    dayMicros: (day._sum.costMicros ?? 0) + evalDayMicros,
+    monthMicros: (month._sum.costMicros ?? 0) + evalMonthMicros,
+    /** Part of the above caused by bot tests */
+    evalDayMicros,
+    evalMonthMicros,
     dayStart,
   };
 }
