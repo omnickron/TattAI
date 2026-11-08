@@ -6,11 +6,11 @@ import { OutcomePanel } from "@/components/outcome-panel";
 import { Badge, Card, cn } from "@/components/ui";
 import { requireUser } from "@/lib/auth/session";
 import { ActionButton } from "./admin/billing/buttons";
-import { resolveHandover } from "./handover-actions";
+import { completeFollowUp, resolveHandover } from "./handover-actions";
 import { loadDashboard } from "@/lib/dashboard";
 import { APP_TIMEZONE, formatRelative } from "@/lib/format";
 import { CONSULTATION_MODE_LABELS } from "@/lib/scheduling/event-content";
-import { formatTimeOfDay, localMinuteOf } from "@/lib/time";
+import { formatTimeOfDay, localDateOf, localMinuteOf } from "@/lib/time";
 
 export const metadata: Metadata = { title: "Übersicht" };
 
@@ -130,6 +130,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
   const data = await loadDashboard(user, now);
   const firstName = user.name.split(/\s+/)[0];
   const { items, currentId, nextId } = data.today;
+  const today = localDateOf(now, APP_TIMEZONE);
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -159,13 +160,28 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
         </p>
       )}
 
+      {data.sending && (
+        <Link
+          href="/admin/whatsapp"
+          className="block rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+        >
+          <span className="font-semibold">
+            {data.sending.queued} WhatsApp-Nachricht{data.sending.queued === 1 ? "" : "en"} warte
+            {data.sending.queued === 1 ? "t" : "n"} –{" "}
+            {data.sending.paused ? "der Versand ist pausiert" : "der Versand ist ausgeschaltet"}.
+          </span>{" "}
+          {data.sending.reason ? `${data.sending.reason}. ` : ""}Neue Leads werden erst
+          angeschrieben, wenn er läuft. Zu den WhatsApp-Einstellungen →
+        </Link>
+      )}
+
       {/* 0. Chats the bot handed over – only when needed */}
       {data.handovers.length > 0 && (
         <Card className="border-red-300 bg-red-50/60 dark:border-red-900 dark:bg-red-950/30">
           <SectionTitle count={data.handovers.length}>Braucht euch</SectionTitle>
           <p className="-mt-1 mb-3 text-sm text-ink-soft">
-            Der Bot hat diese Chats an euch übergeben. Sie bleiben hier, bis ihr im Chat antwortet,
-            den Bot wieder einschaltet oder sie als erledigt markiert (z. B. nach einem Anruf).
+            Der Bot hat diese Chats an euch übergeben. Sie bleiben hier, bis jemand mit „Erledigt“
+            bestätigt, dass sich darum gekümmert wurde.
           </p>
           <ul className="space-y-2">
             {data.handovers.map((h) => (
@@ -195,6 +211,55 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
                 </ActionButton>
               </li>
             ))}
+          </ul>
+        </Card>
+      )}
+
+      {/* Follow-ups due today (or overdue) */}
+      {data.followUps.length > 0 && (
+        <Card className="border-sky-300 bg-sky-50/60 dark:border-sky-900 dark:bg-sky-950/30">
+          <SectionTitle count={data.followUps.length}>Heute nachfassen</SectionTitle>
+          <p className="-mt-1 mb-3 text-sm text-ink-soft">
+            Diese Kunden wollten es sich noch überlegen. Bitte melden – sie bleiben hier, bis jemand
+            mit „Erledigt“ bestätigt.
+          </p>
+          <ul className="space-y-2">
+            {data.followUps.map((f) => {
+              const overdue = f.followUpAt && localDateOf(f.followUpAt, APP_TIMEZONE) < today;
+              return (
+                <li key={f.id} className="flex items-center gap-2 rounded-lg bg-surface pr-3">
+                  <Link
+                    href={`/leads/${f.lead.id}`}
+                    className="flex min-w-0 flex-1 items-center gap-3 rounded-lg p-3 hover:bg-muted"
+                  >
+                    <Initials name={f.lead.name} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium">
+                        {f.lead.name}
+                        {overdue && (
+                          <span className="ml-2 text-xs font-normal text-amber-700">
+                            überfällig
+                          </span>
+                        )}
+                      </span>
+                      <span className="block truncate text-xs text-ink-soft">
+                        {f.outcomeNote ?? "Kunde überlegt noch"}
+                        {data.isAdmin && ` · ${f.tattooer.user.name}`}
+                      </span>
+                    </span>
+                  </Link>
+                  {f.lead.phoneE164 && (
+                    <a
+                      href={`tel:${f.lead.phoneE164}`}
+                      className="shrink-0 rounded-lg border border-line px-3 py-1.5 text-sm hover:bg-muted"
+                    >
+                      Anrufen
+                    </a>
+                  )}
+                  <ActionButton action={completeFollowUp.bind(null, f.id)}>Erledigt</ActionButton>
+                </li>
+              );
+            })}
           </ul>
         </Card>
       )}
@@ -261,11 +326,11 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
               const isCurrent = i.id === currentId;
               const isNext = i.id === nextId;
               return (
-                <li key={i.id}>
+                <li key={i.id} className="flex items-center gap-2">
                   <Link
                     href={`/leads/${i.leadId}`}
                     className={cn(
-                      "grid grid-cols-[3.75rem_1fr_auto] items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-muted/60",
+                      "grid min-w-0 flex-1 grid-cols-[3.75rem_1fr_auto] items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-muted/60",
                       past && "opacity-55",
                       isCurrent &&
                         "bg-emerald-50 ring-1 ring-emerald-200 dark:bg-emerald-950/40 dark:ring-emerald-900",
@@ -306,6 +371,15 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
                       ) : null}
                     </span>
                   </Link>
+                  {/* Phone consultations: the tattooer calls the customer */}
+                  {i.mode === "PHONE" && i.phone && !past && (
+                    <a
+                      href={`tel:${i.phone}`}
+                      className="shrink-0 rounded-lg border border-line px-3 py-1.5 text-sm hover:bg-muted"
+                    >
+                      Anrufen
+                    </a>
+                  )}
                 </li>
               );
             })}

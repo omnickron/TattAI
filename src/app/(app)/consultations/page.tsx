@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { OutcomePanel } from "@/components/outcome-panel";
+import { AttendanceForm, PriceInfo } from "@/components/tattoo-sessions";
+import { missingAttendanceWhere } from "@/lib/outcomes/attendance";
 import { Badge, Card, cn, EmptyState, PageHeader } from "@/components/ui";
 import type { Prisma } from "@/generated/prisma/client";
 import { requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
-import { formatDateTime } from "@/lib/format";
+import { formatDate, formatDateTime } from "@/lib/format";
 import { CONSULTATION_MODE_LABELS } from "@/lib/scheduling/event-content";
 
 export const metadata: Metadata = { title: "Beratungen" };
@@ -40,19 +42,37 @@ export default async function ConsultationsPage({ searchParams }: PageProps<"/co
       ],
     },
   };
-  const [items, openCount] = await Promise.all([
+  const attendanceWhere = missingAttendanceWhere(
+    now,
+    isAdmin ? null : (user.tattooerProfile?.id ?? "__none__"),
+  );
+  const [items, consultationsOpen, openSessions] = await Promise.all([
     prisma.consultation.findMany({
       where: where[tab],
       orderBy: { startsAt: tab === "upcoming" ? "asc" : "desc" },
       take: 100,
       include: {
-        lead: { select: { id: true, name: true } },
+        lead: { select: { id: true, name: true, phoneE164: true } },
         tattooer: { include: { user: { select: { name: true } } } },
         tattooBookings: true,
       },
     }),
     prisma.consultation.count({ where: where.open }),
+    prisma.tattooBooking.findMany({
+      where: attendanceWhere,
+      orderBy: [{ date: "asc" }, { startsAt: "asc" }],
+      take: 100,
+      include: {
+        consultation: {
+          select: {
+            lead: { select: { id: true, name: true } },
+            tattooer: { select: { user: { select: { name: true } } } },
+          },
+        },
+      },
+    }),
   ]);
+  const openCount = consultationsOpen + openSessions.length;
 
   return (
     <>
@@ -93,7 +113,36 @@ export default async function ConsultationsPage({ searchParams }: PageProps<"/co
         ))}
       </nav>
 
-      {items.length === 0 ? (
+      {tab === "open" && openSessions.length > 0 && (
+        <section className="mb-6 space-y-3">
+          <h2 className="text-sm font-semibold">Tattoo-Termine: Erscheinen und Endpreis fehlen</h2>
+          {openSessions.map((s) => (
+            <Card key={s.id} className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="font-medium tabular-nums">
+                  {s.startsAt ? formatDateTime(s.startsAt) : formatDate(s.date)}
+                </span>
+                <Link
+                  href={`/leads/${s.consultation.lead.id}#tattoo-termine`}
+                  className="font-medium underline-offset-2 hover:underline"
+                >
+                  {s.consultation.lead.name}
+                </Link>
+                <Badge tone="violet">Tattoo-Termin</Badge>
+                <PriceInfo s={s} />
+                {isAdmin && (
+                  <span className="ml-auto text-ink-soft">{s.consultation.tattooer.user.name}</span>
+                )}
+              </div>
+              <AttendanceForm s={s} />
+            </Card>
+          ))}
+          {items.length > 0 && <h2 className="pt-2 text-sm font-semibold">Beratungen</h2>}
+        </section>
+      )}
+
+      {items.length === 0 && tab === "open" && openSessions.length > 0 ? null : items.length ===
+        0 ? (
         <EmptyState>
           {tab === "open"
             ? "Alle Ergebnisse sind eingetragen. 👍"
@@ -116,6 +165,14 @@ export default async function ConsultationsPage({ searchParams }: PageProps<"/co
                 <Badge tone={c.mode === "PHONE" ? "violet" : "gray"}>
                   {CONSULTATION_MODE_LABELS[c.mode]}
                 </Badge>
+                {c.mode === "PHONE" && c.lead.phoneE164 && (
+                  <a
+                    href={`tel:${c.lead.phoneE164}`}
+                    className="text-sm tabular-nums underline underline-offset-2"
+                  >
+                    {c.lead.phoneE164}
+                  </a>
+                )}
                 {isAdmin && (
                   <span className="ml-auto text-sm text-ink-soft">{c.tattooer.user.name}</span>
                 )}

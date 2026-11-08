@@ -1,9 +1,13 @@
+import { missingAttendanceWhere } from "@/lib/outcomes/attendance";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { AppNav, type NavGroup } from "@/components/app-nav";
 import { requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { Logo } from "@/components/logo";
+import { dueFollowUpWhere } from "@/lib/outcomes/follow-up";
+import { openHandoverWhere } from "@/lib/bot/handover";
+import { APP_TIMEZONE } from "@/lib/format";
 import { ViewSwitch } from "@/components/view-switch";
 import { PushToggle } from "@/components/push-toggle";
 import { isOperator } from "@/lib/auth/operator";
@@ -22,24 +26,36 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       ...(isAdmin ? {} : { tattooerId: user.tattooerProfile?.id ?? "__none__" }),
     },
   });
+  // Tattoo sessions that are over without "erschienen / nicht erschienen"
+  const openAttendance = await prisma.tattooBooking.count({
+    where: missingAttendanceWhere(
+      new Date(),
+      isAdmin ? null : (user.tattooerProfile?.id ?? "__none__"),
+    ),
+  });
   // Chats the bot handed over that nobody has picked up yet
   const handovers = await prisma.lead.count({
-    where: {
-      isTest: false,
-      botEnabled: false,
-      botDisabledReason: "BOT_HANDOVER",
-      ...(isAdmin
-        ? {}
-        : { consultations: { some: { tattooerId: user.tattooerProfile?.id ?? "__none__" } } }),
-    },
+    where: openHandoverWhere({ isAdmin, tattooerId: user.tattooerProfile?.id ?? null }),
+  });
+  const followUps = await prisma.consultation.count({
+    where: dueFollowUpWhere(
+      new Date(),
+      { isAdmin, tattooerId: user.tattooerProfile?.id ?? null },
+      APP_TIMEZONE,
+    ),
   });
   const groups: NavGroup[] = [
     {
       items: [
-        { href: "/", label: "Übersicht", icon: "home", badge: handovers },
+        { href: "/", label: "Übersicht", icon: "home", badge: handovers + followUps },
         { href: "/leads", label: "Leads", icon: "leads" },
         { href: "/calendar", label: "Kalender", icon: "calendar" },
-        { href: "/consultations", label: "Beratungen", icon: "consultations", badge: openOutcomes },
+        {
+          href: "/consultations",
+          label: "Beratungen",
+          icon: "consultations",
+          badge: openOutcomes + openAttendance,
+        },
         ...(user.tattooerProfile
           ? [{ href: "/availability", label: "Verfügbarkeit", icon: "availability" as const }]
           : []),

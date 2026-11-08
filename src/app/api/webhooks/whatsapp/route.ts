@@ -2,11 +2,12 @@ import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { verifyMetaSignature } from "@/lib/meta/signature";
 import { processWhatsAppWebhook, type WaWebhookPayload } from "@/lib/whatsapp/webhook";
+import { setting } from "@/lib/integrations/store";
 
 /** Subscription verification handshake from Meta. */
 export function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
-  const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN;
+  const verifyToken = setting("WHATSAPP_VERIFY_TOKEN");
   if (
     verifyToken &&
     params.get("hub.mode") === "subscribe" &&
@@ -23,7 +24,7 @@ export function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   const rawBody = await request.text();
-  const secret = process.env.WHATSAPP_APP_SECRET || process.env.META_APP_SECRET || "";
+  const secret = setting("WHATSAPP_APP_SECRET") || setting("META_APP_SECRET") || "";
   if (!verifyMetaSignature(rawBody, request.headers.get("x-hub-signature-256"), secret)) {
     console.warn("[whatsapp-webhook] rejected request with invalid signature");
     return new Response("Invalid signature", { status: 401 });

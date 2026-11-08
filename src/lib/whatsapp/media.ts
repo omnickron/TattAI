@@ -6,6 +6,7 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { PrismaClient } from "@/generated/prisma/client";
+import { setting } from "@/lib/integrations/store";
 
 export const MAX_MEDIA_BYTES = 16 * 1024 * 1024;
 export const ALLOWED_MEDIA: Record<string, string> = {
@@ -64,8 +65,8 @@ export class MockMediaDownloader implements MediaDownloader {
 }
 
 export function createMediaDownloader(): MediaDownloader {
-  if (process.env.WHATSAPP_MOCK === "true") return new MockMediaDownloader();
-  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+  if (setting("WHATSAPP_MOCK") === "true") return new MockMediaDownloader();
+  const accessToken = setting("WHATSAPP_ACCESS_TOKEN");
   if (!accessToken) throw new Error("WHATSAPP_ACCESS_TOKEN must be set");
   return new CloudMediaDownloader({
     accessToken,

@@ -87,7 +87,7 @@ Die Zusammenfassung erscheint am Lead in der App UND im Beschreibungsfeld des Ka
 
 ### 7. Umsatz-Tracking
 - Nach der Beratung trägt der Tätowierer ein: Beratung stattgefunden / No-Show / abgesagt, und ob ein Tattoo-Termin daraus wurde.
-- Für Tattoo-Termine: Datum, Betrag (manuell).
+- Für Tattoo-Termine: Datum, geplanter Preis und Anzahlung (manuell). Nach dem Termin: erschienen ja/nein und Endpreis. Umsatz = Endpreis; nach einem No-Show zählt die Anzahlung als Umsatz, auch für die Provision; bei einer Absage wählt der Tätowierer, ob die Anzahlung einbehalten wird (dann zählt sie ebenso). Preise gelten immer pro Sitzung. Eine Monatsrechnung lässt sich erst erstellen, wenn bei allen Tattoo-Terminen des Monats Erscheinen und Endpreis eingetragen sind (Entscheidungen vom 08.11.2026).
 - Auswertung für den Admin: Leads, gebuchte Beratungen, stattgefundene Beratungen, Tattoo-Abschlüsse, Umsatz, je Zeitraum, Kampagne und Tätowierer.
 - Später: Werbekosten aus Meta importieren (Kosten pro Lead, ROI) und Abschlüsse an Meta zurückmelden (Conversions API).
 
@@ -100,7 +100,7 @@ User (Rolle), TattooerProfile (Google-Verbindung, Beratungsdauer, Puffer), Avail
 ## Technische Leitplanken
 - Vorschlag: TypeScript durchgängig, Next.js (App Router) mit PostgreSQL und Prisma, Hintergrundjobs für Erinnerungen und Retries. Alternativen sind in Ordnung, wenn sie begründet werden.
 - Hosting in der EU (DSGVO).
-- Secrets (Meta, WhatsApp, Google Tokens) nur in Umgebungsvariablen. Google-Refresh-Tokens verschlüsselt speichern.
+- Secrets: Grundlagen (Datenbank, Anmelde-Geheimnis, Verschlüsselungs-Schlüssel, Google-Login, Anthropic, Push) nur in Umgebungsvariablen. Zugänge von TeamUp, WhatsApp und Meta pflegt der Betreiber in der App (Betreiber → Zugänge): verschlüsselt gespeichert (AES-256-GCM), nie wieder angezeigt, Änderungen protokolliert, .env als Rückfall (Entscheidung vom 07.11.2026). Google-Refresh-Tokens verschlüsselt speichern.
 - Alle Webhooks: Signatur prüfen, idempotent verarbeiten, Fehler protokollieren, Retries.
 - Zeitzone: Europe/Berlin, in der Datenbank UTC speichern. Sommer-/Winterzeit in Tests abdecken.
 - Tests für Fairness-Logik, Slot-Berechnung und Webhook-Idempotenz sind Pflicht.

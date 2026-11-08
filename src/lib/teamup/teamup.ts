@@ -21,6 +21,7 @@ import {
   type CalendarConnection,
   type CalendarEventInput,
 } from "../google/calendar";
+import { setting } from "@/lib/integrations/store";
 
 export const TEAMUP_API = "https://api.teamup.com";
 
@@ -113,8 +114,8 @@ export function busyOfArtist(
   artist: string,
   timeZone: string,
   ownSubcalendarId?: string | null,
-): Interval[] {
-  const busy: Interval[] = [];
+): Array<Interval & { title: string | null }> {
+  const busy: Array<Interval & { title: string | null }> = [];
   for (const ev of events) {
     if (ev.remote_id?.startsWith(REMOTE_ID_PREFIX)) continue;
     const inOwn =
@@ -127,9 +128,14 @@ export function busyOfArtist(
       busy.push({
         start: zonedTimeToUtc(startDay, 0, timeZone),
         end: zonedTimeToUtc(addDays(endDay, 1), 0, timeZone),
+        title: ev.title?.trim() || null,
       });
     } else {
-      busy.push({ start: new Date(ev.start_dt), end: new Date(ev.end_dt) });
+      busy.push({
+        start: new Date(ev.start_dt),
+        end: new Date(ev.end_dt),
+        title: ev.title?.trim() || null,
+      });
     }
   }
   return busy;
@@ -280,7 +286,24 @@ export class TeamupClient implements CalendarClient {
     return (res.status === 204 ? undefined : await res.json()) as T;
   }
 
+  /** Short-lived cache: one calendar page asks for the same range once per tattooer. */
+  private eventCache = new Map<string, { at: number; events: Promise<TeamupEvent[]> }>();
+
   async listEvents(from: Date, to: Date, cfg?: TeamupConfig): Promise<TeamupEvent[]> {
+    if (!cfg) {
+      const key = `${from.toISOString()}|${to.toISOString()}`;
+      const hit = this.eventCache.get(key);
+      if (hit && Date.now() - hit.at < 20_000) return hit.events;
+      const events = this.fetchEvents(from, to);
+      this.eventCache.set(key, { at: Date.now(), events });
+      events.catch(() => this.eventCache.delete(key));
+      if (this.eventCache.size > 50) this.eventCache.delete(this.eventCache.keys().next().value!);
+      return events;
+    }
+    return this.fetchEvents(from, to, cfg);
+  }
+
+  private async fetchEvents(from: Date, to: Date, cfg?: TeamupConfig): Promise<TeamupEvent[]> {
     const qs = new URLSearchParams({
       startDate: localDateOf(from, this.timeZone),
       endDate: localDateOf(to, this.timeZone),
@@ -301,6 +324,10 @@ export class TeamupClient implements CalendarClient {
       this.timeZone,
       conn.teamupSubcalendarId,
     );
+  }
+
+  async listBusyEntries(conn: CalendarConnection, from: Date, to: Date) {
+    return this.getBusy(conn, from, to) as Promise<Array<Interval & { title: string | null }>>;
   }
 
   /** The tattooer's own sub-calendar, otherwise the studio default from the settings. */
@@ -509,5 +536,5 @@ export class MockTeamupClient implements CalendarClient {
 }
 
 export function isTeamupMock(): boolean {
-  return process.env.TEAMUP_MOCK === "true";
+  return setting("TEAMUP_MOCK") === "true";
 }

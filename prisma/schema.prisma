@@ -70,6 +70,8 @@ model TattooerProfile {
   // Own TeamUp sub-calendar of this tattooer (null = the studio's default from the settings)
   teamupSubcalendarId   String?
   teamupSubcalendarName String?
+  // Local day (YYYY-MM-DD) of the last morning push about consultations without outcome
+  outcomeReminderOn     String?
   teamupConnectedAt     DateTime?
 
   createdAt DateTime @default(now())
@@ -192,10 +194,13 @@ model Lead {
   tattooSummary Json?
 
   // Short memory the built-in bot keeps about the chat (max. 400 characters)
-  botMemory       String?
+  botMemory               String?
   // Why the bot handed the chat over to a person (shown in the app)
-  botHandoverNote String?
-  botHandoverAt   DateTime?
+  botHandoverNote         String?
+  botHandoverAt           DateTime?
+  // Someone confirmed with the button that the handover was dealt with (list entry gone)
+  botHandoverResolvedAt   DateTime?
+  botHandoverResolvedById String?
 
   // Created by the bot test (AI test customers); hidden everywhere, deleted after the run
   isTest Boolean @default(false)
@@ -317,6 +322,10 @@ model Consultation {
   furtherSessionsScheduled Boolean?
   outcomeRecordedAt        DateTime?
   outcomeRecordedById      String?
+  // Follow-up: customer is interested but undecided – contact again on this day (09:00 local)
+  followUpAt               DateTime?
+  followUpDoneAt           DateTime?
+  followUpNotifiedAt       DateTime?
   createdAt                DateTime           @default(now())
   updatedAt                DateTime           @updatedAt
 
@@ -326,6 +335,11 @@ model Consultation {
 
   @@index([tattooerId, startsAt])
   @@index([leadId])
+}
+
+enum SessionAttendance {
+  ATTENDED
+  NO_SHOW
 }
 
 model TattooBooking {
@@ -348,8 +362,16 @@ model TattooBooking {
   // Automatic retries back off (1, 2, 4 … min, max. 60 min); a manual retry ignores this
   calendarSyncAttempts  Int          @default(0)
   calendarNextAttemptAt DateTime?
-  // Entered manually; may be added later
+  // Planned price, entered when booking; may be added later
   amountCents           Int?
+  // Deposit the customer paid in advance
+  depositCents          Int?
+  // After the session: did the customer show up, and what did the tattoo really cost
+  attendance            SessionAttendance?
+  attendanceRecordedAt  DateTime?
+  finalAmountCents      Int?
+  // Cancelled at short notice and the studio kept the deposit: it counts as revenue
+  depositKept           Boolean      @default(false)
   currency              String       @default("EUR")
   cancelled             Boolean      @default(false)
   note                  String?
@@ -865,6 +887,32 @@ model BotEvalRun {
   results     Json?
   error       String?
   createdAt   DateTime  @default(now())
+
+  @@index([createdAt])
+}
+
+// Access data of integrations (TeamUp, WhatsApp, Meta) maintained by the operator in the
+// app. Secrets are AES-256-GCM encrypted (TOKEN_ENCRYPTION_KEY); the .env is the fallback.
+model IntegrationSetting {
+  // Name of the setting, same as the environment variable (e.g. WHATSAPP_ACCESS_TOKEN)
+  key         String   @id
+  // Encrypted for secrets, plain for IDs and modes
+  value       String
+  // Last characters of a secret, to recognise it without showing it
+  hint        String?
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+}
+
+// Who changed which access data when (never the value itself)
+model IntegrationSettingLog {
+  id        String   @id @default(cuid())
+  key       String
+  // set | cleared
+  action    String
+  userId    String?
+  userName  String?
+  createdAt DateTime @default(now())
 
   @@index([createdAt])
 }

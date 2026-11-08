@@ -33,6 +33,12 @@ export class RoutingCalendarClient implements CalendarClient {
     return this.byProvider(conn).getBusy(conn, from, to);
   }
 
+  async listBusyEntries(conn: CalendarConnection, from: Date, to: Date) {
+    const client = this.byProvider(conn);
+    if (client.listBusyEntries) return client.listBusyEntries(conn, from, to);
+    return (await client.getBusy(conn, from, to)).map((b) => ({ ...b, title: null }));
+  }
+
   ensureConsultationCalendar(conn: CalendarConnection): Promise<string> {
     if (conn.provider !== "TEAMUP" && isTeamupCalendarId(conn.calendarId)) {
       // Switched back to Google: never hand a TeamUp id to Google

@@ -2,6 +2,7 @@ import { ActionForm } from "@/components/action-form";
 import { Badge, Button, cn, Input, PencilIcon, TimeSelect } from "@/components/ui";
 import {
   addSessionAction,
+  recordAttendanceAction,
   retrySessionSyncAction,
   setSessionCancelledAction,
   updateSessionAction,
@@ -10,6 +11,7 @@ import { SyncRetry } from "@/components/sync-retry";
 import { describeCalendarError } from "@/lib/scheduling/session-calendar";
 import { APP_TIMEZONE } from "@/lib/format";
 import { centsToInput, formatEuro } from "@/lib/outcomes/money";
+import { attendanceMissing, sessionRevenueCents } from "@/lib/outcomes/session-revenue";
 import { formatTimeOfDay, localDateOf, localMinuteOf } from "@/lib/time";
 
 export type TattooSession = {
@@ -17,7 +19,11 @@ export type TattooSession = {
   sessionNumber: number;
   date: Date;
   amountCents: number | null;
+  depositCents: number | null;
+  attendance: "ATTENDED" | "NO_SHOW" | null;
+  finalAmountCents: number | null;
   cancelled: boolean;
+  depositKept: boolean;
   startsAt: Date | null;
   endsAt: Date | null;
   calendarEventId: string | null;
@@ -35,34 +41,173 @@ const dayLabel = new Intl.DateTimeFormat("de-DE", {
   year: "numeric",
 });
 
-const FORM_GRID =
-  "grid grid-cols-2 items-center gap-2 space-y-0 sm:grid-cols-[10.5rem_7.5rem_7.5rem_8rem_auto]";
+// Wraps instead of fixed columns: hour/minute pickers need more room than a single field
+const FORM_GRID = "flex flex-wrap items-center gap-x-3 gap-y-2 space-y-0";
 
 function TimeInputs({ start, end }: { start?: Date | null; end?: Date | null }) {
   return (
     <>
-      <TimeSelect
-        name="start"
-        defaultValue={localTime(start ?? null)}
-        aria-label="Beginn"
-        emptyLabel="von –"
-      />
-      <TimeSelect
-        name="end"
-        defaultValue={localTime(end ?? null)}
-        aria-label="Ende"
-        emptyLabel="bis –"
-      />
+      <span className="flex items-center gap-2 text-sm">
+        <span className="text-ink-soft">von</span>
+        <TimeSelect
+          name="start"
+          defaultValue={localTime(start ?? null)}
+          aria-label="Beginn"
+          emptyLabel="–"
+        />
+      </span>
+      <span className="flex items-center gap-2 text-sm">
+        <span className="text-ink-soft">bis</span>
+        <TimeSelect
+          name="end"
+          defaultValue={localTime(end ?? null)}
+          aria-label="Ende"
+          emptyLabel="–"
+          endOfDay
+        />
+      </span>
     </>
   );
 }
 
 function sessionState(s: TattooSession, now: Date) {
   if (s.cancelled) return { label: "abgesagt", tone: "gray" as const };
-  const end = s.endsAt ?? new Date(s.date.getTime() + 24 * 3600_000);
-  return end <= now
-    ? { label: "stattgefunden", tone: "green" as const }
-    : { label: "anstehend", tone: "blue" as const };
+  if (s.attendance === "ATTENDED") return { label: "erschienen", tone: "green" as const };
+  if (s.attendance === "NO_SHOW") return { label: "nicht erschienen", tone: "red" as const };
+  if (attendanceMissing(s, now)) return { label: "Erscheinen offen", tone: "amber" as const };
+  if ((s.startsAt ?? s.date) <= now) return { label: "läuft", tone: "blue" as const };
+  return { label: "anstehend", tone: "blue" as const };
+}
+
+/** Price part of the row: planned price + deposit, after the session the final price. */
+export function PriceInfo({ s }: { s: TattooSession }) {
+  const deposit = s.depositCents ? ` · Anzahlung ${formatEuro(s.depositCents)}` : "";
+  if (s.cancelled) {
+    return s.depositKept && s.depositCents ? (
+      <span className="tabular-nums">Anzahlung {formatEuro(s.depositCents)} einbehalten</span>
+    ) : (
+      <span className="tabular-nums text-ink-soft">{s.depositCents ? "Anzahlung zurück" : ""}</span>
+    );
+  }
+  if (s.attendance === "ATTENDED" && s.finalAmountCents !== null) {
+    const changed = s.amountCents !== null && s.amountCents !== s.finalAmountCents;
+    return (
+      <span className="tabular-nums">
+        Endpreis {formatEuro(s.finalAmountCents)}
+        <span className="text-ink-soft">
+          {changed && ` · geplant ${formatEuro(s.amountCents)}`}
+          {deposit}
+        </span>
+      </span>
+    );
+  }
+  if (s.attendance === "NO_SHOW") {
+    return (
+      <span className="tabular-nums text-ink-soft">{deposit.slice(3) || "keine Anzahlung"}</span>
+    );
+  }
+  return (
+    <span className="tabular-nums">
+      {s.amountCents === null ? (
+        <span className="text-amber-700 dark:text-amber-400">Preis fehlt</span>
+      ) : (
+        `Preis ${formatEuro(s.amountCents)}`
+      )}
+      <span className="text-ink-soft">{deposit}</span>
+    </span>
+  );
+}
+
+function EuroInput({
+  name,
+  label,
+  defaultValue,
+  placeholder,
+}: {
+  name: string;
+  label: string;
+  defaultValue?: string;
+  placeholder?: string;
+}) {
+  return (
+    <label className="flex items-center gap-2 text-sm">
+      <span className="text-ink-soft">{label}</span>
+      <Input
+        name={name}
+        defaultValue={defaultValue}
+        placeholder={placeholder}
+        inputMode="decimal"
+        aria-label={label}
+        className="w-28"
+      />
+      <span className="text-ink-soft">€</span>
+    </label>
+  );
+}
+
+/** Cancel a session; with a deposit, the tattooer says whether the studio keeps it. */
+function CancelSession({ s }: { s: TattooSession }) {
+  const button = (kept: boolean, label: string) => (
+    <ActionForm
+      action={setSessionCancelledAction.bind(null, s.id, true, kept)}
+      confirm={
+        s.depositCents
+          ? `Termin absagen – ${kept ? "Anzahlung wird einbehalten und zählt als Umsatz" : "Anzahlung geht zurück"}?`
+          : "Termin als abgesagt markieren?"
+      }
+    >
+      <Button type="submit" variant="ghost" className="px-2 py-1 text-xs text-red-600">
+        {label}
+      </Button>
+    </ActionForm>
+  );
+  if (!s.depositCents) return button(false, "Termin absagen");
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      {button(true, "Absagen – Anzahlung einbehalten")}
+      {button(false, "Absagen – Anzahlung zurück")}
+    </div>
+  );
+}
+
+/** Asked once the session is over: did the customer come, and what was the final price? */
+export function AttendanceForm({ s }: { s: TattooSession }) {
+  return (
+    <div className="mt-2 space-y-2 rounded-lg bg-amber-50 p-3 dark:bg-amber-950/40">
+      <p className="text-sm font-medium">Ist der Kunde zum Tattoo-Termin erschienen?</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <ActionForm
+          action={recordAttendanceAction.bind(null, s.id, "ATTENDED")}
+          className="flex flex-wrap items-center gap-x-3 gap-y-2 space-y-0"
+        >
+          <EuroInput
+            name="finalAmount"
+            label="Endpreis"
+            defaultValue={centsToInput(s.amountCents)}
+            placeholder="z. B. 450"
+          />
+          <Button type="submit" className="px-3 py-1.5 text-xs">
+            Erschienen
+          </Button>
+        </ActionForm>
+        <ActionForm
+          action={recordAttendanceAction.bind(null, s.id, "NO_SHOW")}
+          confirm="Als „nicht erschienen“ eintragen?"
+        >
+          <Button type="submit" variant="secondary" className="px-3 py-1.5 text-xs">
+            Nicht erschienen
+          </Button>
+        </ActionForm>
+      </div>
+      <p className="text-xs text-ink-soft">
+        Der Endpreis ist das, was diese Sitzung am Ende wirklich gekostet hat (inklusive Anzahlung).
+        Preise gelten immer pro Sitzung.
+        {s.depositCents
+          ? ` Bei „nicht erschienen“ zählt die Anzahlung von ${formatEuro(s.depositCents)} als Umsatz.`
+          : ""}
+      </p>
+    </div>
+  );
 }
 
 /**
@@ -85,8 +230,8 @@ export function TattooSessions({
 }) {
   const sessions = [...unsorted].sort((a, b) => a.sessionNumber - b.sessionNumber);
   const active = sessions.filter((s) => !s.cancelled);
-  const total = active.reduce((sum, s) => sum + (s.amountCents ?? 0), 0);
-  const missingAmounts = active.filter((s) => s.amountCents === null).length;
+  const total = sessions.reduce((sum, s) => sum + (sessionRevenueCents(s) ?? 0), 0);
+  const missingAmounts = active.filter((s) => sessionRevenueCents(s) === null).length;
 
   return (
     <div className="space-y-2">
@@ -119,14 +264,7 @@ export function TattooSessions({
                         ? ` · ${localTime(s.startsAt)}–${localTime(s.endsAt)} Uhr`
                         : " · Uhrzeit offen"}
                     </span>
-                    <span
-                      className={cn(
-                        "tabular-nums",
-                        s.amountCents === null && "text-amber-700 dark:text-amber-400",
-                      )}
-                    >
-                      {s.amountCents === null ? "Betrag fehlt" : formatEuro(s.amountCents)}
-                    </span>
+                    <PriceInfo s={s} />
 
                     <span className="ml-auto">
                       <Badge tone={state.tone}>{state.label}</Badge>
@@ -135,7 +273,9 @@ export function TattooSessions({
                   {canEdit && (
                     <div className="mt-3 space-y-2 border-t border-line pt-3">
                       {s.cancelled ? (
-                        <ActionForm action={setSessionCancelledAction.bind(null, s.id, false)}>
+                        <ActionForm
+                          action={setSessionCancelledAction.bind(null, s.id, false, false)}
+                        >
                           <Button type="submit" variant="secondary" className="px-3 py-1.5 text-xs">
                             Termin wiederherstellen
                           </Button>
@@ -155,12 +295,15 @@ export function TattooSessions({
                               aria-label="Datum"
                             />
                             <TimeInputs start={s.startsAt} end={s.endsAt} />
-                            <Input
+                            <EuroInput
                               name="amount"
+                              label="Preis"
                               defaultValue={centsToInput(s.amountCents)}
-                              placeholder="Betrag €"
-                              inputMode="decimal"
-                              aria-label="Betrag"
+                            />
+                            <EuroInput
+                              name="deposit"
+                              label="Anzahlung"
+                              defaultValue={centsToInput(s.depositCents)}
                             />
                             <Button
                               type="submit"
@@ -169,23 +312,38 @@ export function TattooSessions({
                               Speichern
                             </Button>
                           </ActionForm>
-                          <ActionForm
-                            action={setSessionCancelledAction.bind(null, s.id, true)}
-                            confirm={`Termin ${s.sessionNumber} als abgesagt markieren?`}
-                          >
-                            <Button
-                              type="submit"
-                              variant="ghost"
-                              className="px-2 py-1 text-xs text-red-600"
+                          {s.attendance === "ATTENDED" && (
+                            <ActionForm
+                              action={recordAttendanceAction.bind(null, s.id, "ATTENDED")}
+                              className={FORM_GRID}
                             >
-                              Termin absagen
-                            </Button>
-                          </ActionForm>
+                              <EuroInput
+                                name="finalAmount"
+                                label="Endpreis"
+                                defaultValue={centsToInput(s.finalAmountCents)}
+                              />
+                              <Button type="submit" className="px-3 py-1.5 text-xs">
+                                Endpreis speichern
+                              </Button>
+                            </ActionForm>
+                          )}
+                          {s.attendance && (
+                            <ActionForm
+                              action={recordAttendanceAction.bind(null, s.id, null)}
+                              confirm="Eintrag „erschienen / nicht erschienen“ zurücksetzen?"
+                            >
+                              <Button type="submit" variant="ghost" className="px-2 py-1 text-xs">
+                                Erscheinen zurücksetzen
+                              </Button>
+                            </ActionForm>
+                          )}
+                          <CancelSession s={s} />
                         </>
                       )}
                     </div>
                   )}
                 </details>
+                {canEdit && attendanceMissing(s, now) && <AttendanceForm s={s} />}
                 {!s.cancelled && (s.calendarSyncPending || s.calendarSyncError) && (
                   <SyncRetry
                     action={retrySessionSyncAction.bind(null, s.id)}
@@ -207,7 +365,7 @@ export function TattooSessions({
         {missingAmounts > 0 && (
           <span className="text-amber-700 dark:text-amber-400">
             {" "}
-            · Betrag fehlt noch bei{" "}
+            · Preis fehlt noch bei{" "}
             {missingAmounts === 1 ? "einem Termin" : `${missingAmounts} Terminen`}
           </span>
         )}
@@ -229,12 +387,8 @@ export function TattooSessions({
               className="col-span-2 sm:col-span-1"
             />
             <TimeInputs />
-            <Input
-              name="amount"
-              placeholder="Betrag € (optional)"
-              inputMode="decimal"
-              aria-label="Betrag"
-            />
+            <EuroInput name="amount" label="Preis" placeholder="optional" />
+            <EuroInput name="deposit" label="Anzahlung" placeholder="optional" />
             <Button
               type="submit"
               variant="secondary"

@@ -6,12 +6,15 @@
  *                                                           – also creates, changes and deletes a test entry
  */
 import "dotenv/config";
+import { createPrismaClient } from "../src/lib/prisma-client";
+import { refreshIntegrationSettings } from "../src/lib/integrations/store";
 import {
   normalizeCalendarKey,
   TeamupClient,
   WHO_FIELD,
   type TeamupConfig,
 } from "../src/lib/teamup/teamup";
+import { setting } from "../src/lib/integrations/store";
 
 const TZ = process.env.APP_TIMEZONE || "Europe/Berlin";
 
@@ -20,10 +23,16 @@ function step(title: string) {
 }
 
 async function main() {
-  const apiKey = process.env.TEAMUP_API_KEY?.trim();
-  const calendarKey = normalizeCalendarKey(process.env.TEAMUP_CALENDAR_KEY);
+  // Keys maintained in the app take precedence over the .env
+  const db = createPrismaClient();
+  await refreshIntegrationSettings(db).catch(() => undefined);
+  await db.$disconnect();
+  const apiKey = setting("TEAMUP_API_KEY");
+  const calendarKey = normalizeCalendarKey(setting("TEAMUP_CALENDAR_KEY"));
   if (!apiKey || !calendarKey) {
-    console.log("TEAMUP_API_KEY und TEAMUP_CALENDAR_KEY fehlen in der .env.");
+    console.log(
+      "TeamUp-Zugang fehlt (Betreiber → Zugänge oder TEAMUP_API_KEY/TEAMUP_CALENDAR_KEY in der .env).",
+    );
     process.exit(1);
   }
   const args = process.argv.slice(2);
@@ -139,6 +148,6 @@ main().catch((err) => {
 
 /** First and last characters only – never the whole key. */
 function maskedKey() {
-  const k = normalizeCalendarKey(process.env.TEAMUP_CALENDAR_KEY) ?? "";
+  const k = normalizeCalendarKey(setting("TEAMUP_CALENDAR_KEY")) ?? "";
   return k.length > 6 ? `${k.slice(0, 3)}…${k.slice(-2)} (${k.length} Zeichen)` : "(zu kurz)";
 }

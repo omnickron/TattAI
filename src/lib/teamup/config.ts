@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@/generated/prisma/client";
 import { isTeamupMock, normalizeCalendarKey, type TeamupConfig } from "./teamup";
+import { setting } from "@/lib/integrations/store";
 
 type SettingsDb = Pick<PrismaClient, "appSettings">;
 
@@ -13,8 +14,8 @@ export async function loadTeamupConfig(db: SettingsDb): Promise<TeamupConfig | n
     select: { teamupSubcalendarId: true, teamupArtistFieldId: true },
   });
   const mock = isTeamupMock();
-  const apiKey = mock ? "mock" : process.env.TEAMUP_API_KEY?.trim();
-  const calendarKey = mock ? "mock" : normalizeCalendarKey(process.env.TEAMUP_CALENDAR_KEY);
+  const apiKey = mock ? "mock" : setting("TEAMUP_API_KEY");
+  const calendarKey = mock ? "mock" : normalizeCalendarKey(setting("TEAMUP_CALENDAR_KEY"));
   if (!apiKey || !calendarKey) return null;
   return {
     apiKey,
@@ -26,8 +27,5 @@ export async function loadTeamupConfig(db: SettingsDb): Promise<TeamupConfig | n
 
 /** Whether the server has TeamUp credentials at all (env or sample mode). */
 export function teamupCredentialsPresent(): boolean {
-  return (
-    isTeamupMock() ||
-    Boolean(process.env.TEAMUP_API_KEY?.trim() && process.env.TEAMUP_CALENDAR_KEY?.trim())
-  );
+  return isTeamupMock() || Boolean(setting("TEAMUP_API_KEY") && setting("TEAMUP_CALENDAR_KEY"));
 }

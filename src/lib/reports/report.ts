@@ -8,12 +8,16 @@
  * and tattoo with Alex, a later walk-in tattoo with Kim → each gets their own revenue).
  * Cancelled consultations (reschedules/reassignments) only count if nothing else is left.
  */
+import {
+  attendanceMissing,
+  sessionRevenueCents,
+  type RevenueSession,
+} from "../outcomes/session-revenue";
 import { addDays, DEFAULT_TIME_ZONE, localDateOf, startOfWeek } from "../time";
 
-export interface ReportSession {
+export interface ReportSession extends RevenueSession {
   date: Date;
-  amountCents: number | null;
-  cancelled: boolean;
+  endsAt?: Date | null;
 }
 
 export interface ReportConsultation {
@@ -53,6 +57,8 @@ export interface Metrics {
   revenueCents: number;
   revenueRealizedCents: number;
   missingAmounts: number;
+  /** Tattoo sessions that are over without "erschienen / nicht erschienen" */
+  missingAttendance: number;
 }
 
 export interface Report {
@@ -76,6 +82,7 @@ const empty = (): Metrics => ({
   revenueCents: 0,
   revenueRealizedCents: 0,
   missingAmounts: 0,
+  missingAttendance: 0,
 });
 
 /**
@@ -121,11 +128,19 @@ function addLead(m: Metrics, lead: ReportLead, now: Date) {
   for (const c of all) {
     if (!(c.status === "HELD" && c.tattooBooked)) continue;
     for (const s of c.sessions) {
-      if (s.cancelled) continue;
+      if (s.cancelled) {
+        // Kept deposit of a cancelled session is revenue, but no session
+        const kept = sessionRevenueCents(s) ?? 0;
+        m.revenueCents += kept;
+        if (s.date <= now) m.revenueRealizedCents += kept;
+        continue;
+      }
       m.sessions++;
-      if (s.amountCents === null) m.missingAmounts++;
-      m.revenueCents += s.amountCents ?? 0;
-      if (s.date <= now) m.revenueRealizedCents += s.amountCents ?? 0;
+      const revenue = sessionRevenueCents(s);
+      if (revenue === null) m.missingAmounts++;
+      if (attendanceMissing({ ...s, endsAt: s.endsAt ?? null }, now)) m.missingAttendance++;
+      m.revenueCents += revenue ?? 0;
+      if (s.date <= now) m.revenueRealizedCents += revenue ?? 0;
     }
   }
 }

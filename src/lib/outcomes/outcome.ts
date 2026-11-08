@@ -6,6 +6,7 @@ import type { LeadStatus, PrismaClient } from "@/generated/prisma/client";
 import {
   DEFAULT_TIME_ZONE,
   isLocalDate,
+  localDateOf,
   isQuarterHour,
   parseTimeOfDay,
   zonedTimeToUtc,
@@ -24,9 +25,20 @@ export interface OutcomeInput {
   /** Only for MULTIPLE: are further sessions (beyond the first) already scheduled? */
   furtherScheduled?: boolean;
   /** start/end: optional local times "HH:MM" */
-  sessions?: Array<{ date: string; amount?: string; start?: string; end?: string }>;
+  sessions?: Array<{
+    date: string;
+    amount?: string;
+    deposit?: string;
+    start?: string;
+    end?: string;
+  }>;
   note?: string;
+  /** Tattoo still open ("Follow-up"): local date "YYYY-MM-DD" to contact the customer again */
+  followUpDate?: string;
 }
+
+/** Time of day the follow-up reminder is due (local). */
+export const FOLLOW_UP_MINUTE = 9 * 60;
 
 export interface ValidOutcome {
   outcome: OutcomeKind;
@@ -36,16 +48,18 @@ export interface ValidOutcome {
   sessions: Array<{
     date: string;
     amountCents: number | null;
+    depositCents: number | null;
     start: string | null;
     end: string | null;
   }>;
   note: string | null;
+  followUpDate: string | null;
 }
 
 export class OutcomeError extends Error {}
 
 /** Checks the combination of answers; returns normalised values or throws OutcomeError (German message). */
-export function validateOutcome(input: OutcomeInput): ValidOutcome {
+export function validateOutcome(input: OutcomeInput, today?: string): ValidOutcome {
   const note = input.note?.trim().slice(0, 2000) || null;
   if (!["HELD", "NO_SHOW", "CANCELLED"].includes(input.outcome))
     throw new OutcomeError("Bitte ein Ergebnis wählen.");
@@ -57,12 +71,21 @@ export function validateOutcome(input: OutcomeInput): ValidOutcome {
       furtherScheduled: null,
       sessions: [],
       note,
+      followUpDate: null,
     };
   }
   if (!input.tattoo || !["YES", "NO", "OPEN"].includes(input.tattoo)) {
     throw new OutcomeError("Bitte angeben, ob ein Tattoo-Termin vereinbart wurde.");
   }
   if (input.tattoo !== "YES") {
+    let followUpDate: string | null = null;
+    if (input.tattoo === "OPEN") {
+      followUpDate = input.followUpDate?.trim() ?? "";
+      if (!isLocalDate(followUpDate))
+        throw new OutcomeError("Bitte angeben, wann der Kunde wieder kontaktiert werden soll.");
+      if (today && followUpDate <= today)
+        throw new OutcomeError("Das Follow-up muss in der Zukunft liegen (ab morgen).");
+    }
     return {
       outcome: "HELD",
       tattoo: input.tattoo,
@@ -70,6 +93,7 @@ export function validateOutcome(input: OutcomeInput): ValidOutcome {
       furtherScheduled: null,
       sessions: [],
       note,
+      followUpDate,
     };
   }
   if (input.sessionPlan !== "SINGLE" && input.sessionPlan !== "MULTIPLE") {
@@ -86,11 +110,9 @@ export function validateOutcome(input: OutcomeInput): ValidOutcome {
     .map((s, i) => {
       if (!isLocalDate(s.date?.trim()))
         throw new OutcomeError(`Termin ${i + 1}: bitte ein gültiges Datum angeben.`);
-      const cents = parseEuroToCents(s.amount);
-      if (cents === "invalid")
-        throw new OutcomeError(`Termin ${i + 1}: Betrag ist ungültig (z. B. 450 oder 1.250,50).`);
+      const money = parseSessionMoney(s.amount, s.deposit, `Termin ${i + 1}: `);
       const time = parseTimes(s.start, s.end, `Termin ${i + 1}: `);
-      return { date: s.date.trim(), amountCents: cents, ...time };
+      return { date: s.date.trim(), ...money, ...time };
     });
 
   const further = input.sessionPlan === "MULTIPLE" ? Boolean(input.furtherScheduled) : null;
@@ -114,7 +136,21 @@ export function validateOutcome(input: OutcomeInput): ValidOutcome {
     furtherScheduled: further,
     sessions,
     note,
+    followUpDate: null,
   };
+}
+
+/** Planned price and deposit of a session (both optional). Throws OutcomeError. */
+export function parseSessionMoney(amount?: string, deposit?: string, prefix = "") {
+  const amountCents = parseEuroToCents(amount);
+  if (amountCents === "invalid")
+    throw new OutcomeError(`${prefix}Preis ist ungültig (z. B. 450 oder 1.250,50).`);
+  const depositCents = parseEuroToCents(deposit);
+  if (depositCents === "invalid")
+    throw new OutcomeError(`${prefix}Anzahlung ist ungültig (z. B. 100 oder 150,50).`);
+  if (amountCents !== null && depositCents !== null && depositCents > amountCents)
+    throw new OutcomeError(`${prefix}Die Anzahlung ist höher als der Preis.`);
+  return { amountCents, depositCents };
 }
 
 /** Optional session time: both or none, end after start. Throws OutcomeError. */
@@ -214,14 +250,49 @@ export async function recordOutcome(
   },
 ) {
   const now = input.now ?? new Date();
-  const v = validateOutcome(input.outcome);
+  const tz = input.timeZone ?? DEFAULT_TIME_ZONE;
   const c = await prisma.consultation.findUnique({ where: { id: input.consultationId } });
+  // A follow-up date that is already set may stay as it is (e.g. when correcting the note)
+  const keepFollowUp =
+    c?.followUpAt && input.outcome.followUpDate === localDateOf(c.followUpAt, tz);
+  const v = validateOutcome(input.outcome, keepFollowUp ? undefined : localDateOf(now, tz));
+  // A follow-up that is not confirmed yet stays when the decision changes (only "Erledigt"
+  // removes it); a new date replaces it
+  const followUpAt = v.followUpDate
+    ? zonedTimeToUtc(v.followUpDate, FOLLOW_UP_MINUTE, tz)
+    : c?.followUpAt && !c.followUpDoneAt
+      ? c.followUpAt
+      : null;
+  const followUpChanged = followUpAt?.getTime() !== c?.followUpAt?.getTime();
   if (!c) throw new OutcomeError("Termin nicht gefunden.");
   if (c.startsAt > now) {
     throw new OutcomeError(
       "Das Ergebnis kann erst ab Beginn der Beratung eingetragen werden. Zum Absagen „Absagen“ nutzen.",
     );
   }
+
+  // What was recorded after a session (attendance, final price) survives a corrected outcome
+  // as long as the session keeps its number and day
+  const previous = await prisma.tattooBooking.findMany({
+    where: { consultationId: c.id },
+    select: {
+      sessionNumber: true,
+      date: true,
+      attendance: true,
+      attendanceRecordedAt: true,
+      finalAmountCents: true,
+    },
+  });
+  const recorded = (n: number, date: Date) => {
+    const p = previous.find((b) => b.sessionNumber === n && b.date.getTime() === date.getTime());
+    return p?.attendance
+      ? {
+          attendance: p.attendance,
+          attendanceRecordedAt: p.attendanceRecordedAt,
+          finalAmountCents: p.finalAmountCents,
+        }
+      : {};
+  };
 
   await prisma.$transaction(async (tx) => {
     // Existing sessions are replaced: their calendar events must go.
@@ -237,18 +308,25 @@ export async function recordOutcome(
         outcomeNote: v.note,
         outcomeRecordedAt: now,
         outcomeRecordedById: input.userId,
+        followUpAt,
+        ...(followUpChanged ? { followUpDoneAt: null, followUpNotifiedAt: null } : {}),
       },
     });
     await tx.tattooBooking.deleteMany({ where: { consultationId: c.id } });
     await tx.tattooBooking.createMany({
-      data: v.sessions.map((s, i) => ({
-        consultationId: c.id,
-        sessionNumber: i + 1,
-        date: sessionDate(s.date, input.timeZone),
-        ...sessionSlot(s.date, s.start, s.end, input.timeZone),
-        amountCents: s.amountCents,
-        calendarSyncPending: true,
-      })),
+      data: v.sessions.map((s, i) => {
+        const date = sessionDate(s.date, input.timeZone);
+        return {
+          consultationId: c.id,
+          sessionNumber: i + 1,
+          date,
+          ...sessionSlot(s.date, s.start, s.end, input.timeZone),
+          amountCents: s.amountCents,
+          depositCents: s.depositCents,
+          ...recorded(i + 1, date),
+          calendarSyncPending: true,
+        };
+      }),
     });
   });
   await syncLeadStatusFromConsultations(prisma, c.leadId, now);
@@ -265,6 +343,7 @@ export async function addSession(
     consultationId: string;
     date: string;
     amount?: string;
+    deposit?: string;
     start?: string;
     end?: string;
     timeZone?: string;
@@ -278,8 +357,7 @@ export async function addSession(
     throw new OutcomeError("Sitzungen gibt es nur bei Beratungen mit vereinbartem Tattoo.");
   }
   if (!isLocalDate(input.date)) throw new OutcomeError("Bitte ein gültiges Datum angeben.");
-  const cents = parseEuroToCents(input.amount);
-  if (cents === "invalid") throw new OutcomeError("Betrag ist ungültig (z. B. 450 oder 1.250,50).");
+  const money = parseSessionMoney(input.amount, input.deposit);
   const time = parseTimes(input.start, input.end);
   const next = Math.max(0, ...c.tattooBookings.map((b) => b.sessionNumber)) + 1;
   await prisma.$transaction([
@@ -289,7 +367,7 @@ export async function addSession(
         sessionNumber: next,
         date: sessionDate(input.date, input.timeZone),
         ...sessionSlot(input.date, time.start, time.end, input.timeZone),
-        amountCents: cents,
+        ...money,
         calendarSyncPending: true,
       },
     }),
@@ -309,6 +387,7 @@ export async function updateSession(
     sessionId: string;
     date: string;
     amount?: string;
+    deposit?: string;
     start?: string;
     end?: string;
     timeZone?: string;
@@ -316,26 +395,75 @@ export async function updateSession(
 ) {
   const time = parseTimes(input.start, input.end);
   if (!isLocalDate(input.date)) throw new OutcomeError("Bitte ein gültiges Datum angeben.");
-  const cents = parseEuroToCents(input.amount);
-  if (cents === "invalid") throw new OutcomeError("Betrag ist ungültig (z. B. 450 oder 1.250,50).");
+  const money = parseSessionMoney(input.amount, input.deposit);
   await prisma.tattooBooking.update({
     where: { id: input.sessionId },
     data: {
       date: sessionDate(input.date, input.timeZone),
       ...sessionSlot(input.date, time.start, time.end, input.timeZone),
-      amountCents: cents,
+      ...money,
       calendarSyncPending: true,
     },
   });
 }
 
+/** Cancels or restores a session; on a cancellation the studio may keep the deposit. */
 export async function setSessionCancelled(
   prisma: PrismaClient,
   sessionId: string,
   cancelled: boolean,
+  depositKept = false,
 ) {
   await prisma.tattooBooking.update({
     where: { id: sessionId },
-    data: { cancelled, calendarSyncPending: true },
+    data: {
+      cancelled,
+      depositKept: cancelled && depositKept,
+      // A cancelled session has no attendance
+      ...(cancelled
+        ? { attendance: null, attendanceRecordedAt: null, finalAmountCents: null }
+        : {}),
+      calendarSyncPending: true,
+    },
+  });
+}
+
+/**
+ * After a tattoo session: did the customer show up, and what did the tattoo really cost.
+ * `attendance: null` resets the entry (correction).
+ */
+export async function recordAttendance(
+  prisma: PrismaClient,
+  input: {
+    sessionId: string;
+    attendance: "ATTENDED" | "NO_SHOW" | null;
+    finalAmount?: string;
+    now?: Date;
+  },
+) {
+  const now = input.now ?? new Date();
+  const s = await prisma.tattooBooking.findUnique({ where: { id: input.sessionId } });
+  if (!s) throw new OutcomeError("Termin nicht gefunden.");
+  if (s.cancelled) throw new OutcomeError("Der Termin ist abgesagt.");
+  if (input.attendance === null) {
+    await prisma.tattooBooking.update({
+      where: { id: s.id },
+      data: { attendance: null, attendanceRecordedAt: null, finalAmountCents: null },
+    });
+    return;
+  }
+  if ((s.startsAt ?? s.date) > now)
+    throw new OutcomeError("Das geht erst, wenn der Termin begonnen hat.");
+  let finalAmountCents: number | null = null;
+  if (input.attendance === "ATTENDED") {
+    const cents = parseEuroToCents(input.finalAmount);
+    if (cents === "invalid")
+      throw new OutcomeError("Endpreis ist ungültig (z. B. 450 oder 1.250,50).");
+    if (cents === null) throw new OutcomeError("Bitte den Endpreis angeben.");
+    finalAmountCents = cents;
+  }
+  await prisma.tattooBooking.update({
+    where: { id: s.id },
+    data: { attendance: input.attendance, attendanceRecordedAt: now, finalAmountCents },
   });
 }

@@ -16,18 +16,40 @@ import { brainConfigFromEnv, createBrainClient } from "../src/lib/bot/brain";
 import { BOT_EVENT, processBotInbox } from "../src/lib/bot/inbox";
 import { createPushSender } from "../src/lib/push";
 import { purgeStaleLeads } from "../src/lib/leads/retention";
+import { notifyDueFollowUps } from "../src/lib/outcomes/follow-up";
+import { notifyMissingOutcomes } from "../src/lib/outcomes/reminders";
+import { refreshIntegrationSettings } from "../src/lib/integrations/store";
 import { failStaleEvalRuns, runBotEval } from "../src/lib/bot/eval/run";
 import { createMediaDownloader, downloadPendingAttachments } from "../src/lib/whatsapp/media";
 
 const INTERVAL_MS = 30_000;
 const prisma = createPrismaClient();
-const whatsapp = createWhatsAppClient();
-const calendarDeps = {
-  prisma,
-  calendar: createCalendarClient(prisma),
-  timeZone: process.env.APP_TIMEZONE || "Europe/Berlin",
-  appUrl: process.env.APP_URL,
-};
+// Rebuilt every tick: access data can change in the app at any time
+let whatsapp = createWhatsAppClientSafe();
+let calendarDeps = makeCalendarDeps();
+
+let lastWhatsAppError = "";
+function createWhatsAppClientSafe() {
+  try {
+    const client = createWhatsAppClient();
+    lastWhatsAppError = "";
+    return client;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message !== lastWhatsAppError) console.error("[worker] WhatsApp not configured:", message);
+    lastWhatsAppError = message;
+    return null;
+  }
+}
+
+function makeCalendarDeps() {
+  return {
+    prisma,
+    calendar: createCalendarClient(prisma),
+    timeZone: process.env.APP_TIMEZONE || "Europe/Berlin",
+    appUrl: process.env.APP_URL,
+  };
+}
 // Built-in bot: on when an Anthropic API key is set
 const brain = createBrainClient();
 const push = createPushSender();
@@ -38,18 +60,28 @@ let lastLeadRetry = 0;
 let lastRetention = 0;
 
 async function tick() {
-  try {
-    const result = await runMessagingWorker({
-      prisma,
-      whatsapp,
-      timeZone: process.env.APP_TIMEZONE || "Europe/Berlin",
-    });
-    if (!result.skipped && (result.planned || result.sent || result.failed || result.noResponse)) {
-      console.info(`[worker] ${new Date().toISOString()}`, result);
+  // Access data maintained in the app (TeamUp, WhatsApp, Meta)
+  await refreshIntegrationSettings(prisma).catch((err) =>
+    console.error("[worker] integration settings:", err),
+  );
+  whatsapp = createWhatsAppClientSafe();
+  calendarDeps = makeCalendarDeps();
+  if (whatsapp)
+    try {
+      const result = await runMessagingWorker({
+        prisma,
+        whatsapp,
+        timeZone: process.env.APP_TIMEZONE || "Europe/Berlin",
+      });
+      if (
+        !result.skipped &&
+        (result.planned || result.sent || result.failed || result.noResponse)
+      ) {
+        console.info(`[worker] ${new Date().toISOString()}`, result);
+      }
+    } catch (err) {
+      console.error("[worker] messaging run failed:", err);
     }
-  } catch (err) {
-    console.error("[worker] messaging run failed:", err);
-  }
   if (brain && !evalRunning) {
     const run = await prisma.botEvalRun
       .findFirst({ where: { status: "PENDING" }, orderBy: { createdAt: "asc" } })
@@ -63,7 +95,7 @@ async function tick() {
         .finally(() => (evalRunning = false));
     }
   }
-  if (brain) {
+  if (brain && whatsapp) {
     try {
       const inbox = await processBotInbox({
         ...calendarDeps,
@@ -99,6 +131,23 @@ async function tick() {
   } catch (err) {
     console.error("[worker] media download failed:", err);
   }
+  try {
+    const followUps = await notifyDueFollowUps(prisma, push);
+    if (followUps) console.info(`[worker] follow-up reminders: ${followUps}`);
+  } catch (err) {
+    console.error("[worker] follow-up reminders failed:", err);
+  }
+  try {
+    const outcomes = await notifyMissingOutcomes(
+      prisma,
+      push,
+      new Date(),
+      process.env.APP_TIMEZONE || "Europe/Berlin",
+    );
+    if (outcomes) console.info(`[worker] missing-outcome reminders: ${outcomes}`);
+  } catch (err) {
+    console.error("[worker] missing-outcome reminders failed:", err);
+  }
   // GDPR retention: once every 6 hours
   if (Date.now() - lastRetention > 6 * 3600_000) {
     lastRetention = Date.now();
@@ -127,7 +176,7 @@ async function tick() {
 async function main() {
   await failStaleEvalRuns(prisma).catch(() => undefined);
   console.info(
-    `[worker] started (WhatsApp ${whatsapp.mock ? "mock" : "live"}, Bot ${brain ? "NEEDL" : "aus/extern"})`,
+    `[worker] started (WhatsApp ${!whatsapp ? "nicht eingerichtet" : whatsapp.mock ? "mock" : "live"}, Bot ${brain ? "NEEDL" : "aus/extern"})`,
   );
   while (!stopping) {
     await tick();

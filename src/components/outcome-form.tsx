@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import type { ActionState } from "@/lib/action-state";
+import { DatePicker } from "./date-picker";
 import { Button, Input, Textarea, TimeSelect, cn } from "./ui";
 
 type Outcome = "HELD" | "NO_SHOW" | "CANCELLED";
@@ -13,8 +14,30 @@ export interface OutcomeDefaults {
   tattoo?: Tattoo | null;
   sessionPlan?: Plan | null;
   furtherScheduled?: boolean | null;
-  sessions?: Array<{ date: string; amount: string; start?: string; end?: string }>;
+  sessions?: Array<{
+    date: string;
+    amount: string;
+    deposit?: string;
+    start?: string;
+    end?: string;
+  }>;
   note?: string | null;
+  /** Follow-up day "YYYY-MM-DD" */
+  followUpDate?: string | null;
+}
+
+/** "YYYY-MM-DD" in local time, `days` from today. */
+function inDays(days: number) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** "HH:MM" plus whole hours, capped at 24:00. */
+function plusHours(time: string, hours: number) {
+  const [h, m] = time.split(":").map(Number);
+  const total = Math.min(24 * 60, h * 60 + m + hours * 60);
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 }
 
 function Choice<T extends string>({
@@ -79,8 +102,11 @@ export function OutcomeForm({
   const [further, setFurther] = useState<"yes" | "no" | null>(
     defaults.furtherScheduled === true ? "yes" : defaults.furtherScheduled === false ? "no" : null,
   );
+  const [followUp, setFollowUp] = useState(defaults.followUpDate ?? "");
   const [sessions, setSessions] = useState(
-    defaults.sessions?.length ? defaults.sessions : [{ date: "", amount: "", start: "", end: "" }],
+    defaults.sessions?.length
+      ? defaults.sessions
+      : [{ date: "", amount: "", deposit: "", start: "", end: "" }],
   );
 
   const showSessions =
@@ -90,12 +116,21 @@ export function OutcomeForm({
   const multipleRows = plan === "MULTIPLE" && further === "yes";
   const rows = multipleRows
     ? sessions.length < 2
-      ? [...sessions, { date: "", amount: "", start: "", end: "" }]
+      ? [...sessions, { date: "", amount: "", deposit: "", start: "", end: "" }]
       : sessions
     : sessions.slice(0, 1);
 
-  const update = (i: number, key: "date" | "amount" | "start" | "end", value: string) =>
-    setSessions(rows.map((r, j) => (j === i ? { ...r, [key]: value } : r)));
+  const update = (i: number, key: "date" | "amount" | "deposit" | "start" | "end", value: string) =>
+    setSessions(
+      rows.map((r, j) => {
+        if (j !== i) return r;
+        const next = { ...r, [key]: value };
+        // Start chosen without an end: suggest 3 hours (can be changed)
+        if (key === "start" && value && !r.end) next.end = plusHours(value, 3);
+        if (key === "start" && !value) next.end = "";
+        return next;
+      }),
+    );
 
   return (
     <form action={formAction} className="space-y-4">
@@ -121,9 +156,29 @@ export function OutcomeForm({
             Nein
           </Choice>
           <Choice name="tattoo" value="OPEN" current={tattoo} onChange={setTattoo}>
-            Noch offen (Kunde überlegt)
+            Follow-up (Kunde überlegt noch)
           </Choice>
         </Question>
+      )}
+
+      {outcome === "HELD" && tattoo === "OPEN" && (
+        <div className="space-y-2 rounded-lg bg-muted/50 p-3">
+          <p className="block text-sm font-medium">
+            Wann soll der Kunde wieder kontaktiert werden?
+          </p>
+          <DatePicker
+            name="followUpDate"
+            value={followUp}
+            onChange={setFollowUp}
+            min={inDays(1)}
+            label="Tag für das Follow-up"
+          />
+          <p className="text-xs text-ink-soft">
+            An diesem Tag um 9 Uhr kommt eine Erinnerung aufs Handy, und der Kunde steht auf der
+            Übersicht unter „Heute nachfassen“, bis jemand „Erledigt“ tippt. Den Grund (z. B. Motiv
+            noch unsicher, Termin passt erst später) bitte unten als Notiz eintragen.
+          </p>
+        </div>
       )}
 
       {outcome === "HELD" && tattoo === "YES" && (
@@ -157,23 +212,10 @@ export function OutcomeForm({
                 ? "Erster Termin"
                 : "Tattoo-Termin"}
           </p>
-          <div
-            className="hidden grid-cols-[1.5rem_1fr_auto] gap-2 text-xs text-ink-soft sm:grid"
-            aria-hidden
-          >
-            <span />
-            <div className="grid grid-cols-[1fr_8.5rem_8.5rem_1fr] gap-2">
-              <span>Datum</span>
-              <span>von (optional)</span>
-              <span>bis (optional)</span>
-              <span>Betrag</span>
-            </div>
-            <span className="w-9" />
-          </div>
           {rows.map((row, i) => (
             <div key={i} className="grid grid-cols-[1.5rem_1fr_auto] items-start gap-2">
               <span className="pt-2 text-sm text-ink-soft">{i + 1}.</span>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-[1fr_8.5rem_8.5rem_1fr]">
+              <div className="space-y-2">
                 <Input
                   type="date"
                   name={`session_date_${i}`}
@@ -181,31 +223,59 @@ export function OutcomeForm({
                   onChange={(e) => update(i, "date", e.target.value)}
                   aria-label={`Datum Termin ${i + 1}`}
                   required
-                  className="col-span-2 sm:col-span-1"
+                  className="sm:w-52"
                 />
-                <TimeSelect
-                  name={`session_start_${i}`}
-                  value={row.start ?? ""}
-                  onChange={(e) => update(i, "start", e.target.value)}
-                  aria-label={`Beginn Termin ${i + 1}`}
-                  emptyLabel="von –"
-                />
-                <TimeSelect
-                  name={`session_end_${i}`}
-                  value={row.end ?? ""}
-                  onChange={(e) => update(i, "end", e.target.value)}
-                  aria-label={`Ende Termin ${i + 1}`}
-                  emptyLabel="bis –"
-                />
-                <Input
-                  name={`session_amount_${i}`}
-                  value={row.amount}
-                  onChange={(e) => update(i, "amount", e.target.value)}
-                  placeholder="Betrag in € (optional)"
-                  inputMode="decimal"
-                  aria-label={`Betrag Termin ${i + 1}`}
-                  className="col-span-2 sm:col-span-1"
-                />
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+                  <span className="flex items-center gap-2">
+                    <span className="w-6 text-ink-soft">von</span>
+                    <TimeSelect
+                      name={`session_start_${i}`}
+                      value={row.start ?? ""}
+                      onChange={(e) => update(i, "start", e.target.value)}
+                      aria-label={`Beginn Termin ${i + 1}`}
+                      emptyLabel="–"
+                    />
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <span className="w-6 text-ink-soft">bis</span>
+                    <TimeSelect
+                      name={`session_end_${i}`}
+                      value={row.end ?? ""}
+                      onChange={(e) => update(i, "end", e.target.value)}
+                      aria-label={`Ende Termin ${i + 1}`}
+                      emptyLabel="–"
+                      endOfDay
+                    />
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+                  <label className="flex items-center gap-2">
+                    <span className="w-16 text-ink-soft">Preis</span>
+                    <Input
+                      name={`session_amount_${i}`}
+                      value={row.amount}
+                      onChange={(e) => update(i, "amount", e.target.value)}
+                      placeholder="z. B. 450"
+                      inputMode="decimal"
+                      aria-label={`Preis Termin ${i + 1}`}
+                      className="w-28"
+                    />
+                    <span className="text-ink-soft">€</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <span className="w-16 text-ink-soft">Anzahlung</span>
+                    <Input
+                      name={`session_deposit_${i}`}
+                      value={row.deposit ?? ""}
+                      onChange={(e) => update(i, "deposit", e.target.value)}
+                      placeholder="z. B. 100"
+                      inputMode="decimal"
+                      aria-label={`Anzahlung Termin ${i + 1}`}
+                      className="w-28"
+                    />
+                    <span className="text-ink-soft">€</span>
+                  </label>
+                </div>
               </div>
               {multipleRows && rows.length > 2 ? (
                 <Button
@@ -226,14 +296,18 @@ export function OutcomeForm({
             <Button
               type="button"
               variant="secondary"
-              onClick={() => setSessions([...rows, { date: "", amount: "", start: "", end: "" }])}
+              onClick={() =>
+                setSessions([...rows, { date: "", amount: "", deposit: "", start: "", end: "" }])
+              }
             >
               + Weiterer Termin
             </Button>
           )}
           <p className="text-xs text-ink-soft">
-            Uhrzeit (von–bis) und Betrag sind optional und können später ergänzt werden. Mit Uhrzeit
-            erscheint der Termin im Kalender und blockiert Beratungen.
+            Preise gelten immer pro Sitzung. Uhrzeit, Preis und Anzahlung sind optional und können
+            später ergänzt werden. Nach dem Termin tragt ihr ein, ob der Kunde erschienen ist und
+            was das Tattoo am Ende gekostet hat. Beim Beginn schlägt NEEDL drei Stunden Dauer vor.
+            Mit Uhrzeit erscheint der Termin im Kalender und blockiert Beratungen.
             {plan === "MULTIPLE" &&
               further === "no" &&
               " Weitere Termine lassen sich später ergänzen."}

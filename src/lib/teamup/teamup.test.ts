@@ -53,8 +53,16 @@ describe("artist matching and busy times", () => {
       TZ,
     );
     expect(busy).toEqual([
-      { start: new Date("2026-11-09T09:00:00Z"), end: new Date("2026-11-09T11:00:00Z") },
-      { start: new Date("2026-11-09T23:00:00Z"), end: new Date("2026-11-10T23:00:00Z") },
+      {
+        start: new Date("2026-11-09T09:00:00Z"),
+        end: new Date("2026-11-09T11:00:00Z"),
+        title: null,
+      },
+      {
+        start: new Date("2026-11-09T23:00:00Z"),
+        end: new Date("2026-11-10T23:00:00Z"),
+        title: null,
+      },
     ]);
   });
 });

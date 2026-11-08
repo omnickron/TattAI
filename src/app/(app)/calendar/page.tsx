@@ -1,7 +1,10 @@
+import { sessionRevenueCents } from "@/lib/outcomes/session-revenue";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ButtonLink, cn, PageHeader, Select, Button } from "@/components/ui";
 import { requireUser } from "@/lib/auth/session";
+import { loadExternalEntries } from "@/lib/calendar/external";
+import { createCalendarClient } from "@/lib/google/client";
 import { prisma } from "@/lib/db";
 import { APP_TIMEZONE } from "@/lib/format";
 import { formatEuro } from "@/lib/outcomes/money";
@@ -21,7 +24,6 @@ import {
 } from "@/lib/time";
 
 export const metadata: Metadata = { title: "Kalender" };
-
 
 const dayHeader = new Intl.DateTimeFormat("de-DE", {
   timeZone: "UTC",
@@ -74,6 +76,8 @@ const BLOCK_TEXTURE = {
 type Item = {
   id: string;
   kind: "CONSULTATION" | "TATTOO" | "BLOCKER";
+  /** Read-only entry from the tattooer's own calendar (TeamUp / Google) */
+  external?: "TeamUp" | "Google";
   blockId?: string;
   note?: string | null;
   tattooerId?: string;
@@ -211,7 +215,16 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
         select: {
           lead: { select: { id: true, name: true, phoneE164: true, tattooSummary: true } },
           tattooer: { select: { id: true, user: { select: { name: true } } } },
-          tattooBookings: { where: { cancelled: false }, select: { amountCents: true } },
+          tattooBookings: {
+            where: { cancelled: false },
+            select: {
+              amountCents: true,
+              depositCents: true,
+              finalAmountCents: true,
+              attendance: true,
+              cancelled: true,
+            },
+          },
           attachments: {
             where: { status: { in: ["STORED", "PENDING"] } },
             orderBy: { createdAt: "asc" },
@@ -311,11 +324,14 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
           (l) => !l.startsWith("Motiv:") && !l.startsWith("Referenzbilder"),
         ),
         images: sn.consultation.attachments,
-        amount: sn.amountCents != null ? formatEuro(sn.amountCents) : null,
+        amount: sessionRevenueCents(sn) != null ? formatEuro(sessionRevenueCents(sn)) : null,
         total:
           sn.consultation.tattooBookings.length > 1
             ? formatEuro(
-                sn.consultation.tattooBookings.reduce((sum, b) => sum + (b.amountCents ?? 0), 0),
+                sn.consultation.tattooBookings.reduce(
+                  (sum, b) => sum + (sessionRevenueCents(b) ?? 0),
+                  0,
+                ),
               )
             : null,
         note: sn.note,
@@ -376,6 +392,57 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
     }
   }
 
+  // Entries from the tattooers' own calendars (TeamUp / Google), read-only
+  const external = await loadExternalEntries(prisma, createCalendarClient(prisma), {
+    from: rangeStart,
+    to: rangeEnd,
+    tattooerId: scopeTattooer,
+    own: [
+      ...consultations.map((c) => ({
+        tattooerId: c.tattooer.id,
+        start: c.startsAt,
+        end: c.endsAt,
+      })),
+      ...sessions
+        .filter((sn) => sn.startsAt && sn.endsAt)
+        .map((sn) => ({
+          tattooerId: sn.consultation.tattooer.id,
+          start: sn.startsAt!,
+          end: sn.endsAt!,
+        })),
+    ],
+  }).catch(() => ({ entries: [], failed: [] as string[] }));
+  for (const [n, e] of external.entries.entries()) {
+    for (const d of days) {
+      const dayStart = startOfLocalDay(d, APP_TIMEZONE);
+      const dayEnd = startOfLocalDay(addDays(d, 1), APP_TIMEZONE);
+      if (e.start >= dayEnd || e.end <= dayStart) continue;
+      const base = {
+        id: `ext-${n}-${d}`,
+        kind: "BLOCKER" as const,
+        external: e.source,
+        note: e.title ?? "Belegt",
+        tattooerId: e.tattooerId,
+        leadId: "",
+        leadName: e.title ?? "Belegt",
+        tattooerName: e.tattooerName,
+        tone: BLOCK_TONE,
+        status: "BLOCKER",
+        mode: null,
+        day: d,
+        lane: 0,
+        lanes: 1,
+      };
+      if (e.start <= dayStart && e.end >= dayEnd) {
+        allDay.push({ ...base, startMin: 0, endMin: 0 });
+      } else {
+        const from = e.start > dayStart ? localMinuteOf(e.start, APP_TIMEZONE) : 0;
+        const to = e.end < dayEnd ? localMinuteOf(e.end, APP_TIMEZONE) : 1440;
+        items.push({ ...base, startMin: from, endMin: Math.max(from + 15, to) });
+      }
+    }
+  }
+
   // People the "new appointment" dialog offers (admin: all active, tattooer: self)
   const dialogTattooers = (
     await prisma.tattooerProfile.findMany({
@@ -385,8 +452,8 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
     })
   ).map((t) => ({ id: t.id, name: t.user.name, consultationMinutes: t.consultationMinutes }));
   const canCreate = dialogTattooers.length > 0;
-  const canDeleteBlock = (tattooerId?: string) =>
-    isAdmin || tattooerId === user.tattooerProfile?.id;
+  const canDeleteBlock = (i: Pick<Item, "tattooerId" | "external">) =>
+    !i.external && (isAdmin || i.tattooerId === user.tattooerProfile?.id);
 
   items.sort((a, b) => a.day.localeCompare(b.day) || a.startMin - b.startMin);
   for (const d of days) layoutLanes(items.filter((i) => i.day === d));
@@ -421,10 +488,15 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
         title="Kalender"
         description={
           isAdmin
-            ? "Beratungen, Tattoo-Termine und Blocker aller Tätowierer – mit „+ Termin“ oder einem Klick auf eine freie Stelle trägst du etwas ein."
-            : "Deine Beratungen, Tattoo-Termine und Blocker – mit „+ Termin“ oder einem Klick auf eine freie Stelle trägst du etwas ein."
+            ? "Beratungen, Tattoo-Termine, Blocker und belegte Zeiten aus TeamUp/Google aller Tätowierer – mit „+ Termin“ oder einem Klick auf eine freie Stelle trägst du etwas ein."
+            : "Deine Beratungen, Tattoo-Termine, Blocker und belegte Zeiten aus deinem Kalender – mit „+ Termin“ oder einem Klick auf eine freie Stelle trägst du etwas ein."
         }
       />
+      {external.failed.length > 0 && (
+        <p className="mb-3 rounded-lg bg-amber-50 p-2 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+          Belegte Zeiten aus TeamUp/Google gerade nicht abrufbar für: {external.failed.join(", ")}.
+        </p>
+      )}
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {canCreate && (
@@ -492,9 +564,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
       </div>
 
       {/* Time grid (TeamUp-like): also used on mobile with narrow day columns */}
-      <div
-        className="-mx-4 overflow-hidden border-y border-line bg-surface [--tc:2.6rem] sm:mx-0 sm:rounded-xl sm:border md:[--tc:3.5rem]"
-      >
+      <div className="-mx-4 overflow-hidden border-y border-line bg-surface [--tc:2.6rem] sm:mx-0 sm:rounded-xl sm:border md:[--tc:3.5rem]">
         <div
           className="grid border-b border-line"
           style={{ gridTemplateColumns: `var(--tc) repeat(${dayCount}, minmax(0, 1fr))` }}
@@ -541,14 +611,14 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
                       <BlockerChip
                         key={i.id}
                         id={i.blockId!}
-                        canDelete={canDeleteBlock(i.tattooerId)}
+                        canDelete={canDeleteBlock(i)}
                         className={cn(
                           "block w-full truncate rounded-md border-l-4 px-1 py-1 text-xs font-medium",
                           i.tone,
                         )}
                         style={BLOCK_TEXTURE}
                       >
-                        {i.note || "Blocker"}
+                        {i.note || (i.external ? "Belegt" : "Blocker")}
                         {isAdmin && (
                           <span className="hidden md:inline">{` · ${i.tattooerName}`}</span>
                         )}
@@ -616,7 +686,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
                       <BlockerChip
                         key={i.id}
                         id={i.blockId!}
-                        canDelete={canDeleteBlock(i.tattooerId)}
+                        canDelete={canDeleteBlock(i)}
                         className={cn(
                           "absolute z-[1] overflow-hidden rounded-md border-l-4 px-1 py-1 text-xs leading-tight",
                           WRAP,
@@ -624,7 +694,9 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
                         )}
                         style={{ ...BLOCK_TEXTURE, ...box }}
                       >
-                        <span className="block font-medium">{i.note || "Blocker"}</span>
+                        <span className="block font-medium">
+                          {i.note || (i.external ? "Belegt" : "Blocker")}
+                        </span>
                         <span className="hidden opacity-80 tabular-nums md:block">
                           {formatTimeOfDay(i.startMin)}–{formatTimeOfDay(i.endMin % 1440)}
                           {isAdmin && ` · ${i.tattooerName}`}
@@ -642,7 +714,11 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
                         WRAP,
                         i.tone,
                       )}
-                      style={{ ...(i.kind === "TATTOO" ? TATTOO_TEXTURE : {}), ...colorStyle(i), ...box }}
+                      style={{
+                        ...(i.kind === "TATTOO" ? TATTOO_TEXTURE : {}),
+                        ...colorStyle(i),
+                        ...box,
+                      }}
                     >
                       <span className="block font-medium">
                         {i.kind === "TATTOO" ? "Tattoo: " : "Beratung: "}
@@ -669,7 +745,9 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
           ))}
         </div>
       </div>
-      {canCreate && <AddEntryButton variant="fab" date={date < today ? today : date} className="md:hidden" />}
+      {canCreate && (
+        <AddEntryButton variant="fab" date={date < today ? today : date} className="md:hidden" />
+      )}
     </NewEntryProvider>
   );
 }

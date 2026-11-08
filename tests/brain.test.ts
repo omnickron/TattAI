@@ -5,6 +5,7 @@ import type {
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { runBotTurn, type BrainClient, type BrainDeps, HANDOVER_TEXT } from "@/lib/bot/brain";
 import { costMicros } from "@/lib/bot/costs";
+import { handOverChat, loadHandovers } from "@/lib/bot/handover";
 import { processBotInbox } from "@/lib/bot/inbox";
 import { operatorUserIds, type PushPayload, type PushSender } from "@/lib/push";
 import type { CalendarClient, CalendarConnection, CalendarEventInput } from "@/lib/google/calendar";
@@ -587,5 +588,32 @@ describe("consultation forms from the settings", () => {
     expect(await prisma.consultation.count()).toBe(0);
     const system = JSON.stringify(brain.calls[0].system);
     expect(system).not.toContain("telefonisch (für Kunden");
+  });
+});
+
+describe("handover list", () => {
+  it("keeps a handover until it is confirmed, even after a reply or with the bot back on", async () => {
+    await handOverChat({ prisma }, leadId, "Kunde will einen Menschen", NOW);
+    const scope = { isAdmin: true, tattooerId: null };
+    expect(await loadHandovers(prisma, scope)).toHaveLength(1);
+
+    // Someone replied in the chat and switched the bot back on: still listed
+    await prisma.lead.update({
+      where: { id: leadId },
+      data: { botEnabled: true, botDisabledReason: null },
+    });
+    expect(await loadHandovers(prisma, scope)).toHaveLength(1);
+
+    await prisma.lead.update({
+      where: { id: leadId },
+      data: { botHandoverResolvedAt: NOW },
+    });
+    expect(await loadHandovers(prisma, scope)).toHaveLength(0);
+
+    // A new handover is open again
+    await handOverChat({ prisma }, leadId, "Beschwerde", NOW);
+    expect((await loadHandovers(prisma, scope)).map((h) => h.botHandoverNote)).toEqual([
+      "Beschwerde",
+    ]);
   });
 });

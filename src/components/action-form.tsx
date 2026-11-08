@@ -29,9 +29,14 @@ export function ActionForm({
     if (!state?.ok || !form) return;
     // Selects keep the chosen (= just saved) value: React only sets their default on the first
     // render, so a plain reset would jump back to the value from before saving.
-    const selects = [...form.querySelectorAll("select")].map((el) => [el, el.value] as const);
+    // Hidden inputs belong to pickers (time, date) that keep their own state – keep them too
+    const kept = [
+      ...form.querySelectorAll<HTMLSelectElement | HTMLInputElement>(
+        'select, input[type="hidden"]',
+      ),
+    ].map((el) => [el, el.value] as const);
     form.reset();
-    for (const [el, value] of selects) el.value = value;
+    for (const [el, value] of kept) el.value = value;
   }, [state]);
   return (
     <form

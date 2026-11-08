@@ -38,10 +38,27 @@ describe("validateOutcome", () => {
 
   it("asks for the tattoo decision after a held consultation", () => {
     expect(() => validateOutcome({ outcome: "HELD" })).toThrow("Tattoo-Termin");
-    expect(validateOutcome({ outcome: "HELD", tattoo: "OPEN" })).toMatchObject({
-      tattoo: "OPEN",
-      sessions: [],
-    });
+    expect(
+      validateOutcome(
+        { outcome: "HELD", tattoo: "OPEN", followUpDate: "2026-11-20" },
+        "2026-11-09",
+      ),
+    ).toMatchObject({ tattoo: "OPEN", sessions: [], followUpDate: "2026-11-20" });
+  });
+
+  it("needs a follow-up day in the future when the customer is still undecided", () => {
+    expect(() => validateOutcome({ outcome: "HELD", tattoo: "OPEN" })).toThrow(
+      "wieder kontaktiert",
+    );
+    expect(() =>
+      validateOutcome(
+        { outcome: "HELD", tattoo: "OPEN", followUpDate: "2026-11-09" },
+        "2026-11-09",
+      ),
+    ).toThrow("Zukunft");
+    expect(
+      validateOutcome({ outcome: "HELD", tattoo: "NO", followUpDate: "2026-11-20" }).followUpDate,
+    ).toBeNull();
   });
 
   it("accepts exactly one session for a single appointment", () => {
@@ -100,8 +117,8 @@ describe("validateOutcome", () => {
       sessions: [s("2026-12-01", "600"), s("2027-01-12"), s("", "")],
     });
     expect(many.sessions).toEqual([
-      { date: "2026-12-01", amountCents: 60000, start: null, end: null },
-      { date: "2027-01-12", amountCents: null, start: null, end: null },
+      { date: "2026-12-01", amountCents: 60000, depositCents: null, start: null, end: null },
+      { date: "2027-01-12", amountCents: null, depositCents: null, start: null, end: null },
     ]);
   });
 
@@ -121,7 +138,7 @@ describe("validateOutcome", () => {
         sessionPlan: "SINGLE",
         sessions: [s("2026-12-01", "viel")],
       }),
-    ).toThrow("Betrag");
+    ).toThrow("Preis");
   });
 });
 

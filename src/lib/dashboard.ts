@@ -1,4 +1,5 @@
 import { loadHandovers } from "./bot/handover";
+import { loadDueFollowUps } from "./outcomes/follow-up";
 import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 import { leadScope, type CurrentUser } from "./auth/session";
@@ -181,13 +182,35 @@ export async function loadDashboard(user: CurrentUser, now = new Date()) {
     .map((id) => contactLeads.find((l) => l.id === id))
     .filter((l): l is NonNullable<typeof l> => Boolean(l));
 
+  const followUps = await loadDueFollowUps(
+    prisma,
+    { isAdmin, tattooerId: user.tattooerProfile?.id ?? null },
+    now,
+    APP_TIMEZONE,
+  );
   const handovers = await loadHandovers(prisma, {
     isAdmin,
     tattooerId: user.tattooerProfile?.id ?? null,
   });
+  // Admin: automatic WhatsApp messages are switched off or paused while some are waiting
+  const sending = isAdmin
+    ? await Promise.all([
+        prisma.messagingSettings.findUnique({
+          where: { id: 1 },
+          select: { sendingEnabled: true, pausedAt: true, pausedReason: true },
+        }),
+        prisma.outboundMessage.count({ where: { status: "QUEUED" } }),
+      ]).then(([s, queued]) =>
+        queued && (!s?.sendingEnabled || s.pausedAt)
+          ? { queued, paused: Boolean(s?.pausedAt), reason: s?.pausedReason ?? null }
+          : null,
+      )
+    : null;
   return {
     isAdmin,
+    sending,
     handovers,
+    followUps,
     openOutcomes,
     openCount,
     today: { items, currentId, nextId, dayStart },
