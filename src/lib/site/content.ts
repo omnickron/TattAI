@@ -25,3 +25,24 @@ export const LEGAL_NAV = [
   { href: "/nutzungsbedingungen", label: "Nutzungsbedingungen" },
   { href: "/datenloeschung", label: "Datenlöschung" },
 ] as const;
+
+/** "Demo anfragen" opens a prepared e-mail (no form, no tracking). */
+export const demoMailto = `mailto:${OPERATOR.email}?subject=${encodeURIComponent(
+  "Demo-Anfrage NEEDL",
+)}&body=${encodeURIComponent(
+  "Hallo NEEDL-Team,\n\nich interessiere mich für NEEDL.\n\nStudio:\nOrt:\nAnzahl Tätowierer:\nTelefon (optional):\n\nViele Grüße",
+)}`;
+
+/**
+ * Commercial terms shown on the start page (section "Konditionen").
+ * TODO: confirm wording and numbers before going live.
+ */
+export const PRICING = {
+  model: "Provision auf den Tattoo-Umsatz aus NEEDL-Leads",
+  rate: "[PLATZHALTER: Provision in %]",
+  details: [
+    "Abrechnung monatlich, nachvollziehbar pro Tattoo-Termin",
+    "Werbebudget zahlst du direkt an Meta – volle Kontrolle über deine Kampagnen",
+    "[PLATZHALTER: Einrichtung, Grundgebühr, Laufzeit/Kündigung]",
+  ],
+} as const;
