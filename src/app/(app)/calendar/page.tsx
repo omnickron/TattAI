@@ -57,6 +57,9 @@ function isoWeek(localDate: string): number {
   return 1 + Math.floor((thursday.getTime() - jan1) / 86_400_000 / 7);
 }
 
+/** Today's column: a light accent tint, clearly different from the page background. */
+const TODAY_BG = "bg-accent/[0.07]";
+
 /** Lets long names wrap even inside very narrow columns (mobile week view). */
 const WRAP = "break-words [overflow-wrap:anywhere] hyphens-auto";
 
@@ -579,7 +582,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
               aria-current={d === today ? "date" : undefined}
               className={cn(
                 "flex flex-col items-center border-l border-line px-0.5 py-1.5 leading-tight hover:bg-muted",
-                d === today ? "bg-muted/60 text-accent" : "text-ink",
+                d === today ? "bg-accent/10 text-accent" : "text-ink",
               )}
             >
               <span className="text-lg font-semibold tabular-nums md:text-xl">
@@ -602,7 +605,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
             {days.map((d) => (
               <div
                 key={d}
-                className={cn("space-y-1 border-l border-line p-0.5", d === today && "bg-muted/60")}
+                className={cn("space-y-1 border-l border-line p-0.5", d === today && TODAY_BG)}
               >
                 {allDay
                   .filter((i) => i.day === d)
@@ -660,10 +663,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
             ))}
           </div>
           {days.map((d) => (
-            <div
-              key={d}
-              className={cn("relative border-l border-line", d === today && "bg-muted/60")}
-            >
+            <div key={d} className={cn("relative border-l border-line", d === today && TODAY_BG)}>
               {hours.map((h) => (
                 <div
                   key={h}
