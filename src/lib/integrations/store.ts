@@ -8,8 +8,13 @@ import type { PrismaClient } from "@/generated/prisma/client";
 import { decryptSecret, encryptSecret } from "../crypto";
 import { ALL_KEYS, settingDef } from "./registry";
 
-let cache = new Map<string, string>();
-let loadedAt = 0;
+// Shared via globalThis: Next.js bundles instrumentation.ts, route handlers and pages
+// separately, so a plain module variable would exist once per bundle and the copy filled
+// at server start would not be the one a webhook reads.
+const shared = globalThis as unknown as {
+  __needlIntegrationSettings?: { cache: Map<string, string>; loadedAt: number };
+};
+const state = (shared.__needlIntegrationSettings ??= { cache: new Map(), loadedAt: 0 });
 
 type Db = Pick<PrismaClient, "integrationSetting">;
 
@@ -28,16 +33,25 @@ export async function refreshIntegrationSettings(prisma: Db) {
       );
     }
   }
-  cache = next;
-  loadedAt = Date.now();
+  state.cache = next;
+  state.loadedAt = Date.now();
   return next.size;
 }
 
-export const integrationSettingsLoadedAt = () => loadedAt;
+export const integrationSettingsLoadedAt = () => state.loadedAt;
+
+/** Reloads the settings when they are older than `maxAgeMs` (e.g. before a webhook check). */
+export async function ensureIntegrationSettings(prisma: Db, maxAgeMs = 30_000) {
+  if (Date.now() - state.loadedAt <= maxAgeMs) return;
+  // On a database hiccup keep the values already in memory (and the .env fallback)
+  await refreshIntegrationSettings(prisma).catch((err) =>
+    console.error("[integrations] refresh failed:", err instanceof Error ? err.message : err),
+  );
+}
 
 /** Effective value: app value, otherwise env (and the optional env fallback). */
 export function setting(key: string, env: NodeJS.ProcessEnv = process.env): string | undefined {
-  const fromApp = cache.get(key);
+  const fromApp = state.cache.get(key);
   if (fromApp !== undefined && fromApp !== "") return fromApp;
   const fromEnv = env[key]?.trim();
   if (fromEnv) return fromEnv;
@@ -47,7 +61,7 @@ export function setting(key: string, env: NodeJS.ProcessEnv = process.env): stri
 
 /** Where a value currently comes from (for the operator page; never the value of a secret). */
 export function settingSource(key: string, env: NodeJS.ProcessEnv = process.env) {
-  if (cache.get(key)) return "app" as const;
+  if (state.cache.get(key)) return "app" as const;
   if (env[key]?.trim()) return "env" as const;
   const fallback = settingDef(key)?.envFallback;
   if (fallback && env[fallback]?.trim()) return "env" as const;
@@ -74,7 +88,7 @@ export async function saveIntegrationSetting(
       await prisma.integrationSettingLog.create({
         data: { key, action: "cleared", userId: user.id, userName: user.name },
       });
-    cache.delete(key);
+    state.cache.delete(key);
     return;
   }
   const stored = def?.secret ? encryptSecret(v) : v;
@@ -87,11 +101,11 @@ export async function saveIntegrationSetting(
   await prisma.integrationSettingLog.create({
     data: { key, action: "set", userId: user.id, userName: user.name },
   });
-  cache.set(key, v);
+  state.cache.set(key, v);
 }
 
 /** For tests: start from an empty cache. */
 export function resetIntegrationCache() {
-  cache = new Map();
-  loadedAt = 0;
+  state.cache = new Map();
+  state.loadedAt = 0;
 }

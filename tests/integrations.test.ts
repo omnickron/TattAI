@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  ensureIntegrationSettings,
   refreshIntegrationSettings,
   resetIntegrationCache,
   saveIntegrationSetting,
@@ -23,6 +24,19 @@ afterEach(() => resetIntegrationCache());
 afterAll(() => prisma.$disconnect());
 
 describe("access data maintained in the app", () => {
+  it("shares one cache across bundles and reloads stale values before webhooks", async () => {
+    await saveIntegrationSetting(prisma, "META_VERIFY_TOKEN", "verify-me", user);
+    resetIntegrationCache();
+    // A second copy of the module (as Next.js bundles create) sees the same cache
+    const shared = (globalThis as Record<string, unknown>).__needlIntegrationSettings as {
+      cache: Map<string, string>;
+    };
+    expect(shared.cache.size).toBe(0);
+    await ensureIntegrationSettings(prisma);
+    expect(shared.cache.get("META_VERIFY_TOKEN")).toBe("verify-me");
+    expect(setting("META_VERIFY_TOKEN", {} as NodeJS.ProcessEnv)).toBe("verify-me");
+  });
+
   it("prefers the app value, stores secrets encrypted and falls back to the .env", async () => {
     expect(setting("TEAMUP_API_KEY", env)).toBe("env-key");
     expect(settingSource("TEAMUP_API_KEY", env)).toBe("env");

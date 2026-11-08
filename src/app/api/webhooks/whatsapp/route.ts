@@ -2,10 +2,12 @@ import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { verifyMetaSignature } from "@/lib/meta/signature";
 import { processWhatsAppWebhook, type WaWebhookPayload } from "@/lib/whatsapp/webhook";
-import { setting } from "@/lib/integrations/store";
+import { ensureIntegrationSettings, setting } from "@/lib/integrations/store";
 
 /** Subscription verification handshake from Meta. */
-export function GET(request: NextRequest) {
+export async function GET(request: NextRequest) {
+  // Tokens maintained in the app: make sure this request sees the current values
+  await ensureIntegrationSettings(prisma);
   const params = request.nextUrl.searchParams;
   const verifyToken = setting("WHATSAPP_VERIFY_TOKEN");
   if (
@@ -23,6 +25,7 @@ export function GET(request: NextRequest) {
  * 500 and let Meta retry the delivery.
  */
 export async function POST(request: NextRequest) {
+  await ensureIntegrationSettings(prisma);
   const rawBody = await request.text();
   const secret = setting("WHATSAPP_APP_SECRET") || setting("META_APP_SECRET") || "";
   if (!verifyMetaSignature(rawBody, request.headers.get("x-hub-signature-256"), secret)) {
