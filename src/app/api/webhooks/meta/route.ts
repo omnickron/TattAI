@@ -4,10 +4,12 @@ import { ingestDeps } from "@/lib/leads/ingest-deps";
 import { processWebhookEvent, recordLeadgenEvents } from "@/lib/leads/meta-ingest";
 import { verifyMetaSignature } from "@/lib/meta/signature";
 import type { MetaWebhookPayload } from "@/lib/meta/types";
-import { setting } from "@/lib/integrations/store";
+import { ensureIntegrationSettings, setting } from "@/lib/integrations/store";
 
 /** Subscription verification handshake from Meta. */
-export function GET(request: NextRequest) {
+export async function GET(request: NextRequest) {
+  // Tokens maintained in the app: make sure this request sees the current values
+  await ensureIntegrationSettings(prisma);
   const params = request.nextUrl.searchParams;
   const verifyToken = setting("META_VERIFY_TOKEN");
   if (
@@ -26,6 +28,7 @@ export function GET(request: NextRequest) {
  * the response. Failures are retried by the webhook retry job.
  */
 export async function POST(request: NextRequest) {
+  await ensureIntegrationSettings(prisma);
   const rawBody = await request.text();
   const signature = request.headers.get("x-hub-signature-256");
   if (!verifyMetaSignature(rawBody, signature, setting("META_APP_SECRET") ?? "")) {
