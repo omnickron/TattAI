@@ -93,6 +93,13 @@ export const SETTINGS: SettingDef[] = [
     hint: "Frei wählbar, muss in Meta beim Webhook genauso eingetragen sein",
   },
   {
+    key: "META_APP_ID",
+    group: "meta",
+    label: "App-ID",
+    secret: false,
+    hint: "Steht oben im App-Dashboard bei developers.facebook.com",
+  },
+  {
     key: "META_PAGE_ACCESS_TOKEN",
     group: "meta",
     label: "Seiten-Zugriffstoken",

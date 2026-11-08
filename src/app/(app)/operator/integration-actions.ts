@@ -1,5 +1,6 @@
 "use server";
 
+import { appUrl } from "@/lib/app-url";
 import { createHmac } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import type { ActionState } from "@/lib/action-state";
@@ -105,6 +106,12 @@ export async function testIntegration(group: IntegrationGroup): Promise<ActionSt
       data?: Array<{ name?: string; subscribed_fields?: string[] }>;
     };
     const leadgen = (apps.data ?? []).filter((a) => a.subscribed_fields?.includes("leadgen"));
+    const appWebhook = await appLeadgenWebhook().catch(() => null);
+    if (appWebhook === false)
+      return {
+        ok: false,
+        message: `Seite „${me.name ?? "?"}“ erreichbar, aber der Webhook der App hat „leadgen“ noch nicht abonniert – „Webhook bei Meta eintragen“ drücken.`,
+      };
     if (!leadgen.length)
       return {
         ok: false,
@@ -160,6 +167,81 @@ export async function subscribeMetaPage(): Promise<ActionState> {
       ok: false,
       message:
         `Abonnieren fehlgeschlagen: ${err instanceof Error ? err.message : String(err)}`.slice(
+          0,
+          300,
+        ),
+    };
+  }
+}
+
+/** App access token "APP_ID|APP_SECRET" for app-level calls (webhook subscriptions). */
+function appToken() {
+  const id = setting("META_APP_ID");
+  const secret = setting("META_APP_SECRET");
+  return id && secret ? { id, token: `${id}|${secret}` } : null;
+}
+
+/** true/false = app webhook for Page.leadgen points to NEEDL or not; null = App-ID missing. */
+async function appLeadgenWebhook(): Promise<boolean | null> {
+  const app = appToken();
+  if (!app) return null;
+  const subs = (await graphGet(`/${app.id}/subscriptions`, app.token)) as {
+    data?: Array<{
+      object?: string;
+      callback_url?: string;
+      active?: boolean;
+      fields?: Array<{ name?: string }>;
+    }>;
+  };
+  const url = appUrl("/api/webhooks/meta").toString();
+  return (subs.data ?? []).some(
+    (s) =>
+      s.object === "page" &&
+      s.active !== false &&
+      s.callback_url === url &&
+      (s.fields ?? []).some((f) => f.name === "leadgen"),
+  );
+}
+
+/**
+ * Registers NEEDL's webhook for Page.leadgen at the app (instead of the Meta developer UI).
+ * Meta calls the verification handshake right away, so the verify token must be stored.
+ */
+export async function registerMetaWebhook(): Promise<ActionState> {
+  await requireOperator();
+  const app = appToken();
+  if (!app) return { ok: false, message: "App-ID oder App-Geheimnis fehlt." };
+  const verifyToken = setting("META_VERIFY_TOKEN");
+  if (!verifyToken) return { ok: false, message: "Verify-Token fehlt." };
+  try {
+    const url = new URL(`${GRAPH()}/${app.id}/subscriptions`);
+    const body = new URLSearchParams({
+      object: "page",
+      callback_url: appUrl("/api/webhooks/meta").toString(),
+      fields: "leadgen",
+      include_values: "true",
+      verify_token: verifyToken,
+      access_token: app.token,
+    });
+    const res = await fetch(url, { method: "POST", body, signal: AbortSignal.timeout(20_000) });
+    const json = (await res.json().catch(() => ({}))) as {
+      success?: boolean;
+      error?: { message?: string };
+    };
+    if (!res.ok || !json.success)
+      return {
+        ok: false,
+        message: `Eintragen fehlgeschlagen: ${json.error?.message ?? `HTTP ${res.status}`}`.slice(
+          0,
+          300,
+        ),
+      };
+    return { ok: true, message: "Webhook eingetragen – Meta meldet neue Leads jetzt an NEEDL." };
+  } catch (err) {
+    return {
+      ok: false,
+      message:
+        `Eintragen fehlgeschlagen: ${err instanceof Error ? err.message : String(err)}`.slice(
           0,
           300,
         ),
