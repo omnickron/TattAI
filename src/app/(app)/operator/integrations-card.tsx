@@ -9,6 +9,7 @@ import { ActionButton } from "../admin/billing/buttons";
 import {
   clearIntegrationSetting,
   saveIntegration,
+  registerMetaWebhook,
   setIntegrationLive,
   subscribeMetaPage,
   testIntegration,
@@ -62,9 +63,14 @@ export async function IntegrationsCard() {
                     Verbindung testen
                   </ActionButton>
                   {g.id === "meta" && (
-                    <ActionButton action={subscribeMetaPage}>
-                      Seite für Leads abonnieren
-                    </ActionButton>
+                    <>
+                      <ActionButton action={registerMetaWebhook}>
+                        Webhook bei Meta eintragen
+                      </ActionButton>
+                      <ActionButton action={subscribeMetaPage}>
+                        Seite für Leads abonnieren
+                      </ActionButton>
+                    </>
                   )}
                 </span>
               </div>
