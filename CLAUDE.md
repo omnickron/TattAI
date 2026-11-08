@@ -54,7 +54,7 @@ Sprache der Oberfläche und aller Texte für Nutzer: Deutsch. Code, Variablen un
 - Kampagne, Anzeigengruppe und Anzeige am Lead mitspeichern (für spätere Auswertung der Kosten pro Lead).
 
 ### 2. Automatische WhatsApp-Erstansprache
-- WhatsApp Cloud API (eigener WhatsApp-Business-Account nur für dieses Projekt).
+- WhatsApp Cloud API (eigener WhatsApp-Business-Account nur für dieses Projekt). Eigene Nummer nur für NEEDL, getrennt von der Hauptnummer des Studios; Coexistence mit der WhatsApp-Business-App prüfen wir erst, wenn NEEDL Tech-Anbieter ist (Entscheidung vom 08.11.2026).
 - Erstkontakt nur mit vorab von Meta genehmigten Templates. Freie Nachrichten nur im 24-Stunden-Fenster nach Antwort des Kunden.
 - Das Formular muss eine Einwilligung für den WhatsApp-Kontakt enthalten, die am Lead gespeichert wird (Zeitstempel und Wortlaut).
 - Erinnerungen vor dem Termin (z. B. 24 h und 2 h vorher) per Template.
@@ -129,6 +129,7 @@ Nach jeder Phase lauffähigen Stand liefern, bevor die nächste beginnt.
 - Warteliste, wenn keine Slots frei sind.
 
 ## Offene Punkte
+- NEEDL als Meta-Tech-Anbieter: 1. öffentliche Website needl-booker.de (Startseite, Impressum, Datenschutz, Nutzungsbedingungen, Datenlöschung), 2. Unternehmensverifizierung des NEEDL-Portfolios, 3. „Mit Facebook verbinden“ (Embedded Signup) für WhatsApp und Leads, 4. App-Prüfung und Tech-Anbieter-Status. Bis dahin: Leads über Partner-Freigabe der Studio-Seite, WhatsApp über das Portfolio des Studios.
 - Zeitplan für Erstansprache und Nachfassen bei fehlender Antwort.
 - Texte der WhatsApp-Templates und Einwilligungstext im Formular.
 
