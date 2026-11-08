@@ -87,7 +87,7 @@ Die Zusammenfassung erscheint am Lead in der App UND im Beschreibungsfeld des Ka
 
 ### 7. Umsatz-Tracking
 - Nach der Beratung trägt der Tätowierer ein: Beratung stattgefunden / No-Show / abgesagt, und ob ein Tattoo-Termin daraus wurde.
-- Für Tattoo-Termine: Datum, Betrag (manuell).
+- Für Tattoo-Termine: Datum, geplanter Preis und Anzahlung (manuell). Nach dem Termin: erschienen ja/nein und Endpreis. Umsatz = Endpreis; nach einem No-Show zählt die Anzahlung als Umsatz, auch für die Provision (Entscheidung vom 08.11.2026).
 - Auswertung für den Admin: Leads, gebuchte Beratungen, stattgefundene Beratungen, Tattoo-Abschlüsse, Umsatz, je Zeitraum, Kampagne und Tätowierer.
 - Später: Werbekosten aus Meta importieren (Kosten pro Lead, ROI) und Abschlüsse an Meta zurückmelden (Conversions API).
 
