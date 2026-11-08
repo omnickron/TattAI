@@ -10,6 +10,7 @@ import {
   clearIntegrationSetting,
   saveIntegration,
   setIntegrationLive,
+  subscribeMetaPage,
   testIntegration,
 } from "./integration-actions";
 
@@ -60,6 +61,11 @@ export async function IntegrationsCard() {
                   <ActionButton action={testIntegration.bind(null, g.id)}>
                     Verbindung testen
                   </ActionButton>
+                  {g.id === "meta" && (
+                    <ActionButton action={subscribeMetaPage}>
+                      Seite für Leads abonnieren
+                    </ActionButton>
+                  )}
                 </span>
               </div>
               <p className="mb-3 text-sm text-ink-soft">{g.intro}</p>

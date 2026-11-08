@@ -99,13 +99,67 @@ export async function testIntegration(group: IntegrationGroup): Promise<ActionSt
     }
     const token = setting("META_PAGE_ACCESS_TOKEN");
     if (!token) return { ok: false, message: "Seiten-Zugriffstoken fehlt." };
-    const me = await graphGet("/me?fields=name", token, setting("META_APP_SECRET"));
-    return { ok: true, message: `Meta erreichbar – Seite „${me.name ?? "?"}“.` };
+    const secret = setting("META_APP_SECRET");
+    const me = await graphGet("/me?fields=name", token, secret);
+    const apps = (await graphGet("/me/subscribed_apps", token, secret)) as {
+      data?: Array<{ name?: string; subscribed_fields?: string[] }>;
+    };
+    const leadgen = (apps.data ?? []).filter((a) => a.subscribed_fields?.includes("leadgen"));
+    if (!leadgen.length)
+      return {
+        ok: false,
+        message: `Seite „${me.name ?? "?"}“ erreichbar, meldet aber noch keine Leads an die App – „Seite für Leads abonnieren“ drücken.`,
+      };
+    return {
+      ok: true,
+      message: `Meta erreichbar – Seite „${me.name ?? "?"}“ meldet Leads an ${leadgen.map((a) => a.name ?? "die App").join(", ")}.`,
+    };
   } catch (err) {
     return {
       ok: false,
       message:
         `Verbindung fehlgeschlagen: ${err instanceof Error ? err.message : String(err)}`.slice(
+          0,
+          300,
+        ),
+    };
+  }
+}
+
+/** Subscribes the app to the page's `leadgen` events (otherwise Meta sends no webhooks). */
+export async function subscribeMetaPage(): Promise<ActionState> {
+  await requireOperator();
+  const token = setting("META_PAGE_ACCESS_TOKEN");
+  if (!token) return { ok: false, message: "Seiten-Zugriffstoken fehlt." };
+  try {
+    const url = new URL(`${GRAPH()}/me/subscribed_apps`);
+    url.searchParams.set("subscribed_fields", "leadgen");
+    url.searchParams.set("access_token", token);
+    const secret = setting("META_APP_SECRET");
+    if (secret)
+      url.searchParams.set(
+        "appsecret_proof",
+        createHmac("sha256", secret).update(token).digest("hex"),
+      );
+    const res = await fetch(url, { method: "POST", signal: AbortSignal.timeout(10_000) });
+    const body = (await res.json().catch(() => ({}))) as {
+      success?: boolean;
+      error?: { message?: string };
+    };
+    if (!res.ok || !body.success)
+      return {
+        ok: false,
+        message: `Abonnieren fehlgeschlagen: ${body.error?.message ?? `HTTP ${res.status}`}`.slice(
+          0,
+          300,
+        ),
+      };
+    return { ok: true, message: "Seite abonniert – neue Leads werden jetzt an NEEDL gemeldet." };
+  } catch (err) {
+    return {
+      ok: false,
+      message:
+        `Abonnieren fehlgeschlagen: ${err instanceof Error ? err.message : String(err)}`.slice(
           0,
           300,
         ),
