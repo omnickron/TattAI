@@ -42,7 +42,17 @@ export function ActionButton({
       >
         {pending ? "…" : children}
       </button>
-      {state && !state.ok && <span className="text-xs text-red-600">{state.message}</span>}
+      {state && (
+        <span
+          role="status"
+          className={cn(
+            "max-w-xs text-right text-xs",
+            state.ok ? "text-emerald-700 dark:text-emerald-400" : "text-red-600",
+          )}
+        >
+          {state.message}
+        </span>
+      )}
     </span>
   );
 }
