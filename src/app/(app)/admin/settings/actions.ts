@@ -11,7 +11,8 @@ import { moveUpcomingEntries } from "@/lib/scheduling/calendar-switch";
 import { schedulingDeps } from "@/lib/scheduling/deps";
 
 const schema = z.object({
-  consentCheckboxKey: z.string().trim().max(200),
+  // Meta derives the key from the checkbox text, so it can be as long as the text
+  consentCheckboxKey: z.string().trim().max(2000),
   consentText: z.string().trim().max(5000),
 });
 

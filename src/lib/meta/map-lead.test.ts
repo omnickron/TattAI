@@ -86,3 +86,16 @@ describe("hasConsent", () => {
     ).toBe(true);
   });
 });
+
+describe("long checkbox keys", () => {
+  it("matches a key that Meta derived from a long checkbox text", () => {
+    const key =
+      "ich_bin_einverstanden,_dass_nink_tattoo_mich_unter_der_angegebenen_nummer_per_whatsapp_kontaktiert,_um_meine_tattoo-idee_zu_besprechen,_einen_beratungstermin_zu_vereinbaren_und_mich_daran_zu_erinnern._ich_kann_die_einwilligung_jederzeit_widerrufen,_z._b._mit_„stop“_per_whatsapp.";
+    expect(
+      hasConsent(
+        { id: "1", custom_disclaimer_responses: [{ checkbox_key: key, is_checked: "1" }] },
+        key,
+      ),
+    ).toBe(true);
+  });
+});
