@@ -264,7 +264,8 @@ anderen sehen die Werte nur. Die `BILLING_*`-Umgebungsvariablen gelten als Ausga
 1. **Server anlegen:** VPS mit Ubuntu 24.04, mindestens 2 vCores und 4 GB RAM, Rechenzentrum in
    Deutschland. Bei IONOS zusätzlich in der Firewall-Richtlinie des Servers die Ports 80 und 443
    freigeben (sonst kein HTTPS-Zertifikat).
-2. **DNS:** A-Record der App-Adresse (z. B. `studio.needl-booker.de`) auf die IPv4 des Servers.
+2. **DNS:** A-Record der App-Adresse (z. B. `app.needl-booker.de`) auf die IPv4 des Servers. Für die
+   öffentliche Website zusätzlich A-Records für `needl-booker.de` und `www.needl-booker.de`.
 3. **Einrichten** (als root auf dem Server): `deploy/setup-server.sh` installiert Docker, Firewall,
    Swap, automatische Sicherheitsupdates und das tägliche Backup; es erzeugt einen Deploy-Key für
    GitHub und holt den Code nach `/opt/needl`.
@@ -272,7 +273,13 @@ anderen sehen die Werte nur. Die `BILLING_*`-Umgebungsvariablen gelten als Ausga
    die `.env` mit neuen Zufallswerten an (u. a. `AUTH_URL`, ohne die Google den Login ablehnt).
 5. **Starten / Aktualisieren:** `bash deploy/update.sh` (Code holen, bauen, Migrationen, Neustart;
    Caddy holt das HTTPS-Zertifikat automatisch).
-6. **Google:** In der Cloud Console beim OAuth-Client zusätzlich die Weiterleitungs-URIs
+6. **Website:** Mit `SITE_DOMAIN="needl-booker.de"` in der `.env` zeigt derselbe Server unter
+   dieser Domain die öffentliche Website (Startseite, Impressum, Datenschutz, Nutzungsbedingungen,
+   Datenlöschung); `www.` leitet dorthin um. Die Auswahl passiert per Host in `src/proxy.ts`
+   (`src/lib/site/routing.ts`), App-Pfade auf der Website-Domain leiten zur App weiter. Die
+   Rechtsseiten sind auch unter der App-Adresse ohne Login erreichbar. Betreiberangaben und
+   Platzhalter stehen in `src/lib/site/content.ts` und in den Seiten unter `src/app/(site)/`.
+7. **Google:** In der Cloud Console beim OAuth-Client zusätzlich die Weiterleitungs-URIs
    `https://<adresse>/api/auth/callback/google` und `https://<adresse>/api/google/callback` eintragen.
 
 Google-Login (sobald der Workspace existiert): In der Google Cloud Console ein OAuth-Projekt mit

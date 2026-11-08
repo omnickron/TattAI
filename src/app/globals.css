@@ -168,3 +168,46 @@ html[data-splash-done] .splash {
     animation: splash-out 0.3s ease 0.6s forwards;
   }
 }
+
+/* ------------------------------------------------------------------ legal pages */
+/* Long-form text on the public website (see components/legal-page.tsx) */
+.legal {
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.legal h2 {
+  margin-top: 2.5rem;
+  margin-bottom: 0.75rem;
+  font-size: 1.375rem;
+  line-height: 1.3;
+}
+.legal h3 {
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  font-size: 1.0625rem;
+}
+.legal p,
+.legal ul,
+.legal ol,
+.legal address {
+  margin-bottom: 0.875rem;
+  font-style: normal;
+}
+.legal ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+}
+.legal ol {
+  list-style: decimal;
+  padding-left: 1.25rem;
+}
+.legal li {
+  margin-bottom: 0.35rem;
+}
+.legal a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.legal a:hover {
+  color: var(--accent);
+}

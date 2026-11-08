@@ -1,10 +1,34 @@
-{$APP_DOMAIN} {
-	encode zstd gzip
+(security_headers) {
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options nosniff
 		Referrer-Policy strict-origin-when-cross-origin
 		X-Frame-Options DENY
 	}
+}
+
+# The app (login, webhooks, bot API)
+{$APP_DOMAIN} {
+	encode zstd gzip
+	import security_headers
 	reverse_proxy app:3000
+}
+
+# Public website (start page and legal pages), served by the same app container;
+# src/proxy.ts picks the website by host. Without SITE_DOMAIN the block falls back to a local-only name (no certificate request).
+{$SITE_DOMAIN:needl-site.localhost} {
+	encode zstd gzip
+	import security_headers
+	# Webhooks, bot API and uploads only live on the app domain
+	handle /api/* {
+		respond 404
+	}
+	handle {
+		reverse_proxy app:3000
+	}
+}
+
+www.{$SITE_DOMAIN:needl-site.localhost} {
+	import security_headers
+	redir https://{$SITE_DOMAIN:needl-site.localhost}{uri} permanent
 }

@@ -54,6 +54,8 @@ services:
     ports: ["80:80", "443:443"]
     environment:
       APP_DOMAIN: ${APP_DOMAIN:?set APP_DOMAIN}
+      # Public website (e.g. needl-booker.de); optional, the fallback is a local-only name
+      SITE_DOMAIN: ${SITE_DOMAIN:-needl-site.localhost}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
