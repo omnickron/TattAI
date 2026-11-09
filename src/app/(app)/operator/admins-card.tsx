@@ -3,7 +3,12 @@ import { Badge, Button, Card, CardTitle, Field, Input } from "@/components/ui";
 import { isOperator } from "@/lib/auth/operator";
 import { prisma } from "@/lib/db";
 import { ActionButton } from "../admin/billing/buttons";
-import { createStudioAdmin, setStudioAdminActive } from "./actions";
+import {
+  createStudioAdmin,
+  deleteStudioAdmin,
+  setAdminTattoos,
+  setStudioAdminActive,
+} from "./actions";
 
 /** Studio admins (studio owners): add, lock and unlock. */
 export async function AdminsCard({ currentUserId }: { currentUserId: string }) {
@@ -24,7 +29,9 @@ export async function AdminsCard({ currentUserId }: { currentUserId: string }) {
       <CardTitle>Studio-Admins</CardTitle>
       <p className="mb-4 text-sm text-ink-soft">
         Admins sehen alle Leads, Termine und Auswertungen, verwalten Tätowierer und pflegen das
-        Bot-Wissen. Die Anmeldung läuft mit dem Google-Konto der eingetragenen E-Mail.
+        Bot-Wissen. Die Anmeldung läuft mit dem Google-Konto der eingetragenen E-Mail. Löschen geht
+        nur ohne Beratungen und Tattoo-Termine – sonst sperren, damit Auswertung und Abrechnung
+        stimmen.
       </p>
       <ul className="mb-5 divide-y divide-line rounded-lg border border-line">
         {admins.map((a) => (
@@ -39,6 +46,14 @@ export async function AdminsCard({ currentUserId }: { currentUserId: string }) {
             {isOperator(a) && <Badge tone="violet">Betreiber</Badge>}
             {a.tattooerProfile && <Badge tone="gray">tätowiert</Badge>}
             {!a.active && <Badge tone="red">gesperrt</Badge>}
+            {!a.tattooerProfile && (
+              <ActionButton
+                action={setAdminTattoos.bind(null, a.id)}
+                confirm={`${a.name} auch als Tätowierer führen? Dann bekommt ${a.name} Beratungen nach der Fairness-Verteilung.`}
+              >
+                Tätowiert auch
+              </ActionButton>
+            )}
             {a.id !== currentUserId && (
               <ActionButton
                 variant={a.active ? "danger" : "secondary"}
@@ -50,6 +65,15 @@ export async function AdminsCard({ currentUserId }: { currentUserId: string }) {
                 }
               >
                 {a.active ? "Sperren" : "Aktivieren"}
+              </ActionButton>
+            )}
+            {a.id !== currentUserId && !isOperator(a) && (
+              <ActionButton
+                variant="danger"
+                action={deleteStudioAdmin.bind(null, a.id)}
+                confirm={`${a.name} endgültig löschen? Das geht nur, wenn ${a.name} keine Beratungen oder Tattoo-Termine hat.`}
+              >
+                Löschen
               </ActionButton>
             )}
           </li>
