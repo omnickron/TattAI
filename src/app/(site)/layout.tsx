@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { Logo } from "@/components/logo";
 import { siteBodyFont, siteDisplayFont } from "@/app/fonts";
-import { LEGAL_NAV, OPERATOR, demoMailto } from "@/lib/site/content";
+import { LEGAL_NAV, OPERATOR, contactMailto } from "@/lib/site/content";
 import { siteLinks, siteOrigin } from "@/lib/site/links";
 
 const origin = siteOrigin();
@@ -13,24 +13,22 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
   ...(origin ? { metadataBase: new URL(origin) } : {}),
   description:
-    "NEEDL macht aus Leads aus Meta-Werbung Beratungstermine für Tattoo-Studios: WhatsApp-Erstansprache in Minuten, Chatbot-Buchung, faire Verteilung im Team und Umsatz-Auswertung.",
+    "NEEDL füllt die Kalender von Tattoo-Studios mit neuen Beratungsterminen – provisionsbasiert.",
   openGraph: {
     type: "website",
     locale: "de_DE",
     siteName: "NEEDL",
-    title: "NEEDL – Mehr Beratungstermine aus deiner Meta-Werbung",
-    description:
-      "Leads per WhatsApp anschreiben, Beratungen automatisch buchen, fair im Team verteilen, Umsatz sehen.",
+    title: "NEEDL – Wir füllen deinen Kalender",
+    description: "Neue Beratungstermine für Tattoo-Studios. Provisionsbasiert.",
   },
 };
 
 export const viewport: Viewport = { themeColor: "#f1f1ed" };
 
 const NAV = [
-  { anchor: "funktionen", label: "Funktionen" },
-  { anchor: "ablauf", label: "Ablauf" },
-  { anchor: "konditionen", label: "Konditionen" },
+  { anchor: "provision", label: "Provision" },
   { anchor: "faq", label: "FAQ" },
+  { anchor: "kontakt", label: "Kontakt" },
 ];
 
 export default async function SiteLayout({ children }: { children: ReactNode }) {
@@ -79,10 +77,10 @@ export default async function SiteLayout({ children }: { children: ReactNode }) 
               Anmelden
             </Link>
             <a
-              href={demoMailto}
+              href={contactMailto}
               className="inline-flex items-center rounded-full bg-[var(--ink)] px-4 py-2 text-[13px] font-medium text-[var(--paper)] transition-transform hover:scale-[1.03] active:scale-[0.98]"
             >
-              Demo anfragen
+              Termine anfragen
             </a>
           </div>
         </div>
@@ -98,8 +96,7 @@ export default async function SiteLayout({ children }: { children: ReactNode }) 
             <div className="max-w-sm">
               <Logo className="text-2xl" gap="var(--night)" />
               <p className="mt-4 text-sm leading-relaxed text-[var(--ink-soft)]">
-                Mehr Beratungstermine aus deiner Meta-Werbung – für Tattoo-Studios. Entwickelt und
-                gehostet in Deutschland.
+                Wir füllen die Kalender von Tattoo-Studios. Provisionsbasiert.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-10 text-sm sm:gap-16">

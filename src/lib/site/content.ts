@@ -26,23 +26,15 @@ export const LEGAL_NAV = [
   { href: "/datenloeschung", label: "Datenlöschung" },
 ] as const;
 
-/** "Demo anfragen" opens a prepared e-mail (no form, no tracking). */
-export const demoMailto = `mailto:${OPERATOR.email}?subject=${encodeURIComponent(
-  "Demo-Anfrage NEEDL",
+/** "Termine anfragen" opens a prepared e-mail (no form, no tracking). */
+export const contactMailto = `mailto:${OPERATOR.email}?subject=${encodeURIComponent(
+  "Anfrage NEEDL",
 )}&body=${encodeURIComponent(
-  "Hallo NEEDL-Team,\n\nich interessiere mich für NEEDL.\n\nStudio:\nOrt:\nAnzahl Tätowierer:\nTelefon (optional):\n\nViele Grüße",
+  "Hallo NEEDL-Team,\n\nwir möchten mehr Beratungstermine für unser Studio.\n\nStudio:\nOrt:\nAnzahl Tätowierer:\nTelefon (optional):\n\nViele Grüße",
 )}`;
 
 /**
- * Commercial terms shown on the start page (section "Konditionen").
- * TODO: confirm wording and numbers before going live.
+ * Commercial terms shown on the start page (section "Provision").
+ * `rate` is shown only when set, e.g. "15 %". TODO: confirm wording before going live.
  */
-export const PRICING = {
-  model: "Provision auf den Tattoo-Umsatz aus NEEDL-Leads",
-  rate: "[PLATZHALTER: Provision in %]",
-  details: [
-    "Abrechnung monatlich, nachvollziehbar pro Tattoo-Termin",
-    "Werbebudget zahlst du direkt an Meta – volle Kontrolle über deine Kampagnen",
-    "[PLATZHALTER: Einrichtung, Grundgebühr, Laufzeit/Kündigung]",
-  ],
-} as const;
+export const PRICING: { rate: string | null } = { rate: null };
