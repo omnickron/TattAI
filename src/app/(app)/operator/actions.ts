@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { ActionState } from "@/lib/action-state";
 import { requireOperator } from "@/lib/auth/session";
+import { isOperator } from "@/lib/auth/operator";
 import { prisma } from "@/lib/db";
 
 const percent = (v: FormDataEntryValue | null) => {
@@ -192,4 +193,58 @@ export async function setStudioAdminActive(userId: string, active: boolean): Pro
   await prisma.user.update({ where: { id: userId, role: "ADMIN" }, data: { active } });
   revalidatePath("/operator", "layout");
   return { ok: true, message: active ? "Wieder aktiviert." : "Deaktiviert, Anmeldung gesperrt." };
+}
+
+/**
+ * Deletes a studio admin (never the operator). Only without consultations or tattoo
+ * sessions: reports and invoices need that history – such admins are locked instead.
+ * Content they uploaded stays and is moved to the operator.
+ */
+export async function deleteStudioAdmin(userId: string): Promise<ActionState> {
+  const user = await requireOperator();
+  if (userId === user.id) return { ok: false, message: "Dich selbst kannst du nicht löschen." };
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      role: true,
+      name: true,
+      email: true,
+      tattooerProfile: { select: { _count: { select: { consultations: true } } } },
+    },
+  });
+  if (!target || target.role !== "ADMIN") return { ok: false, message: "Admin nicht gefunden." };
+  if (isOperator(target)) return { ok: false, message: "Den Betreiber kann man nicht löschen." };
+  if ((target.tattooerProfile?._count.consultations ?? 0) > 0)
+    return {
+      ok: false,
+      message: `${target.name} hat Beratungen oder Tattoo-Termine – die werden für Auswertung und Abrechnung gebraucht. Bitte sperren statt löschen.`,
+    };
+  await prisma.$transaction([
+    prisma.contentItem.updateMany({ where: { uploaderId: userId }, data: { uploaderId: user.id } }),
+    prisma.user.delete({ where: { id: userId } }),
+  ]);
+  revalidatePath("/operator", "layout");
+  revalidatePath("/admin/tattooers");
+  return { ok: true, message: `${target.name} wurde gelöscht.` };
+}
+
+/** Gives an existing admin a tattooer profile (bookings, availability, calendar, color). */
+export async function setAdminTattoos(userId: string): Promise<ActionState> {
+  await requireOperator();
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true, name: true, tattooerProfile: { select: { id: true } } },
+  });
+  if (!target || target.role !== "ADMIN") return { ok: false, message: "Admin nicht gefunden." };
+  if (target.tattooerProfile) return { ok: true, message: "Tätowiert bereits." };
+  await prisma.tattooerProfile.create({
+    data: { userId, fairnessShare: { create: { weight: 1 } } },
+  });
+  revalidatePath("/operator", "layout");
+  revalidatePath("/admin/tattooers");
+  revalidatePath("/admin/fairness");
+  return {
+    ok: true,
+    message: `${target.name} tätowiert jetzt auch – Farbe unter Tätowierer, Verfügbarkeit selbst pflegen.`,
+  };
 }

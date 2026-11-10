@@ -54,9 +54,19 @@ export async function updateTattooer(
   formData: FormData,
 ): Promise<ActionState> {
   await requireAdmin();
-  const parsed = tattooerSchema.safeParse(Object.fromEntries(formData));
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true, email: true, tattooerProfile: { select: { id: true } } },
+  });
+  if (!target || (target.role === "ADMIN" && !target.tattooerProfile))
+    return { ok: false, message: "Nicht gefunden." };
+  // Admins (listed because they tattoo) keep their e-mail; it is the operator's to change
+  const parsed = tattooerSchema.safeParse({
+    ...Object.fromEntries(formData),
+    ...(target.role === "ADMIN" ? { email: target.email } : {}),
+  });
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message };
-  const domainError = workspaceDomainError(parsed.data.email);
+  const domainError = target.role === "ADMIN" ? null : workspaceDomainError(parsed.data.email);
   if (domainError) return { ok: false, message: domainError };
   // Calendar color: hex from the palette / color picker, "" = automatic
   const rawColor = String(formData.get("calendarColor") ?? "")
@@ -66,7 +76,7 @@ export async function updateTattooer(
 
   try {
     await prisma.user.update({
-      where: { id: userId, role: "TATTOOER" },
+      where: { id: userId },
       data: {
         ...parsed.data,
         ...(formData.has("calendarColor")

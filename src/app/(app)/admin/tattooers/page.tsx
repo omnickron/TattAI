@@ -22,7 +22,8 @@ export const metadata: Metadata = { title: "Tätowierer" };
 export default async function TattooersPage() {
   await requireAdmin();
   const tattooers = await prisma.user.findMany({
-    where: { role: "TATTOOER" },
+    // Admins (e.g. the studio owner) who tattoo are listed too, for their calendar color
+    where: { OR: [{ role: "TATTOOER" }, { role: "ADMIN", tattooerProfile: { isNot: null } }] },
     orderBy: [{ active: "desc" }, { name: "asc" }],
     include: {
       tattooerProfile: {
@@ -67,6 +68,7 @@ export default async function TattooersPage() {
                   style={{ backgroundColor: colorOf(t.tattooerProfile) }}
                 />
                 <h2 className="font-semibold">{t.name}</h2>
+                {t.role === "ADMIN" && <Badge tone="violet">Admin</Badge>}
                 {t.active ? <Badge tone="green">aktiv</Badge> : <Badge>deaktiviert</Badge>}
                 {t.tattooerProfile && isCalendarConnected(t.tattooerProfile) ? (
                   <Badge tone="blue">{calendarLabel(t.tattooerProfile)} verbunden</Badge>
@@ -91,15 +93,25 @@ export default async function TattooersPage() {
                     <Field label="Name" htmlFor={`name-${t.id}`}>
                       <Input id={`name-${t.id}`} name="name" defaultValue={t.name} required />
                     </Field>
-                    <Field label="Google-E-Mail" htmlFor={`email-${t.id}`}>
-                      <Input
-                        id={`email-${t.id}`}
-                        name="email"
-                        type="email"
-                        defaultValue={t.email}
-                        required
-                      />
-                    </Field>
+                    {t.role === "ADMIN" ? (
+                      <Field
+                        label="Google-E-Mail"
+                        htmlFor={`email-${t.id}`}
+                        hint="Admins verwaltet der Betreiber."
+                      >
+                        <Input id={`email-${t.id}`} value={t.email} readOnly disabled />
+                      </Field>
+                    ) : (
+                      <Field label="Google-E-Mail" htmlFor={`email-${t.id}`}>
+                        <Input
+                          id={`email-${t.id}`}
+                          name="email"
+                          type="email"
+                          defaultValue={t.email}
+                          required
+                        />
+                      </Field>
+                    )}
                     <fieldset className="sm:col-span-2">
                       <legend className="mb-1.5 text-sm font-medium text-ink">
                         Farbe im Kalender
@@ -141,14 +153,16 @@ export default async function TattooersPage() {
                       </Button>
                     </div>
                   </ActionForm>
-                  <ActionForm
-                    action={setTattooerActive.bind(null, t.id, !t.active)}
-                    confirm={t.active ? `${t.name} wirklich deaktivieren?` : undefined}
-                  >
-                    <Button type="submit" variant={t.active ? "danger" : "secondary"}>
-                      {t.active ? "Deaktivieren" : "Aktivieren"}
-                    </Button>
-                  </ActionForm>
+                  {t.role !== "ADMIN" && (
+                    <ActionForm
+                      action={setTattooerActive.bind(null, t.id, !t.active)}
+                      confirm={t.active ? `${t.name} wirklich deaktivieren?` : undefined}
+                    >
+                      <Button type="submit" variant={t.active ? "danger" : "secondary"}>
+                        {t.active ? "Deaktivieren" : "Aktivieren"}
+                      </Button>
+                    </ActionForm>
+                  )}
                 </div>
               </details>
             </Card>
