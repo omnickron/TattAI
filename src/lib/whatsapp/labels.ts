@@ -15,7 +15,7 @@ export const TEMPLATE_STATUS_LABELS = {
 
 export const OUTBOUND_KIND_LABELS = {
   FIRST_CONTACT: "Erstkontakt",
-  SECOND_MESSAGE: "Zweite Nachricht",
+  INTRO_MESSAGE: "Erstnachricht",
   FOLLOW_UP: "Nachfassen",
   REMINDER: "Erinnerung",
   AFTER_CONSULTATION: "Nach dem Termin",

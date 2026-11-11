@@ -8,7 +8,7 @@ import {
   dispatchMessages,
   planMessages,
   runMessagingWorker,
-  waitingForSecondMessage,
+  waitingForIntroMessages,
   type MessagingDeps,
 } from "@/lib/whatsapp/messaging";
 import { processWhatsAppWebhook } from "@/lib/whatsapp/webhook";
@@ -255,7 +255,7 @@ describe("first contact", () => {
   });
 });
 
-describe("immediate first contact and second message", () => {
+describe("immediate first contact and further opening messages", () => {
   async function setup() {
     const second = await template(
       "FOLLOW_UP",
@@ -264,12 +264,10 @@ describe("immediate first contact and second message", () => {
     );
     await prisma.messagingSettings.update({
       where: { id: 1 },
-      data: {
-        firstContactImmediate: true,
-        secondMessageTemplateId: second,
-        secondMessageMinDelayMinutes: 60,
-        maxPerDay: 50,
-      },
+      data: { firstContactImmediate: true, maxPerDay: 50 },
+    });
+    await prisma.introStep.create({
+      data: { position: 2, templateId: second, minDelayMinutes: 60 },
     });
     await prisma.followUpStep.create({
       data: { position: 1, delayHours: 24, templateId: templates.follow },
@@ -293,6 +291,32 @@ describe("immediate first contact and second message", () => {
     expect(await dispatchMessages(deps)).toMatchObject({ sent: 0, waiting: "Ruhezeit" });
     clock = at("2026-11-10", "08:01");
     expect(await dispatchMessages(deps)).toMatchObject({ sent: 1 });
+
+    // Without quiet hours it goes out at night, too
+    await prisma.messagingSettings.update({ where: { id: 1 }, data: { quietHoursEnabled: false } });
+    clock = at("2026-11-10", "23:30");
+    await lead();
+    await planMessages(deps);
+    expect(await dispatchMessages(deps)).toMatchObject({ sent: 1 });
+  });
+
+  it("sends any number of opening messages one after the other before the bot", async () => {
+    await setup();
+    const third = await template("FOLLOW_UP", "dritte", "Kleiner Tipp: Fotos helfen uns sehr!");
+    await prisma.introStep.create({ data: { position: 3, templateId: third, minDelayMinutes: 0 } });
+    clock = at(MON, "09:00");
+    const l = await lead();
+    await planMessages(deps);
+    await dispatchMessages(deps); // 1: right away
+    clock = at(MON, "10:01");
+    await planMessages(deps);
+    expect(await dispatchMessages(deps)).toMatchObject({ sent: 1 }); // 2: send time 10:00
+    expect(await waitingForIntroMessages(prisma, l.id, clock)).toBe(true);
+    clock = at(MON, "10:03");
+    await planMessages(deps);
+    expect(await dispatchMessages(deps)).toMatchObject({ sent: 1 }); // 3: same batch, 0 min
+    expect(wa.sent.map((m) => m.name)).toEqual(["erstkontakt", "zweite", "dritte"]);
+    expect(await waitingForIntroMessages(prisma, l.id, clock)).toBe(false);
   });
 
   it("always sends the second message at the next send time; the bot waits for it", async () => {
@@ -332,10 +356,10 @@ describe("immediate first contact and second message", () => {
     expect((await prisma.lead.findUniqueOrThrow({ where: { id: l.id } })).status).toBe("IN_CHAT");
     await planMessages(deps);
     const second = await prisma.outboundMessage.findFirstOrThrow({
-      where: { leadId: l.id, kind: "SECOND_MESSAGE" },
+      where: { leadId: l.id, kind: "INTRO_MESSAGE" },
     });
     expect(second.status).toBe("QUEUED");
-    expect(await waitingForSecondMessage(prisma, l.id, clock)).toBe(true);
+    expect(await waitingForIntroMessages(prisma, l.id, clock)).toBe(true);
 
     // Not before the next send time (17:00)
     clock = at(MON, "16:00");
@@ -343,7 +367,7 @@ describe("immediate first contact and second message", () => {
     clock = at(MON, "17:00");
     expect(await dispatchMessages(deps)).toMatchObject({ sent: 1 });
     expect(wa.sent.map((m) => m.name)).toEqual(["erstkontakt", "zweite"]);
-    expect(await waitingForSecondMessage(prisma, l.id, clock)).toBe(false);
+    expect(await waitingForIntroMessages(prisma, l.id, clock)).toBe(false);
     // The customer replied: no follow-up
     clock = at("2026-11-11", "10:00");
     await planMessages(deps);
@@ -373,22 +397,34 @@ describe("immediate first contact and second message", () => {
     expect(wa.sent.map((m) => m.name)).toEqual(["erstkontakt", "zweite", "nachfassen"]);
   });
 
-  it("does not hold the bot when the second message is not configured or failed", async () => {
-    const l = await lead({ firstContactedAt: at(MON, "09:00"), status: "CONTACTED" });
-    expect(await waitingForSecondMessage(prisma, l.id, clock)).toBe(false);
-    const second = await setup();
-    expect(await waitingForSecondMessage(prisma, l.id, clock)).toBe(true);
+  it("does not hold the bot without opening messages or after a failed one", async () => {
+    const l = await lead({ firstContactedAt: at(MON, "07:00"), status: "CONTACTED" });
     await prisma.outboundMessage.create({
       data: {
         leadId: l.id,
-        kind: "SECOND_MESSAGE",
-        dedupeKey: `second:${l.id}`,
+        kind: "FIRST_CONTACT",
+        dedupeKey: `first:${l.id}`,
+        templateId: templates.first,
+        notBefore: at(MON, "07:00"),
+        status: "SENT",
+        sentAt: at(MON, "07:00"),
+      },
+    });
+    expect(await waitingForIntroMessages(prisma, l.id, clock)).toBe(false);
+    const second = await setup();
+    expect(await waitingForIntroMessages(prisma, l.id, clock)).toBe(true);
+    await prisma.outboundMessage.create({
+      data: {
+        leadId: l.id,
+        kind: "INTRO_MESSAGE",
+        step: 2,
+        dedupeKey: `intro:${l.id}:2`,
         templateId: second,
         notBefore: clock,
         status: "FAILED",
       },
     });
-    expect(await waitingForSecondMessage(prisma, l.id, clock)).toBe(false);
+    expect(await waitingForIntroMessages(prisma, l.id, clock)).toBe(false);
   });
 });
 

@@ -8,7 +8,7 @@ import { MAX_DELIVERY_ATTEMPTS } from "./deliveries";
 import { runBotTurn, type BrainDeps } from "./brain";
 import { alertAdminsOnce, checkGuard, pauseOnRepeatedErrors } from "./guard";
 import { handOverChat } from "./handover";
-import { waitingForSecondMessage } from "../whatsapp/messaging";
+import { waitingForIntroMessages } from "../whatsapp/messaging";
 
 export const BOT_EVENT = "message.received";
 /** Wait this long after the newest message before answering. */
@@ -40,8 +40,8 @@ export async function processBotInbox(deps: BrainDeps, limit = 10) {
     const newest = list[0].lead?.lastInboundAt?.getTime() ?? 0;
     if (now.getTime() - newest < DEBOUNCE_MS) continue;
     const ids = list.map((d) => d.id);
-    // The bot takes over only after the second automatic message went out
-    if (await waitingForSecondMessage(prisma, leadId, now)) {
+    // The bot takes over only after the last opening message went out
+    if (await waitingForIntroMessages(prisma, leadId, now)) {
       await prisma.botDelivery.updateMany({
         where: { id: { in: ids } },
         data: { nextAttemptAt: new Date(now.getTime() + 2 * MIN) },

@@ -104,17 +104,24 @@ export async function deleteTemplate(id: string): Promise<ActionState> {
   const t = await prisma.whatsAppTemplate.findUnique({
     where: { id },
     include: {
-      _count: { select: { followUpSteps: true, reminderRules: true, outboundMessages: true } },
+      _count: {
+        select: {
+          followUpSteps: true,
+          introSteps: true,
+          reminderRules: true,
+          outboundMessages: true,
+        },
+      },
     },
   });
   if (!t) return { ok: false, message: "Template nicht gefunden." };
   const settings = await prisma.messagingSettings.findUnique({ where: { id: 1 } });
   if (
     t._count.followUpSteps ||
+    t._count.introSteps ||
     t._count.reminderRules ||
     t._count.outboundMessages ||
-    settings?.firstContactTemplateId === id ||
-    settings?.secondMessageTemplateId === id
+    settings?.firstContactTemplateId === id
   ) {
     return { ok: false, message: "Das Template wird verwendet und kann nicht gelöscht werden." };
   }

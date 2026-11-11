@@ -56,7 +56,7 @@ Sprache der Oberfläche und aller Texte für Nutzer: Deutsch. Code, Variablen un
 ### 2. Automatische WhatsApp-Erstansprache
 - WhatsApp Cloud API (eigener WhatsApp-Business-Account nur für dieses Projekt). Eigene Nummer nur für NEEDL, getrennt von der Hauptnummer des Studios; Coexistence mit der WhatsApp-Business-App prüfen wir erst, wenn NEEDL Tech-Anbieter ist (Entscheidung vom 08.11.2026).
 - Erstkontakt nur mit vorab von Meta genehmigten Templates. Freie Nachrichten nur im 24-Stunden-Fenster nach Antwort des Kunden.
-- Ablauf nach dem Lead-Formular (Entscheidung vom 11.11.2026): 1. Erstkontakt per Template sofort (außerhalb einer einstellbaren Ruhezeit, z. B. 21–8 Uhr). 2. Zweite Nachricht per Template zur nächsten Sendezeit – immer, auch wenn der Kunde schon geantwortet hat. Der Bot übernimmt erst, wenn die zweite Nachricht verschickt ist. 3. Ohne Antwort folgt das Nachfassen, gerechnet ab der zweiten Nachricht.
+- Ablauf nach dem Lead-Formular (Entscheidung vom 11.11.2026): 1. Erstkontakt per Template sofort (optional mit Ruhezeit, z. B. 21–8 Uhr). 2. Beliebig viele weitere Erstnachrichten per Template, jeweils zur nächsten Sendezeit – immer, auch wenn der Kunde schon geantwortet hat. Der Bot übernimmt erst, wenn die letzte Erstnachricht verschickt ist. 3. Ohne Antwort folgt das Nachfassen, gerechnet ab der letzten Erstnachricht.
 - Das Formular muss eine Einwilligung für den WhatsApp-Kontakt enthalten, die am Lead gespeichert wird (Zeitstempel und Wortlaut).
 - Erinnerungen vor dem Termin (z. B. 24 h und 2 h vorher) per Template.
 - Eingehende und ausgehende Nachrichten werden pro Lead gespeichert.

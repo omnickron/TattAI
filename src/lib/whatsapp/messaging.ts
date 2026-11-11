@@ -42,14 +42,42 @@ const MAX_PER_RUN = 10;
 // Bulk messages: released only at send times and within the limits.
 const BULK_KINDS: OutboundKind[] = [
   "FIRST_CONTACT",
-  "SECOND_MESSAGE",
+  "INTRO_MESSAGE",
   "FOLLOW_UP",
   "AFTER_CONSULTATION",
 ];
-/** A second message is only planned for first contacts younger than this. */
-const SECOND_MESSAGE_MAX_AGE_MS = 7 * 24 * HOUR;
-/** Lead statuses in which the second message still goes out (also after a reply). */
-const SECOND_MESSAGE_STATUSES = ["CONTACTED", "IN_CHAT", "NO_RESPONSE"] as const;
+/** Further opening messages are only planned for first contacts younger than this. */
+const INTRO_MAX_AGE_MS = 7 * 24 * HOUR;
+/** Lead statuses in which opening messages still go out (also after a reply). */
+const INTRO_STATUSES = ["CONTACTED", "IN_CHAT", "NO_RESPONSE"] as const;
+
+type IntroRow = { kind: OutboundKind; step: number; status: string; sentAt: Date | null };
+
+/**
+ * Where a lead stands in the opening messages: the next step to plan (with its due time),
+ * whether one is still pending (planned or queued), and the time of the last one sent.
+ * Failed or cancelled steps count as done.
+ */
+export function introProgress(
+  steps: Array<{ position: number; templateId: string; minDelayMinutes: number }>,
+  firstSentAt: Date,
+  rows: IntroRow[],
+) {
+  let previous = firstSentAt;
+  for (const step of steps) {
+    const row = rows.find((r) => r.kind === "INTRO_MESSAGE" && r.step === step.position);
+    if (!row) {
+      return {
+        pending: true,
+        next: { step, due: new Date(previous.getTime() + step.minDelayMinutes * 60_000) },
+        lastSentAt: previous,
+      };
+    }
+    if (row.status === "QUEUED") return { pending: true, next: null, lastSentAt: previous };
+    if (row.status === "SENT" && row.sentAt) previous = row.sentAt;
+  }
+  return { pending: false, next: null, lastSentAt: previous };
+}
 /** After-consultation messages that are overdue by more than this are skipped. */
 const AFTER_MAX_LATE_MS = 7 * 24 * HOUR;
 const OPT_OUT_WORDS = new Set(["stop", "stopp", "abmelden", "keine nachrichten", "unsubscribe"]);
@@ -127,33 +155,43 @@ export async function planMessages(deps: MessagingDeps) {
     }
   }
 
-  // 1b. Second message at the next send time after the first contact – always, also when
-  // the customer has replied in between (the bot waits for it, see waitingForSecondMessage)
-  if (settings.secondMessageTemplateId) {
+  // 1b. Further opening messages after the first contact, one after the other at send times –
+  // always, also when the customer has replied (the bot waits, see waitingForIntroMessages)
+  const introSteps = await prisma.introStep.findMany({ orderBy: { position: "asc" } });
+  if (introSteps.length) {
     const leads = await prisma.lead.findMany({
       where: {
-        status: { in: [...SECOND_MESSAGE_STATUSES] },
+        status: { in: [...INTRO_STATUSES] },
         ...eligibleLead,
-        firstContactedAt: { gte: new Date(now.getTime() - SECOND_MESSAGE_MAX_AGE_MS) },
+        firstContactedAt: { gte: new Date(now.getTime() - INTRO_MAX_AGE_MS) },
+      },
+      select: {
+        id: true,
         outboundMessages: {
-          some: { kind: "FIRST_CONTACT", status: "SENT" },
-          none: { kind: "SECOND_MESSAGE" },
+          where: { kind: { in: ["FIRST_CONTACT", "INTRO_MESSAGE"] } },
+          select: { kind: true, step: true, status: true, sentAt: true },
         },
       },
-      select: { id: true, firstContactedAt: true },
-      take: 500,
+      take: 1000,
     });
-    if (leads.length) {
+    for (const lead of leads) {
+      const first = lead.outboundMessages.find(
+        (m) => m.kind === "FIRST_CONTACT" && m.status === "SENT" && m.sentAt,
+      );
+      if (!first?.sentAt) continue;
+      const { next } = introProgress(introSteps, first.sentAt, lead.outboundMessages);
+      if (!next) continue;
       const res = await prisma.outboundMessage.createMany({
-        data: leads.map((l) => ({
-          leadId: l.id,
-          kind: "SECOND_MESSAGE" as const,
-          dedupeKey: `second:${l.id}`,
-          templateId: settings.secondMessageTemplateId!,
-          notBefore: new Date(
-            l.firstContactedAt!.getTime() + settings.secondMessageMinDelayMinutes * 60_000,
-          ),
-        })),
+        data: [
+          {
+            leadId: lead.id,
+            kind: "INTRO_MESSAGE" as const,
+            step: next.step.position,
+            dedupeKey: `intro:${lead.id}:${next.step.position}`,
+            templateId: next.step.templateId,
+            notBefore: next.due,
+          },
+        ],
         skipDuplicates: true,
       });
       planned += res.count;
@@ -177,16 +215,10 @@ export async function planMessages(deps: MessagingDeps) {
     const sent = lead.outboundMessages.filter((m) => m.status === "SENT" && m.sentAt);
     const first = sent.find((m) => m.kind === "FIRST_CONTACT");
     if (!first?.sentAt) continue;
-    // Follow-ups start after the second message once there is one
-    const second = lead.outboundMessages.find((m) => m.kind === "SECOND_MESSAGE");
-    if (second?.status === "QUEUED") continue;
-    if (
-      !second &&
-      settings.secondMessageTemplateId &&
-      now.getTime() - first.sentAt.getTime() < SECOND_MESSAGE_MAX_AGE_MS
-    )
-      continue;
-    let previous = second?.status === "SENT" && second.sentAt ? second.sentAt : first.sentAt;
+    // Follow-ups start after the last opening message
+    const intro = introProgress(introSteps, first.sentAt, lead.outboundMessages);
+    if (intro.pending && now.getTime() - first.sentAt.getTime() < INTRO_MAX_AGE_MS) continue;
+    let previous = intro.lastSentAt;
     let done = true;
     for (const [index, step] of steps.entries()) {
       const position = index + 1;
@@ -384,8 +416,8 @@ async function stillApplicable(
   if (!lead || !lead.whatsappConsent || !lead.phoneValid || lead.whatsappOptOut || !lead.phoneE164)
     return false;
   if (o.kind === "FIRST_CONTACT") return lead.status === "NEW";
-  if (o.kind === "SECOND_MESSAGE")
-    return (SECOND_MESSAGE_STATUSES as readonly string[]).includes(lead.status);
+  if (o.kind === "INTRO_MESSAGE")
+    return (INTRO_STATUSES as readonly string[]).includes(lead.status);
   if (o.kind === "FOLLOW_UP") return lead.status === "CONTACTED";
   if (!o.consultationId) return false;
   if (o.kind === "AFTER_CONSULTATION") {
@@ -452,7 +484,7 @@ export async function dispatchMessages(deps: MessagingDeps): Promise<DispatchRes
     };
 
     // Reminders first (time-critical), then immediate first contacts, then the messages
-    // released at send times (first contacts / second messages / follow-ups) in arrival order.
+    // released at send times (first contacts / opening messages / follow-ups) in arrival order.
     const queued = (kinds: OutboundKind[]) =>
       prisma.outboundMessage.findFirst({
         where: {
@@ -471,10 +503,14 @@ export async function dispatchMessages(deps: MessagingDeps): Promise<DispatchRes
             {
               kinds: ["FIRST_CONTACT"] as OutboundKind[],
               decide: () =>
-                immediateDecision(now, cfg, counters, {
-                  start: settings.quietHoursStart,
-                  end: settings.quietHoursEnd,
-                }),
+                immediateDecision(
+                  now,
+                  cfg,
+                  counters,
+                  settings.quietHoursEnabled
+                    ? { start: settings.quietHoursStart, end: settings.quietHoursEnd }
+                    : null,
+                ),
             },
           ]
         : []),
@@ -654,33 +690,31 @@ export async function cancelQueued(prisma: PrismaClient, leadId: string, kinds: 
 }
 
 /**
- * The bot answers a lead only after the second automatic message went out: true while it is
- * queued, or while it is configured but not yet planned for a recent first contact.
+ * The bot answers a lead only after the last opening message went out: true while one is
+ * queued or not yet planned for a recent first contact.
  */
-export async function waitingForSecondMessage(
+export async function waitingForIntroMessages(
   prisma: PrismaClient,
   leadId: string,
   now = new Date(),
 ) {
-  const [lead, settings, second] = await Promise.all([
+  const [lead, steps] = await Promise.all([
     prisma.lead.findUnique({
       where: { id: leadId },
-      select: { firstContactedAt: true, whatsappOptOut: true },
+      select: {
+        whatsappOptOut: true,
+        outboundMessages: {
+          where: { kind: { in: ["FIRST_CONTACT", "INTRO_MESSAGE"] } },
+          select: { kind: true, step: true, status: true, sentAt: true },
+        },
+      },
     }),
-    prisma.messagingSettings.findUnique({
-      where: { id: 1 },
-      select: { secondMessageTemplateId: true },
-    }),
-    prisma.outboundMessage.findFirst({
-      where: { leadId, kind: "SECOND_MESSAGE" },
-      select: { status: true },
-    }),
+    prisma.introStep.findMany({ orderBy: { position: "asc" } }),
   ]);
-  if (!lead || lead.whatsappOptOut) return false;
-  if (second) return second.status === "QUEUED";
-  return Boolean(
-    settings?.secondMessageTemplateId &&
-    lead.firstContactedAt &&
-    now.getTime() - lead.firstContactedAt.getTime() < SECOND_MESSAGE_MAX_AGE_MS,
+  if (!lead || lead.whatsappOptOut || !steps.length) return false;
+  const first = lead.outboundMessages.find(
+    (m) => m.kind === "FIRST_CONTACT" && m.status === "SENT" && m.sentAt,
   );
+  if (!first?.sentAt || now.getTime() - first.sentAt.getTime() >= INTRO_MAX_AGE_MS) return false;
+  return introProgress(steps, first.sentAt, lead.outboundMessages).pending;
 }

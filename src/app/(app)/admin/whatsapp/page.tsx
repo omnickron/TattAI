@@ -28,10 +28,12 @@ import { activeBatch, dailyLimit, nextSendTime, parseSendTimes } from "@/lib/wha
 import {
   addAfterRule,
   addFollowUpStep,
+  addIntroStep,
   addReminderRule,
   cancelOutbound,
   deleteAfterRule,
   deleteFollowUpStep,
+  deleteIntroStep,
   deleteReminderRule,
   pauseSendingAction,
   resumeSending,
@@ -64,6 +66,7 @@ export default async function WhatsAppPage() {
   const [
     templates,
     steps,
+    introSteps,
     reminders,
     sentToday,
     queuedByKind,
@@ -74,6 +77,7 @@ export default async function WhatsAppPage() {
   ] = await Promise.all([
     prisma.whatsAppTemplate.findMany({ orderBy: [{ purpose: "asc" }, { name: "asc" }] }),
     prisma.followUpStep.findMany({ orderBy: { position: "asc" }, include: { template: true } }),
+    prisma.introStep.findMany({ orderBy: { position: "asc" }, include: { template: true } }),
     prisma.reminderRule.findMany({
       orderBy: { hoursBefore: "desc" },
       include: { template: true },
@@ -437,7 +441,14 @@ export default async function WhatsAppPage() {
                     Sofort nach dem Ausfüllen senden (sonst zur nächsten Sendezeit)
                   </label>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
-                    <span className="text-ink-soft">Ruhezeit: keine Sofort-Nachrichten von</span>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        name="quietHoursEnabled"
+                        defaultChecked={settings.quietHoursEnabled}
+                      />
+                      Ruhezeit beachten: keine Sofort-Nachrichten von
+                    </label>
                     <TimeSelect
                       name="quietHoursStart"
                       defaultValue={settings.quietHoursStart}
@@ -450,47 +461,70 @@ export default async function WhatsAppPage() {
                       aria-label="Ruhezeit Ende"
                     />
                   </div>
-                  <Field
-                    label="2. Zweite Nachricht (Template)"
-                    htmlFor="secondMessageTemplateId"
-                    hint="Geht zur nächsten Sendezeit raus – immer, auch wenn der Kunde schon geantwortet hat. Der Bot antwortet erst danach."
-                  >
-                    <Select
-                      id="secondMessageTemplateId"
-                      name="secondMessageTemplateId"
-                      defaultValue={settings.secondMessageTemplateId ?? ""}
-                    >
-                      <option value="">– keine (Bot antwortet sofort) –</option>
-                      {[...byPurpose("FIRST_CONTACT"), ...byPurpose("FOLLOW_UP")].map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.name} {t.approvedText ? "" : "(noch nicht genehmigt)"}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                  <Field
-                    label="Frühestens nach (Min.)"
-                    htmlFor="secondMessageMinDelayMinutes"
-                    hint="Abstand zur ersten Nachricht; danach zählt die nächste Sendezeit."
-                  >
-                    <Input
-                      id="secondMessageMinDelayMinutes"
-                      name="secondMessageMinDelayMinutes"
-                      type="number"
-                      min={0}
-                      max={2880}
-                      defaultValue={settings.secondMessageMinDelayMinutes}
-                      className="w-32"
-                    />
-                  </Field>
                   <p className="text-xs text-ink-soft">
-                    3. Antwortet der Kunde nicht, folgt das Nachfassen unten – gerechnet ab der
-                    zweiten Nachricht.
+                    Weitere Erstnachrichten legst du im Kasten „Weitere Erstnachrichten“ an.
+                    Antwortet der Kunde danach nicht, folgt das Nachfassen – gerechnet ab der
+                    letzten Erstnachricht.
                   </p>
                 </div>
               </div>
             </div>
             <Button type="submit">Speichern</Button>
+          </ActionForm>
+        </Card>
+
+        <Card>
+          <CardTitle>Weitere Erstnachrichten</CardTitle>
+          <p className="mb-3 text-sm text-ink-soft">
+            Nach dem Erstkontakt (Nachricht 1) gehen diese Nachrichten nacheinander zur jeweils
+            nächsten Sendezeit raus – immer, auch wenn der Kunde schon geantwortet hat. Der Bot
+            antwortet erst nach der letzten. Ohne Einträge antwortet er sofort.
+          </p>
+          {introSteps.length > 0 && (
+            <ol className="mb-3 divide-y divide-line text-sm">
+              {introSteps.map((s) => (
+                <li key={s.id} className="flex items-center justify-between gap-2 py-2">
+                  <span>
+                    <span className="font-medium">{s.position}.</span> frühestens{" "}
+                    {s.minDelayMinutes} Min. nach Nachricht {s.position - 1}, zur nächsten Sendezeit
+                    · <span className="text-ink-soft">{s.template.name}</span>
+                  </span>
+                  <ActionForm action={deleteIntroStep.bind(null, s.id)}>
+                    <Button type="submit" variant="ghost" className="px-2 py-1 text-xs">
+                      Entfernen
+                    </Button>
+                  </ActionForm>
+                </li>
+              ))}
+            </ol>
+          )}
+          <ActionForm
+            action={addIntroStep}
+            className="grid grid-cols-[7rem_1fr] items-end gap-2 space-y-0"
+          >
+            <Field label="Nach (Min.)" htmlFor="minDelayMinutes">
+              <Input
+                id="minDelayMinutes"
+                name="minDelayMinutes"
+                type="number"
+                min={0}
+                defaultValue={60}
+              />
+            </Field>
+            <Field label="Template" htmlFor="intro-template">
+              <Select id="intro-template" name="templateId">
+                {[...byPurpose("FIRST_CONTACT"), ...byPurpose("FOLLOW_UP")].map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} {t.approvedText ? "" : "(noch nicht genehmigt)"}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <div className="col-span-2">
+              <Button type="submit" variant="secondary">
+                Nachricht {introSteps.length + 2} hinzufügen
+              </Button>
+            </div>
           </ActionForm>
         </Card>
 
@@ -505,8 +539,8 @@ export default async function WhatsAppPage() {
                   <span>
                     <span className="font-medium">{s.position}.</span> {s.delayHours} Std. nach der{" "}
                     {s.position === 1
-                      ? settings.secondMessageTemplateId
-                        ? "zweiten Nachricht"
+                      ? introSteps.length
+                        ? "letzten Erstnachricht"
                         : "Erstansprache"
                       : "vorigen Nachricht"}{" "}
                     · <span className="text-ink-soft">{s.template.name}</span>

@@ -213,10 +213,10 @@ export function immediateDecision(
   now: Date,
   cfg: ThrottleConfig,
   counters: DispatchCounters,
-  quiet: { start: string; end: string },
+  quiet: { start: string; end: string } | null,
 ): Decision {
   const tz = cfg.timeZone ?? DEFAULT_TIME_ZONE;
-  const until = quietUntil(now, quiet.start, quiet.end, tz);
+  const until = quiet ? quietUntil(now, quiet.start, quiet.end, tz) : null;
   if (until) return { send: false, reason: "Ruhezeit", retryAt: until };
   if (counters.nextSendAllowedAt && counters.nextSendAllowedAt > now) {
     return {
