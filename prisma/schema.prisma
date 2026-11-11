@@ -553,14 +553,16 @@ model MessagingSettings {
   updatedAt              DateTime  @updatedAt
 }
 
-// Further opening messages after the first contact, in order (position 2, 3, …): each at
-// the next send time, at least minDelayMinutes after the previous one.
+// Further opening messages after the first contact, in order (position 2, 3, …): each at least
+// minDelayMinutes after the previous one – at the next send time or right away.
 model IntroStep {
   id              String           @id @default(cuid())
   position        Int              @unique
   templateId      String
   template        WhatsAppTemplate @relation(fields: [templateId], references: [id])
   minDelayMinutes Int              @default(60)
+  // true: at the next send time after the delay; false: right after the delay (quiet hours apply)
+  atSendTime      Boolean          @default(true)
   createdAt       DateTime         @default(now())
 }
 

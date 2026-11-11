@@ -397,6 +397,23 @@ describe("immediate first contact and further opening messages", () => {
     expect(wa.sent.map((m) => m.name)).toEqual(["erstkontakt", "zweite", "nachfassen"]);
   });
 
+  it("sends an opening message right after its delay when it does not wait for send times", async () => {
+    const second = await setup();
+    await prisma.introStep.updateMany({ data: { atSendTime: false, minDelayMinutes: 30 } });
+    clock = at(MON, "14:12");
+    const l = await lead();
+    await planMessages(deps);
+    await dispatchMessages(deps); // first contact
+    clock = at(MON, "14:41");
+    await planMessages(deps);
+    expect(await dispatchMessages(deps)).toMatchObject({ sent: 0 }); // 29 min: too early
+    clock = at(MON, "14:43");
+    expect(await dispatchMessages(deps)).toMatchObject({ sent: 1 }); // no send time needed
+    expect(wa.sent.map((m) => m.name)).toEqual(["erstkontakt", "zweite"]);
+    expect(await waitingForIntroMessages(prisma, l.id, clock)).toBe(false);
+    expect(second).toBeTruthy();
+  });
+
   it("does not hold the bot without opening messages or after a failed one", async () => {
     const l = await lead({ firstContactedAt: at(MON, "07:00"), status: "CONTACTED" });
     await prisma.outboundMessage.create({

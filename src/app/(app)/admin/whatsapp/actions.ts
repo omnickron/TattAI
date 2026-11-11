@@ -240,7 +240,12 @@ export async function addIntroStep(_prev: ActionState, formData: FormData): Prom
   if (!t) return { ok: false, message: "Bitte ein Template wählen." };
   const last = await prisma.introStep.findFirst({ orderBy: { position: "desc" } });
   await prisma.introStep.create({
-    data: { position: (last?.position ?? 1) + 1, templateId, minDelayMinutes },
+    data: {
+      position: (last?.position ?? 1) + 1,
+      templateId,
+      minDelayMinutes,
+      atSendTime: formData.get("atSendTime") === "on",
+    },
   });
   return ok("Erstnachricht hinzugefügt.");
 }
@@ -265,4 +270,17 @@ export async function deleteIntroStep(id: string): Promise<ActionState> {
     ),
   ]);
   return ok("Erstnachricht entfernt.");
+}
+
+/** Switches an opening message between "at the next send time" and "right after the delay". */
+export async function toggleIntroStepSendTime(id: string): Promise<ActionState> {
+  await requireAdmin();
+  const step = await prisma.introStep.findUnique({ where: { id } });
+  if (!step) return { ok: false, message: "Nicht gefunden." };
+  await prisma.introStep.update({ where: { id }, data: { atSendTime: !step.atSendTime } });
+  return ok(
+    step.atSendTime
+      ? "Geht jetzt direkt nach der Wartezeit raus."
+      : "Geht jetzt zur nächsten Sendezeit raus.",
+  );
 }

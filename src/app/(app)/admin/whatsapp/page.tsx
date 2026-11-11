@@ -34,6 +34,7 @@ import {
   deleteAfterRule,
   deleteFollowUpStep,
   deleteIntroStep,
+  toggleIntroStepSendTime,
   deleteReminderRule,
   pauseSendingAction,
   resumeSending,
@@ -109,6 +110,7 @@ export default async function WhatsAppPage() {
     prisma.lead.count({ where: { botEnabled: false } }),
   ]);
   const byPurpose = (p: string) => templates.filter((t) => t.purpose === p);
+  const introTemplates = [...byPurpose("FIRST_CONTACT"), ...byPurpose("FOLLOW_UP")];
   const afterRules = await prisma.afterConsultationRule.findMany({
     orderBy: [{ condition: "asc" }, { hoursAfter: "asc" }],
     include: { template: true },
@@ -476,8 +478,9 @@ export default async function WhatsAppPage() {
         <Card>
           <CardTitle>Weitere Erstnachrichten</CardTitle>
           <p className="mb-3 text-sm text-ink-soft">
-            Nach dem Erstkontakt (Nachricht 1) gehen diese Nachrichten nacheinander zur jeweils
-            nächsten Sendezeit raus – immer, auch wenn der Kunde schon geantwortet hat. Der Bot
+            Nach dem Erstkontakt (Nachricht 1) gehen diese Nachrichten nacheinander raus – je nach
+            Einstellung zur nächsten Sendezeit oder direkt nach der Wartezeit (dann gilt die
+            Ruhezeit). Sie gehen immer raus, auch wenn der Kunde schon geantwortet hat. Der Bot
             antwortet erst nach der letzten. Ohne Einträge antwortet er sofort.
           </p>
           {introSteps.length > 0 && (
@@ -485,15 +488,24 @@ export default async function WhatsAppPage() {
               {introSteps.map((s) => (
                 <li key={s.id} className="flex items-center justify-between gap-2 py-2">
                   <span>
-                    <span className="font-medium">{s.position}.</span> frühestens{" "}
-                    {s.minDelayMinutes} Min. nach Nachricht {s.position - 1}, zur nächsten Sendezeit
+                    <span className="font-medium">{s.position}.</span>{" "}
+                    {s.atSendTime
+                      ? `frühestens ${s.minDelayMinutes} Min. nach Nachricht ${s.position - 1}, zur nächsten Sendezeit`
+                      : `${s.minDelayMinutes} Min. nach Nachricht ${s.position - 1}, direkt`}{" "}
                     · <span className="text-ink-soft">{s.template.name}</span>
                   </span>
-                  <ActionForm action={deleteIntroStep.bind(null, s.id)}>
-                    <Button type="submit" variant="ghost" className="px-2 py-1 text-xs">
-                      Entfernen
-                    </Button>
-                  </ActionForm>
+                  <span className="flex items-center gap-1">
+                    <ActionForm action={toggleIntroStepSendTime.bind(null, s.id)}>
+                      <Button type="submit" variant="ghost" className="px-2 py-1 text-xs">
+                        {s.atSendTime ? "Direkt senden" : "Zur Sendezeit"}
+                      </Button>
+                    </ActionForm>
+                    <ActionForm action={deleteIntroStep.bind(null, s.id)}>
+                      <Button type="submit" variant="ghost" className="px-2 py-1 text-xs">
+                        Entfernen
+                      </Button>
+                    </ActionForm>
+                  </span>
                 </li>
               ))}
             </ol>
@@ -511,17 +523,29 @@ export default async function WhatsAppPage() {
                 defaultValue={60}
               />
             </Field>
-            <Field label="Template" htmlFor="intro-template">
-              <Select id="intro-template" name="templateId">
-                {[...byPurpose("FIRST_CONTACT"), ...byPurpose("FOLLOW_UP")].map((t) => (
+            <Field
+              label="Template"
+              htmlFor="intro-template"
+              hint={
+                introTemplates.length
+                  ? undefined
+                  : "Noch keine Vorlage für Erstkontakt oder Nachfassen – zuerst unter „Templates“ anlegen."
+              }
+            >
+              <Select id="intro-template" name="templateId" disabled={!introTemplates.length}>
+                {introTemplates.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name} {t.approvedText ? "" : "(noch nicht genehmigt)"}
                   </option>
                 ))}
               </Select>
             </Field>
+            <label className="col-span-2 flex items-center gap-2 text-sm">
+              <input type="checkbox" name="atSendTime" defaultChecked />
+              Zur nächsten Sendezeit senden (sonst direkt nach der Wartezeit)
+            </label>
             <div className="col-span-2">
-              <Button type="submit" variant="secondary">
+              <Button type="submit" variant="secondary" disabled={!introTemplates.length}>
                 Nachricht {introSteps.length + 2} hinzufügen
               </Button>
             </div>

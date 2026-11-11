@@ -6,6 +6,7 @@ import type {
   AfterConsultationCondition,
   MessagingSettings,
   OutboundKind,
+  Prisma,
   PrismaClient,
 } from "@/generated/prisma/client";
 import { DEFAULT_TIME_ZONE, localDateOf, startOfLocalDay } from "../time";
@@ -465,13 +466,30 @@ export async function dispatchMessages(deps: MessagingDeps): Promise<DispatchRes
     // First contacts go out right away (outside quiet hours) unless they wait for send times
     const immediate = settings.firstContactImmediate;
     const batchKinds = immediate ? BULK_KINDS.filter((k) => k !== "FIRST_CONTACT") : BULK_KINDS;
+    // Opening messages that go out right after their delay instead of at send times
+    const directSteps = (
+      await prisma.introStep.findMany({ where: { atSendTime: false }, select: { position: true } })
+    ).map((st) => st.position);
+    const direct: Prisma.OutboundMessageWhereInput[] = [
+      ...(immediate ? [{ kind: "FIRST_CONTACT" as const }] : []),
+      ...(directSteps.length
+        ? [{ kind: "INTRO_MESSAGE" as const, step: { in: directSteps } }]
+        : []),
+    ];
     const [sentToday, sentInBatch] = await Promise.all([
       prisma.outboundMessage.count({
         where: { status: "SENT", sentAt: { gte: startOfLocalDay(localDateOf(now, tz), tz) } },
       }),
       batch
         ? prisma.outboundMessage.count({
-            where: { status: "SENT", kind: { in: batchKinds }, sentAt: { gte: batch.start } },
+            where: {
+              status: "SENT",
+              kind: { in: batchKinds },
+              sentAt: { gte: batch.start },
+              ...(directSteps.length
+                ? { NOT: { kind: "INTRO_MESSAGE", step: { in: directSteps } } }
+                : {}),
+            },
           })
         : Promise.resolve(0),
     ]);
@@ -485,41 +503,44 @@ export async function dispatchMessages(deps: MessagingDeps): Promise<DispatchRes
 
     // Reminders first (time-critical), then immediate first contacts, then the messages
     // released at send times (first contacts / opening messages / follow-ups) in arrival order.
-    const queued = (kinds: OutboundKind[]) =>
+    const queued = (filter: Prisma.OutboundMessageWhereInput) =>
       prisma.outboundMessage.findFirst({
         where: {
-          status: "QUEUED",
-          kind: { in: kinds },
-          notBefore: { lte: now },
-          template: approved,
+          AND: [{ status: "QUEUED", notBefore: { lte: now }, template: approved }, filter],
         },
         orderBy: [{ kind: "asc" }, { notBefore: "asc" }],
         include: { template: true },
       });
-    const candidates: Array<{ kinds: OutboundKind[]; decide: () => Decision }> = [
-      { kinds: ["REMINDER"], decide: () => reminderDecision(now, counters) },
-      ...(immediate
-        ? [
-            {
-              kinds: ["FIRST_CONTACT"] as OutboundKind[],
-              decide: () =>
-                immediateDecision(
-                  now,
-                  cfg,
-                  counters,
-                  settings.quietHoursEnabled
-                    ? { start: settings.quietHoursStart, end: settings.quietHoursEnd }
-                    : null,
-                ),
-            },
-          ]
+    const quiet = settings.quietHoursEnabled
+      ? { start: settings.quietHoursStart, end: settings.quietHoursEnd }
+      : null;
+    const candidates: Array<{
+      filter: Prisma.OutboundMessageWhereInput;
+      decide: () => Decision;
+      reminder?: boolean;
+    }> = [
+      {
+        filter: { kind: "REMINDER" },
+        decide: () => reminderDecision(now, counters),
+        reminder: true,
+      },
+      ...(direct.length
+        ? [{ filter: { OR: direct }, decide: () => immediateDecision(now, cfg, counters, quiet) }]
         : []),
-      { kinds: batchKinds, decide: () => bulkDecision(now, cfg, counters) },
+      {
+        filter: {
+          kind: { in: batchKinds },
+          ...(directSteps.length
+            ? { NOT: { kind: "INTRO_MESSAGE" as const, step: { in: directSteps } } }
+            : {}),
+        },
+        decide: () => bulkDecision(now, cfg, counters),
+      },
     ];
     let next: Awaited<ReturnType<typeof queued>> = null;
     let waiting: string | null = null;
     for (const c of candidates) {
-      const found = await queued(c.kinds);
+      const found = await queued(c.filter);
       if (!found) continue;
       const decision = c.decide();
       if (decision.send) {
@@ -528,7 +549,7 @@ export async function dispatchMessages(deps: MessagingDeps): Promise<DispatchRes
       }
       waiting ??= decision.reason;
       // Reminders block everything behind them only for the gap between messages
-      if (c.kinds[0] === "REMINDER") break;
+      if (c.reminder) break;
     }
     if (!next) return waiting ? { ...result, waiting } : result;
 
