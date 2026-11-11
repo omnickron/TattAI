@@ -1,23 +1,24 @@
 /**
  * Operator details for the public website and legal pages.
- * TODO before going live: replace every [PLATZHALTER …] and have the legal texts reviewed.
+ * The legal texts are best-effort drafts; a legal review is still recommended.
  */
 export const OPERATOR = {
-  name: "[PLATZHALTER: Name bzw. Firma des Betreibers]",
-  legalForm: "[PLATZHALTER: Rechtsform, z. B. Einzelunternehmen]",
-  representative: "[PLATZHALTER: Vertretungsberechtigte Person]",
-  street: "[PLATZHALTER: Straße und Hausnummer]",
-  city: "[PLATZHALTER: PLZ Ort]",
+  name: "Nick Schestag Webdevelopment",
+  legalForm: "Einzelunternehmen",
+  representative: "Nick Schestag",
+  street: "Feldbrunnenstraße 31",
+  city: "20148 Hamburg",
   country: "Deutschland",
-  email: "kontakt@needl-booker.de",
+  email: "info@needl-booker.de",
   privacyEmail: "datenschutz@needl-booker.de",
-  phone: "[PLATZHALTER: Telefonnummer]",
-  vatId: "[PLATZHALTER: USt-IdNr. nach § 27a UStG – oder Zeile entfernen]",
-  register: "[PLATZHALTER: Registergericht und Registernummer – oder Zeile entfernen]",
+  phone: "+49 176 34614265",
+  phoneE164: "+4917634614265",
+  /** Small business (§ 19 UStG): no VAT, no VAT ID */
+  smallBusiness: true,
 } as const;
 
 /** Date shown as "Stand" on the legal pages. */
-export const LEGAL_LAST_UPDATED = "[PLATZHALTER: Datum]";
+export const LEGAL_LAST_UPDATED = "11. November 2026";
 
 export const LEGAL_NAV = [
   { href: "/impressum", label: "Impressum" },

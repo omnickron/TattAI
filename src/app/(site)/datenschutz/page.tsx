@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { LegalPage, Ph } from "@/components/legal-page";
+import { LegalPage } from "@/components/legal-page";
 import { OPERATOR } from "@/lib/site/content";
 
 export const metadata: Metadata = {
@@ -9,15 +9,23 @@ export const metadata: Metadata = {
 };
 
 const PROCESSORS = [
-  ["Hosting (Server, Datenbank, Dateien)", "IONOS SE, Montabaur", "Deutschland (EU)"],
+  ["Hosting (Server, Datenbank, Dateien, E-Mail)", "IONOS SE, Montabaur", "Deutschland (EU)"],
   [
     "Lead-Formulare, WhatsApp Business Platform",
     "Meta Platforms Ireland Ltd., Dublin",
     "EU; Übermittlung in die USA möglich",
   ],
-  ["KI für den Chatbot", "Anthropic", "USA"],
+  [
+    "KI für den Chatbot",
+    "Anthropic Ireland, Limited, Dublin, mit Anthropic PBC",
+    "Irland; Verarbeitung in den USA",
+  ],
   ["Login, Google Kalender", "Google Ireland Ltd., Dublin", "EU; Übermittlung in die USA möglich"],
-  ["Kalender TeamUp (falls vom Studio gewählt)", "Teamup", "Schweiz"],
+  [
+    "Kalender TeamUp (falls vom Studio gewählt)",
+    "Teamup Solutions AG, Zürich",
+    "Schweiz; Daten in Irland und den USA",
+  ],
   [
     "Push-Benachrichtigungen (Studio-Team)",
     "Push-Dienst des jeweiligen Browsers",
@@ -42,7 +50,8 @@ export default function DatenschutzPage() {
         E-Mail: <a href={`mailto:${OPERATOR.privacyEmail}`}>{OPERATOR.privacyEmail}</a>
       </address>
       <p>
-        Datenschutzbeauftragter: <Ph>falls benannt: Name und Kontakt – sonst Absatz entfernen</Ph>
+        Ein Datenschutzbeauftragter ist nicht benannt, da hierzu keine gesetzliche Pflicht besteht.
+        Fragen zum Datenschutz richtest du bitte an die oben genannte Adresse.
       </p>
 
       <h2>2. Rollen: Website und Software</h2>
@@ -55,11 +64,11 @@ export default function DatenschutzPage() {
           <strong>Software NEEDL:</strong> NEEDL wird von Tattoo-Studios genutzt. Für die Daten
           ihrer Kundinnen und Kunden (Leads) ist das jeweilige Studio Verantwortlicher; wir
           verarbeiten diese Daten als Auftragsverarbeiter nach Art. 28 DSGVO auf Grundlage eines
-          Auftragsverarbeitungsvertrags. <Ph>Rollenmodell rechtlich bestätigen</Ph>
+          Auftragsverarbeitungsvertrags.
         </li>
         <li>
           Für die Konten der Studio-Mitarbeitenden und die Abrechnung mit den Studios sind wir
-          Verantwortlicher. <Ph>prüfen</Ph>
+          Verantwortlicher.
         </li>
       </ul>
       <p>
@@ -71,11 +80,10 @@ export default function DatenschutzPage() {
       <h3>3.1 Hosting und Server-Logfiles</h3>
       <p>
         Die Website und die Software werden auf Servern in Deutschland betrieben (IONOS SE,
-        Elgendorfer Str. 57, 56410 Montabaur). <Ph>Anbieter und Standort bestätigen</Ph> Beim Aufruf
-        werden technisch notwendige Daten verarbeitet: IP-Adresse, Datum und Uhrzeit, aufgerufene
-        Seite, Browser-Typ, Referrer. Zweck ist die sichere Bereitstellung der Website;
-        Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO. Logdaten werden nach <Ph>Anzahl</Ph> Tagen
-        gelöscht.
+        Elgendorfer Str. 57, 56410 Montabaur). Beim Aufruf werden technisch notwendige Daten
+        verarbeitet: IP-Adresse, Datum und Uhrzeit, aufgerufene Seite, Browser-Typ, Referrer. Zweck
+        ist die sichere Bereitstellung der Website; Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO.
+        Logdaten werden nach sieben Tagen gelöscht.
       </p>
       <h3>3.2 Keine Cookies, kein Tracking</h3>
       <p>
@@ -86,7 +94,8 @@ export default function DatenschutzPage() {
       <p>
         Wenn du uns schreibst, verarbeiten wir deine Angaben, um die Anfrage zu beantworten (Art. 6
         Abs. 1 lit. b DSGVO bei Vertragsanfragen, sonst lit. f). Wir löschen die Nachrichten, wenn
-        sie erledigt sind und keine Aufbewahrungspflichten bestehen. <Ph>E-Mail-Anbieter nennen</Ph>
+        sie erledigt sind und keine Aufbewahrungspflichten bestehen. Unser E-Mail-Postfach wird von
+        der IONOS SE, Elgendorfer Str. 57, 56410 Montabaur, auf Servern in Deutschland betrieben.
       </p>
 
       <h2>4. Verarbeitung in NEEDL: Kundinnen und Kunden der Studios</h2>
@@ -100,8 +109,13 @@ export default function DatenschutzPage() {
       </p>
       <p>
         Zweck: Kontaktaufnahme, Terminvereinbarung und Auswertung, welche Werbung zu Terminen führt.
-        Rechtsgrundlage: Art. 6 Abs. 1 lit. a und b DSGVO; für die Auswertung lit. f.{" "}
-        <Ph>prüfen; ggf. gemeinsame Verantwortlichkeit von Studio und Meta für Lead Ads</Ph>
+        Rechtsgrundlage: Art. 6 Abs. 1 lit. a und b DSGVO; für die Auswertung lit. f. Für die
+        Darstellung der Anzeigen und die Erhebung im Lead-Formular selbst gelten zusätzlich die
+        Datenschutzbestimmungen von Meta (
+        <a href="https://www.facebook.com/privacy/policy" rel="noopener noreferrer">
+          facebook.com/privacy/policy
+        </a>
+        ).
       </p>
       <h3>4.2 WhatsApp</h3>
       <p>
@@ -118,26 +132,27 @@ export default function DatenschutzPage() {
         Nachrichten im WhatsApp-Chat können von einem Chatbot beantwortet werden, der die
         Tattoo-Idee klärt und einen Beratungstermin bucht. Dazu werden der Chatverlauf, die
         bisherige Zusammenfassung und freie Termine an das KI-Modell Claude der Anthropic
-        übermittelt.{" "}
-        <Ph>
-          Vertragspartner (Anthropic PBC, USA, bzw. Anthropic Ireland Ltd.), Speicherdauer bei
-          Anthropic und Ausschluss der Nutzung zum Training bestätigen
-        </Ph>
+        übermittelt. Vertragspartner ist für Kunden mit Sitz in Europa die Anthropic Ireland,
+        Limited (Dublin, Irland); die Verarbeitung erfolgt auch durch die Anthropic PBC in den USA
+        (siehe Abschnitt 8). Nach den geschäftlichen Bedingungen von Anthropic werden diese Daten
+        nicht zum Training von KI-Modellen verwendet und bei Anthropic in der Regel innerhalb von 30
+        Tagen gelöscht. Übermittelt werden nur die für die Antwort nötigen Angaben, keine E-Mail-
+        Adressen und keine Daten anderer Kundinnen und Kunden.
       </p>
       <p>
         Der Chatbot nennt keine Preise und gibt sich nicht als Mensch aus; auf Nachfrage weist er
         darauf hin, dass Nachrichten durch eine KI automatisiert werden. Ein Mensch aus dem Studio
-        kann das Gespräch jederzeit übernehmen. Rechtsgrundlage: Art. 6 Abs. 1 lit. b und f DSGVO.{" "}
-        <Ph>Transparenzpflichten nach Art. 50 KI-Verordnung prüfen</Ph>
+        kann das Gespräch jederzeit übernehmen. Rechtsgrundlage: Art. 6 Abs. 1 lit. b und f DSGVO.
       </p>
       <h3>4.4 Termine und Kalender (Google, TeamUp)</h3>
       <p>
         Gebuchte Termine werden in NEEDL gespeichert und in den Kalender des Studios bzw. der
         zuständigen Person eingetragen – je nach Wahl des Studios Google Kalender (Google Ireland
-        Ltd., Gordon House, Barrow Street, Dublin 4, Irland) oder TeamUp{" "}
-        <Ph>Anbieter und Anschrift von TeamUp</Ph>. Der Kalendereintrag enthält Name, Telefonnummer,
-        Termin und die Zusammenfassung der Tattoo-Idee. Für freie Zeiten fragt NEEDL belegte
-        Zeiträume aus diesen Kalendern ab. Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO.
+        Ltd., Gordon House, Barrow Street, Dublin 4, Irland) oder TeamUp (Teamup Solutions AG,
+        Kreuzstrasse 42, 8008 Zürich, Schweiz; Datenhaltung in Irland und den USA). Der
+        Kalendereintrag enthält Name, Telefonnummer, Termin und die Zusammenfassung der Tattoo-Idee.
+        Für freie Zeiten fragt NEEDL belegte Zeiträume aus diesen Kalendern ab. Rechtsgrundlage:
+        Art. 6 Abs. 1 lit. b DSGVO.
       </p>
       <h3>4.5 Beratungsergebnis und Umsatz</h3>
       <p>
@@ -154,7 +169,8 @@ export default function DatenschutzPage() {
         wird ein technisch notwendiges Sitzungs-Cookie gesetzt (§ 25 Abs. 2 TDDDG). Wer
         Push-Benachrichtigungen einschaltet, erhält diese über den Push-Dienst seines Browsers. Die
         Verteilung von Terminen im Team erfolgt automatisch nach vom Studio festgelegten Anteilen.
-        Rechtsgrundlage: Art. 6 Abs. 1 lit. b und f DSGVO, § 26 BDSG. <Ph>prüfen</Ph>
+        Rechtsgrundlage: Art. 6 Abs. 1 lit. b und f DSGVO sowie, im Verhältnis zum Studio als
+        Arbeitgeber, § 26 BDSG.
       </p>
 
       <h2>6. Daten von Meta-Plattformen</h2>
@@ -173,12 +189,16 @@ export default function DatenschutzPage() {
           gelöscht.
         </li>
         <li>
-          Leads mit Beratung oder Termin: <Ph>Frist festlegen</Ph>
+          Leads mit Beratung oder Termin: solange der Vertrag mit dem Studio besteht oder bis das
+          Studio sie löscht. Nach Vertragsende erhält das Studio auf Wunsch einen Export; danach
+          werden die Daten innerhalb von 30 Tagen gelöscht.
         </li>
         <li>
-          Konten von Mitarbeitenden: bis zur Löschung durch das Studio bzw. bis Vertragsende.{" "}
-          <Ph>prüfen</Ph>
+          Konten von Mitarbeitenden: bis zur Löschung durch das Studio, spätestens 30 Tage nach
+          Vertragsende.
         </li>
+        <li>Sicherungskopien werden täglich erstellt und nach 14 Tagen überschrieben.</li>
+        <li>Server-Logdaten: sieben Tage.</li>
         <li>Gesetzliche Aufbewahrungspflichten (z. B. für Rechnungen) bleiben unberührt.</li>
       </ul>
 
@@ -210,7 +230,9 @@ export default function DatenschutzPage() {
         Übermittlungen in die USA stützen sich auf den Angemessenheitsbeschluss der EU-Kommission
         zum EU-U.S. Data Privacy Framework, soweit der Empfänger zertifiziert ist, sonst auf
         Standardvertragsklauseln (Art. 46 DSGVO). Für die Schweiz besteht ein
-        Angemessenheitsbeschluss. <Ph>je Anbieter prüfen</Ph>
+        Angemessenheitsbeschluss. Mit Meta, Google und Anthropic gelten deren
+        Auftragsverarbeitungsbedingungen einschließlich Standardvertragsklauseln; mit TeamUp dessen
+        Auftragsverarbeitungsvertrag.
       </p>
 
       <h2>9. Deine Rechte</h2>
@@ -231,14 +253,18 @@ export default function DatenschutzPage() {
       </p>
       <p>
         Bei Daten, die wir für ein Studio verarbeiten, leiten wir deine Anfrage an das Studio weiter
-        und unterstützen es bei der Bearbeitung. Zuständige Aufsichtsbehörde:{" "}
-        <Ph>Landesdatenschutzbehörde am Sitz des Betreibers</Ph>
+        und unterstützen es bei der Bearbeitung. Zuständige Aufsichtsbehörde für uns ist der
+        Hamburgische Beauftragte für Datenschutz und Informationsfreiheit, Ludwig-Erhard-Str. 22,
+        20459 Hamburg. Du kannst dich auch an die Aufsichtsbehörde an deinem Wohnort wenden.
       </p>
 
       <h2>10. Automatisierte Entscheidungen</h2>
       <p>
-        Eine automatisierte Entscheidung im Sinne von Art. 22 DSGVO findet nicht statt.{" "}
-        <Ph>prüfen (Chatbot-Buchung, automatische Terminverteilung)</Ph>
+        Eine automatisierte Entscheidung im Sinne von Art. 22 DSGVO, die dir gegenüber rechtliche
+        Wirkung entfaltet oder dich ähnlich erheblich beeinträchtigt, findet nicht statt. Der
+        Chatbot schlägt freie Beratungstermine vor und bucht den Termin, den du auswählst; welche
+        Person aus dem Studio die Beratung übernimmt, wird automatisch nach den Anteilen des Studios
+        bestimmt. Ein Mensch aus dem Studio kann jederzeit übernehmen.
       </p>
 
       <h2>11. Datensicherheit</h2>

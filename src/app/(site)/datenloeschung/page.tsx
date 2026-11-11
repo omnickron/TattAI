@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { LegalPage, Ph } from "@/components/legal-page";
+import { LegalPage } from "@/components/legal-page";
 import { OPERATOR } from "@/lib/site/content";
 
 export const metadata: Metadata = {
@@ -57,7 +57,9 @@ export default function DatenloeschungPage() {
       <p>
         Daten, die wir oder das Studio aus gesetzlichen Gründen aufbewahren müssen (z. B.
         steuerrelevante Angaben zu einem bezahlten Tattoo-Termin), werden gesperrt und erst nach
-        Ablauf der Frist gelöscht. <Ph>konkrete Fälle und Fristen prüfen</Ph>
+        Ablauf der Frist gelöscht. Das betrifft vor allem Angaben, die in Rechnungen und Buchhaltung
+        eingehen; sie werden bis zu zehn Jahre aufbewahrt (§ 147 AO, § 257 HGB). Sicherungskopien
+        werden nach 14 Tagen überschrieben.
       </p>
 
       <h2>4. Automatische Löschung</h2>
@@ -70,7 +72,9 @@ export default function DatenloeschungPage() {
       <p>
         Wenn du keine Nachrichten mehr bekommen möchtest, kannst du deine Einwilligung jederzeit
         widerrufen – per E-Mail an die oben genannte Adresse oder mit einer Nachricht an das Studio
-        im WhatsApp-Chat. <Ph>Ablauf im Chat festlegen</Ph>
+        im WhatsApp-Chat. Schreibst du dort „STOP“, „Stopp“ oder „Abmelden“, bekommst du ab sofort
+        keine automatischen Nachrichten mehr. Bittest du im Chat um Löschung deiner Daten, wird das
+        Gespräch an einen Menschen aus dem Studio übergeben, der die Löschung veranlasst.
       </p>
 
       <h2>6. Daten bei Meta</h2>
