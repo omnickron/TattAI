@@ -1,46 +1,27 @@
-# Rechtstexte für needl-booker.de – Vorlagen
+# Rechtstexte
 
-**Stand:** Entwurf vom 10.11.2026. **Keine Rechtsberatung.** Diese Texte sind Vorlagen, die auf
-dem tatsächlichen Funktionsumfang von NEEDL beruhen. Sie müssen vor der Veröffentlichung von
-einer Anwältin oder einem Anwalt (IT-/Datenschutzrecht) geprüft und ergänzt werden.
+Die Rechtstexte stehen direkt in den Seiten der Website und sind die einzige Quelle:
 
-## Dateien
+| Seite | Datei |
+| --- | --- |
+| /impressum | `src/app/(site)/impressum/page.tsx` |
+| /datenschutz | `src/app/(site)/datenschutz/page.tsx` |
+| /nutzungsbedingungen (zugleich Vertragsbedingungen mit den Studios) | `src/app/(site)/nutzungsbedingungen/page.tsx` |
+| /datenloeschung | `src/app/(site)/datenloeschung/page.tsx` |
 
-| Datei | Seite | Wofür |
-| --- | --- | --- |
-| `impressum.md` | /impressum | Pflicht nach § 5 DDG, § 18 MStV |
-| `datenschutz.md` | /datenschutz | Website, Plattform, Daten aus Meta (von Meta als „Privacy Policy URL“ verlangt) |
-| `nutzungsbedingungen.md` | /nutzungsbedingungen | Regeln für alle, die NEEDL nutzen (von Meta als „Terms of Service URL“ verlangt) |
-| `agb.md` | /agb | Vertrag zwischen NEEDL und dem Studio (Leistung, Provision, Haftung, Laufzeit) |
-| `datenloeschung.md` | /datenloeschung | Anleitung zur Datenlöschung (von Meta als „Data Deletion Instructions URL“ verlangt) |
+Anbieterdaten (Name, Anschrift, Kontakt) und der „Stand“ stehen in `src/lib/site/content.ts`.
 
-## Platzhalter
+**Stand 11.11.2026:** Alle Platzhalter sind ausgefüllt. Die Texte sind nach bestem Wissen
+erstellt und keine Rechtsberatung. Vor allem diese Punkte sollte eine Anwältin oder ein Anwalt
+noch prüfen:
 
-Alle Stellen in `[[doppelten eckigen Klammern]]` müssen ersetzt werden, vor allem:
+1. Rollenmodell: Studio als Verantwortlicher, NEEDL als Auftragsverarbeiter; ggf. gemeinsame
+   Verantwortlichkeit von Studio und Meta bei Lead Ads.
+2. Anthropic: Vertragspartner (Anthropic Ireland, Limited), Drittlandtransfer in die USA,
+   Speicherdauer und kein Training (laut Commercial Terms von Anthropic).
+3. Chatbot: Transparenz nach Art. 50 KI-Verordnung (Hinweis nur auf Nachfrage), Art. 22 DSGVO.
+4. Haftungsbegrenzung, Provision nach Vertragsende, Änderungsklausel in den Nutzungsbedingungen.
+5. Einwilligungstext im Meta-Formular und Werbung per WhatsApp (§ 7 UWG).
 
-- `[[Name/Firma]]`, `[[Rechtsform]]`, `[[Anschrift]]`, `[[Vertretungsberechtigte Person]]`
-- `[[Registergericht, HRB]]` (nur bei GmbH/UG) bzw. streichen
-- `[[USt-IdNr.]]` oder Hinweis auf Kleinunternehmerregelung (§ 19 UStG)
-- `[[Telefon]]`, E-Mail (Vorschlag: info@needl-booker.de, datenschutz@needl-booker.de)
-- `[[Serverstandort]]` (IONOS-Rechenzentrum, z. B. Deutschland)
-- `[[Datum]]` (Stand der Fassung)
-- `[[Provision in %]]` (derzeit in NEEDL voreingestellt: 15 % zzgl. USt.)
-
-## Für die Prüfung: offene Fragen
-
-1. **Rollen nach DSGVO:** Die Vorlagen gehen davon aus, dass NEEDL für die Daten der Kundinnen
-   und Kunden des Studios **Auftragsverarbeiter** (Art. 28 DSGVO) ist und das Studio der
-   Verantwortliche. Für Website, Vertragsabwicklung, Abrechnung und Sicherheit ist NEEDL selbst
-   Verantwortlicher. Bitte bestätigen lassen.
-2. **Auftragsverarbeitungsvertrag (AVV):** Die AGB verweisen auf einen AVV mit dem Studio.
-   Dieser fehlt noch (inkl. Liste der Unterauftragsverarbeiter und TOMs).
-3. **Anthropic (USA):** Übermittlung von Chat-Inhalten an Anthropic zur Erzeugung der
-   Bot-Antworten. Rechtsgrundlage für den Drittlandtransfer (Standardvertragsklauseln bzw.
-   EU-US Data Privacy Framework) und aktuelle Vertragsgesellschaft prüfen.
-4. **KI-Transparenz:** Der Bot weist nur auf Nachfrage auf die Automatisierung hin. Pflichten
-   nach Art. 50 KI-Verordnung (ab 02.08.2026 anwendbar) prüfen, ggf. Hinweis im Erstkontakt.
-5. **Einwilligungstext** im Meta-Formular und Werbung per WhatsApp (§ 7 UWG) prüfen.
-6. **Haftungsbegrenzung, Provisionsmodell, Kündigungsfristen** in den AGB an das tatsächliche
-   Angebot anpassen.
-7. **Datenschutzhinweise des Studios:** Das Studio braucht eigene Datenschutzhinweise für seine
-   Kundinnen und Kunden (Lead-Formular, WhatsApp). NEEDL kann dafür einen Baustein liefern.
+Noch offen: Auftragsverarbeitungsvertrag (AVV) mit den Studios und ein Baustein für die
+Datenschutzhinweise der Studios gegenüber ihren Kundinnen und Kunden.

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { LegalPage, Ph } from "@/components/legal-page";
+import { LegalPage } from "@/components/legal-page";
 import { OPERATOR } from "@/lib/site/content";
 
 export const metadata: Metadata = { title: "Impressum", alternates: { canonical: "/impressum" } };
@@ -11,7 +11,7 @@ export default function ImpressumPage() {
       <address>
         {OPERATOR.name}
         <br />
-        {OPERATOR.legalForm}
+        Inhaber: {OPERATOR.representative}
         <br />
         {OPERATOR.street}
         <br />
@@ -19,32 +19,18 @@ export default function ImpressumPage() {
         <br />
         {OPERATOR.country}
       </address>
-      <p>
-        Vertreten durch: {OPERATOR.representative}
-        <br />
-        <Ph>nur bei Gesellschaften, sonst Zeile entfernen</Ph>
-      </p>
 
       <h2>Kontakt</h2>
       <p>
         E-Mail: <a href={`mailto:${OPERATOR.email}`}>{OPERATOR.email}</a>
         <br />
-        Telefon: {OPERATOR.phone}
+        Telefon: <a href={`tel:${OPERATOR.phoneE164}`}>{OPERATOR.phone}</a>
       </p>
-
-      <h2>Registereintrag</h2>
-      <p>{OPERATOR.register}</p>
 
       <h2>Umsatzsteuer</h2>
       <p>
-        Umsatzsteuer-Identifikationsnummer gemäß § 27a Umsatzsteuergesetz: {OPERATOR.vatId}
-        <br />
-        <Ph>bei Kleinunternehmerregelung nach § 19 UStG ggf. Hinweis statt USt-IdNr.</Ph>
-      </p>
-
-      <h2>Berufsrechtliche Angaben</h2>
-      <p>
-        <Ph>Aufsichtsbehörde bzw. Kammer, falls erforderlich – sonst Abschnitt entfernen</Ph>
+        Kleinunternehmer im Sinne von § 19 UStG; es wird keine Umsatzsteuer berechnet und daher
+        keine Umsatzsteuer-Identifikationsnummer angegeben.
       </p>
 
       <h2>Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV</h2>
@@ -56,14 +42,32 @@ export default function ImpressumPage() {
 
       <h2>Verbraucherstreitbeilegung</h2>
       <p>
-        Unser Angebot richtet sich ausschließlich an Unternehmer. Wir sind nicht bereit und nicht
-        verpflichtet, an Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle
-        teilzunehmen. <Ph>Formulierung prüfen</Ph>
+        Unser Angebot richtet sich ausschließlich an Unternehmer im Sinne von § 14 BGB. Wir sind
+        nicht bereit und nicht verpflichtet, an Streitbeilegungsverfahren vor einer
+        Verbraucherschlichtungsstelle teilzunehmen.
       </p>
 
-      <h2>Haftung für Inhalte und Links</h2>
+      <h2>Haftung für Inhalte</h2>
       <p>
-        <Ph>optionaler Hinweis zur Haftung für eigene Inhalte (§ 7 DDG) und für externe Links</Ph>
+        Als Diensteanbieter sind wir für eigene Inhalte auf diesen Seiten nach den allgemeinen
+        Gesetzen verantwortlich. Nach §§ 8 bis 10 DDG sind wir nicht verpflichtet, übermittelte oder
+        gespeicherte fremde Informationen zu überwachen oder nach Umständen zu forschen, die auf
+        eine rechtswidrige Tätigkeit hinweisen. Sobald uns eine konkrete Rechtsverletzung bekannt
+        wird, entfernen wir die betreffenden Inhalte umgehend.
+      </p>
+
+      <h2>Haftung für Links</h2>
+      <p>
+        Unsere Seiten enthalten Links zu Websites Dritter, auf deren Inhalte wir keinen Einfluss
+        haben. Für diese Inhalte ist der jeweilige Anbieter oder Betreiber verantwortlich. Zum
+        Zeitpunkt der Verlinkung waren keine Rechtsverstöße erkennbar. Werden uns Rechtsverletzungen
+        bekannt, entfernen wir solche Links umgehend.
+      </p>
+
+      <h2>Urheberrecht</h2>
+      <p>
+        Texte, Logo und Gestaltung dieser Website sind urheberrechtlich geschützt. Eine Verwendung
+        außerhalb der Grenzen des Urheberrechts bedarf unserer Zustimmung.
       </p>
     </LegalPage>
   );

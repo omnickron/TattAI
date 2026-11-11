@@ -8,12 +8,6 @@ import { LEGAL_LAST_UPDATED } from "@/lib/site/content";
 export function LegalPage({ title, children }: { title: string; children: ReactNode }) {
   return (
     <main className="mx-auto max-w-3xl px-4 py-10 sm:py-14">
-      <p
-        role="note"
-        className="mb-8 rounded-lg border border-amber-600/30 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200"
-      >
-        Entwurf – wird rechtlich geprüft. Markierte Stellen sind Platzhalter.
-      </p>
       <h1 className="text-3xl sm:text-4xl">{title}</h1>
       <p className="mt-2 text-sm text-ink-soft">Stand: {LEGAL_LAST_UPDATED}</p>
       <div className="legal mt-8">{children}</div>
