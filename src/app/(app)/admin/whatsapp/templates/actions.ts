@@ -113,7 +113,8 @@ export async function deleteTemplate(id: string): Promise<ActionState> {
     t._count.followUpSteps ||
     t._count.reminderRules ||
     t._count.outboundMessages ||
-    settings?.firstContactTemplateId === id
+    settings?.firstContactTemplateId === id ||
+    settings?.secondMessageTemplateId === id
   ) {
     return { ok: false, message: "Das Template wird verwendet und kann nicht gelöscht werden." };
   }

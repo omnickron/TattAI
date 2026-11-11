@@ -536,6 +536,15 @@ model MessagingSettings {
   // Lead becomes "keine Antwort" this long after the last follow-up without reply
   noResponseAfterHours   Int       @default(48)
   firstContactTemplateId String?
+  // First contact right after the lead comes in (outside quiet hours) instead of at send times
+  firstContactImmediate  Boolean   @default(true)
+  // Local times "HH:MM"; no immediate first contact in between (e.g. 21:00–08:00)
+  quietHoursStart        String    @default("21:00")
+  quietHoursEnd          String    @default("08:00")
+  // Second message (template) at the next send time after the first contact
+  secondMessageTemplateId      String?
+  // At least this long after the first contact
+  secondMessageMinDelayMinutes Int @default(60)
   // Runtime state of the dispatcher
   nextSendAllowedAt      DateTime?
   // Lease so only one worker process dispatches at a time
@@ -568,6 +577,9 @@ model ReminderRule {
 
 enum OutboundKind {
   FIRST_CONTACT
+  // Second automatic message at the next send time; always sent (also after a reply),
+  // the bot answers only once it is out
+  SECOND_MESSAGE
   FOLLOW_UP
   REMINDER
   AFTER_CONSULTATION

@@ -12,6 +12,7 @@ import {
   addDays,
   DEFAULT_TIME_ZONE,
   localDateOf,
+  localMinuteOf,
   parseTimeOfDay,
   weekdayOf,
   zonedTimeToUtc,
@@ -181,4 +182,52 @@ export function parseSendTimes(value: unknown): SendTime[] {
     result.push({ weekday, time: normalized });
   }
   return result.sort((a, b) => a.weekday - b.weekday || a.time.localeCompare(b.time));
+}
+
+/**
+ * End of the quiet hours if `now` lies within them, else null. Start and end are local
+ * "HH:MM"; the span may cross midnight (e.g. 21:00–08:00). Equal times = no quiet hours.
+ */
+export function quietUntil(
+  now: Date,
+  start: string,
+  end: string,
+  timeZone = DEFAULT_TIME_ZONE,
+): Date | null {
+  const s = parseTimeOfDay(start);
+  const e = parseTimeOfDay(end);
+  if (s === null || e === null || s === e) return null;
+  const today = localDateOf(now, timeZone);
+  const minute = localMinuteOf(now, timeZone);
+  if (s < e) return minute >= s && minute < e ? zonedTimeToUtc(today, e, timeZone) : null;
+  if (minute >= s) return zonedTimeToUtc(addDays(today, 1), e, timeZone);
+  if (minute < e) return zonedTimeToUtc(today, e, timeZone);
+  return null;
+}
+
+/**
+ * Immediate first contact: outside the quiet hours, independent of the send times, but
+ * with the gap between messages and the daily limit (incl. warm-up).
+ */
+export function immediateDecision(
+  now: Date,
+  cfg: ThrottleConfig,
+  counters: DispatchCounters,
+  quiet: { start: string; end: string },
+): Decision {
+  const tz = cfg.timeZone ?? DEFAULT_TIME_ZONE;
+  const until = quietUntil(now, quiet.start, quiet.end, tz);
+  if (until) return { send: false, reason: "Ruhezeit", retryAt: until };
+  if (counters.nextSendAllowedAt && counters.nextSendAllowedAt > now) {
+    return {
+      send: false,
+      reason: "Abstand zwischen Nachrichten",
+      retryAt: counters.nextSendAllowedAt,
+    };
+  }
+  const limit = dailyLimit(localDateOf(now, tz), cfg);
+  if (counters.sentToday >= limit) {
+    return { send: false, reason: `Tageslimit erreicht (${limit})`, retryAt: null };
+  }
+  return { send: true };
 }

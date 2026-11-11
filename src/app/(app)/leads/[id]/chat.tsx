@@ -22,7 +22,7 @@ type ChatMessage = {
 
 type Planned = {
   id: string;
-  kind: "FIRST_CONTACT" | "FOLLOW_UP" | "REMINDER" | "AFTER_CONSULTATION";
+  kind: "FIRST_CONTACT" | "SECOND_MESSAGE" | "FOLLOW_UP" | "REMINDER" | "AFTER_CONSULTATION";
   status: "QUEUED" | "SENT" | "FAILED" | "CANCELLED";
   step: number;
   notBefore: Date;

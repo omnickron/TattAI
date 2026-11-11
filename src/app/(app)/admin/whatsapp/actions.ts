@@ -53,6 +53,10 @@ const settingsSchema = z
     warmupIncreasePerDay: int(0, 10000),
     noResponseAfterHours: int(1, 24 * 30),
     firstContactTemplateId: z.string().optional().default(""),
+    secondMessageTemplateId: z.string().optional().default(""),
+    secondMessageMinDelayMinutes: int(0, 2880),
+    quietHoursStart: z.string().optional().default("21:00"),
+    quietHoursEnd: z.string().optional().default("08:00"),
   })
   .refine((v) => v.maxGapSeconds >= v.minGapSeconds, {
     message: "Der maximale Abstand muss ≥ dem minimalen sein.",
@@ -85,6 +89,14 @@ export async function updateMessagingSettings(
     });
     if (!t) return { ok: false, message: "Template für den Erstkontakt nicht gefunden." };
   }
+  if (v.secondMessageTemplateId) {
+    const t = await prisma.whatsAppTemplate.findFirst({
+      where: { id: v.secondMessageTemplateId, purpose: { in: ["FIRST_CONTACT", "FOLLOW_UP"] } },
+    });
+    if (!t) return { ok: false, message: "Template für die zweite Nachricht nicht gefunden." };
+  }
+  for (const t of [v.quietHoursStart, v.quietHoursEnd])
+    if (parseTimeOfDay(t) === null) return { ok: false, message: `Ungültige Uhrzeit „${t}“.` };
 
   await loadMessagingSettings(prisma);
   await prisma.messagingSettings.update({
@@ -94,6 +106,8 @@ export async function updateMessagingSettings(
       sendTimes: parseSendTimes(raw) as unknown as Prisma.InputJsonValue,
       warmupStartDate: v.warmupStartDate ? new Date(`${v.warmupStartDate}T00:00:00Z`) : null,
       firstContactTemplateId: v.firstContactTemplateId || null,
+      secondMessageTemplateId: v.secondMessageTemplateId || null,
+      firstContactImmediate: formData.get("firstContactImmediate") === "on",
     },
   });
   return ok("Gespeichert.");

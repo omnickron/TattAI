@@ -124,7 +124,7 @@ async function handleInbound(prisma: PrismaClient, m: WaMessage, now: Date) {
     prisma,
     lead.id,
     optOut
-      ? ["FIRST_CONTACT", "FOLLOW_UP", "REMINDER", "AFTER_CONSULTATION"]
+      ? ["FIRST_CONTACT", "SECOND_MESSAGE", "FOLLOW_UP", "REMINDER", "AFTER_CONSULTATION"]
       : ["FIRST_CONTACT", "FOLLOW_UP"],
   );
 

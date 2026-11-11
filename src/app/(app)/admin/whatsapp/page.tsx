@@ -1,7 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ActionForm } from "@/components/action-form";
-import { Badge, Button, Card, CardTitle, Field, Input, PageHeader, Select } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  CardTitle,
+  Field,
+  Input,
+  PageHeader,
+  Select,
+  TimeSelect,
+} from "@/components/ui";
 import { requireAdmin } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { APP_TIMEZONE, formatDateTime } from "@/lib/format";
@@ -279,8 +289,9 @@ export default async function WhatsAppPage() {
             <div className="grid gap-6 lg:grid-cols-2">
               <div className="space-y-2">
                 <p className="text-sm text-ink-soft">
-                  Erstansprache und Nachfassen werden nur ab diesen Uhrzeiten verschickt (mehrere
-                  mit Komma trennen, leer = an diesem Tag nicht).
+                  Die zweite Nachricht und das Nachfassen werden nur ab diesen Uhrzeiten verschickt,
+                  die Erstansprache nur, wenn sie nicht sofort rausgeht (mehrere mit Komma trennen,
+                  leer = an diesem Tag nicht).
                 </p>
                 {Object.entries(WEEKDAY_LABELS).map(([n, label]) => (
                   <div key={n} className="grid grid-cols-[6.5rem_1fr] items-center gap-2">
@@ -401,8 +412,9 @@ export default async function WhatsAppPage() {
                     </Field>
                   </div>
                 </div>
-                <div className="col-span-2">
-                  <Field label="Template für den Erstkontakt" htmlFor="firstContactTemplateId">
+                <div className="col-span-2 space-y-3 rounded-lg bg-muted/60 p-3">
+                  <p className="text-sm font-medium">Ablauf nach dem Lead-Formular</p>
+                  <Field label="1. Erstkontakt (Template)" htmlFor="firstContactTemplateId">
                     <Select
                       id="firstContactTemplateId"
                       name="firstContactTemplateId"
@@ -416,6 +428,65 @@ export default async function WhatsAppPage() {
                       ))}
                     </Select>
                   </Field>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      name="firstContactImmediate"
+                      defaultChecked={settings.firstContactImmediate}
+                    />
+                    Sofort nach dem Ausfüllen senden (sonst zur nächsten Sendezeit)
+                  </label>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+                    <span className="text-ink-soft">Ruhezeit: keine Sofort-Nachrichten von</span>
+                    <TimeSelect
+                      name="quietHoursStart"
+                      defaultValue={settings.quietHoursStart}
+                      aria-label="Ruhezeit Beginn"
+                    />
+                    <span className="text-ink-soft">bis</span>
+                    <TimeSelect
+                      name="quietHoursEnd"
+                      defaultValue={settings.quietHoursEnd}
+                      aria-label="Ruhezeit Ende"
+                    />
+                  </div>
+                  <Field
+                    label="2. Zweite Nachricht (Template)"
+                    htmlFor="secondMessageTemplateId"
+                    hint="Geht zur nächsten Sendezeit raus – immer, auch wenn der Kunde schon geantwortet hat. Der Bot antwortet erst danach."
+                  >
+                    <Select
+                      id="secondMessageTemplateId"
+                      name="secondMessageTemplateId"
+                      defaultValue={settings.secondMessageTemplateId ?? ""}
+                    >
+                      <option value="">– keine (Bot antwortet sofort) –</option>
+                      {[...byPurpose("FIRST_CONTACT"), ...byPurpose("FOLLOW_UP")].map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name} {t.approvedText ? "" : "(noch nicht genehmigt)"}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field
+                    label="Frühestens nach (Min.)"
+                    htmlFor="secondMessageMinDelayMinutes"
+                    hint="Abstand zur ersten Nachricht; danach zählt die nächste Sendezeit."
+                  >
+                    <Input
+                      id="secondMessageMinDelayMinutes"
+                      name="secondMessageMinDelayMinutes"
+                      type="number"
+                      min={0}
+                      max={2880}
+                      defaultValue={settings.secondMessageMinDelayMinutes}
+                      className="w-32"
+                    />
+                  </Field>
+                  <p className="text-xs text-ink-soft">
+                    3. Antwortet der Kunde nicht, folgt das Nachfassen unten – gerechnet ab der
+                    zweiten Nachricht.
+                  </p>
                 </div>
               </div>
             </div>
@@ -433,8 +504,12 @@ export default async function WhatsAppPage() {
                 <li key={s.id} className="flex items-center justify-between gap-2 py-2">
                   <span>
                     <span className="font-medium">{s.position}.</span> {s.delayHours} Std. nach der{" "}
-                    {s.position === 1 ? "Erstansprache" : "vorigen Nachricht"} ·{" "}
-                    <span className="text-ink-soft">{s.template.name}</span>
+                    {s.position === 1
+                      ? settings.secondMessageTemplateId
+                        ? "zweiten Nachricht"
+                        : "Erstansprache"
+                      : "vorigen Nachricht"}{" "}
+                    · <span className="text-ink-soft">{s.template.name}</span>
                   </span>
                   <ActionForm action={deleteFollowUpStep.bind(null, s.id)}>
                     <Button type="submit" variant="ghost" className="px-2 py-1 text-xs">
