@@ -43,11 +43,11 @@ enum CalendarProvider {
 }
 
 model TattooerProfile {
-  id                  String @id @default(cuid())
-  userId              String @unique
-  user                User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  consultationMinutes Int    @default(30)
-  bufferMinutes       Int    @default(0)
+  id                  String  @id @default(cuid())
+  userId              String  @unique
+  user                User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  consultationMinutes Int     @default(30)
+  bufferMinutes       Int     @default(0)
   // Color in the app calendar (hex, e.g. "#2563eb"); null = default by order of creation
   calendarColor       String?
 
@@ -343,11 +343,11 @@ enum SessionAttendance {
 }
 
 model TattooBooking {
-  id                    String       @id @default(cuid())
+  id                    String             @id @default(cuid())
   consultationId        String
-  consultation          Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  consultation          Consultation       @relation(fields: [consultationId], references: [id], onDelete: Cascade)
   // 1, 2, 3 … within the tattoo
-  sessionNumber         Int          @default(1)
+  sessionNumber         Int                @default(1)
   // Local day of the session (stored as local midnight)
   date                  DateTime
   // Optional time slot; shown in the calendar and blocks consultation slots
@@ -356,11 +356,11 @@ model TattooBooking {
   // Google Calendar sync (same app calendar as the consultations)
   calendarId            String?
   calendarEventId       String?
-  calendarSyncPending   Boolean      @default(false)
+  calendarSyncPending   Boolean            @default(false)
   calendarSyncError     String?
   calendarSyncedAt      DateTime?
   // Automatic retries back off (1, 2, 4 … min, max. 60 min); a manual retry ignores this
-  calendarSyncAttempts  Int          @default(0)
+  calendarSyncAttempts  Int                @default(0)
   calendarNextAttemptAt DateTime?
   // Planned price, entered when booking; may be added later
   amountCents           Int?
@@ -371,12 +371,12 @@ model TattooBooking {
   attendanceRecordedAt  DateTime?
   finalAmountCents      Int?
   // Cancelled at short notice and the studio kept the deposit: it counts as revenue
-  depositKept           Boolean      @default(false)
-  currency              String       @default("EUR")
-  cancelled             Boolean      @default(false)
+  depositKept           Boolean            @default(false)
+  currency              String             @default("EUR")
+  cancelled             Boolean            @default(false)
   note                  String?
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
 
   @@index([date])
   @@index([startsAt])
@@ -505,6 +505,7 @@ model WhatsAppTemplate {
   updatedAt       DateTime         @updatedAt
 
   followUpSteps    FollowUpStep[]
+  introSteps       IntroStep[]
   reminderRules    ReminderRule[]
   afterRules       AfterConsultationRule[]
   outboundMessages OutboundMessage[]
@@ -536,6 +537,12 @@ model MessagingSettings {
   // Lead becomes "keine Antwort" this long after the last follow-up without reply
   noResponseAfterHours   Int       @default(48)
   firstContactTemplateId String?
+  // First contact right after the lead comes in (outside quiet hours) instead of at send times
+  firstContactImmediate  Boolean   @default(true)
+  // Quiet hours: no immediate first contact in between (local "HH:MM", e.g. 21:00–08:00)
+  quietHoursEnabled      Boolean   @default(true)
+  quietHoursStart        String    @default("21:00")
+  quietHoursEnd          String    @default("08:00")
   // Runtime state of the dispatcher
   nextSendAllowedAt      DateTime?
   // Lease so only one worker process dispatches at a time
@@ -544,6 +551,17 @@ model MessagingSettings {
   // Master switch for the chatbot in all chats
   botGloballyEnabled     Boolean   @default(true)
   updatedAt              DateTime  @updatedAt
+}
+
+// Further opening messages after the first contact, in order (position 2, 3, …): each at
+// the next send time, at least minDelayMinutes after the previous one.
+model IntroStep {
+  id              String           @id @default(cuid())
+  position        Int              @unique
+  templateId      String
+  template        WhatsAppTemplate @relation(fields: [templateId], references: [id])
+  minDelayMinutes Int              @default(60)
+  createdAt       DateTime         @default(now())
 }
 
 model FollowUpStep {
@@ -568,6 +586,9 @@ model ReminderRule {
 
 enum OutboundKind {
   FIRST_CONTACT
+  // Further opening messages after the first contact (IntroStep, step = position); always
+  // sent (also after a reply), the bot answers only once the last one is out
+  INTRO_MESSAGE
   FOLLOW_UP
   REMINDER
   AFTER_CONSULTATION

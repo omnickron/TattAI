@@ -8,6 +8,7 @@ import { MAX_DELIVERY_ATTEMPTS } from "./deliveries";
 import { runBotTurn, type BrainDeps } from "./brain";
 import { alertAdminsOnce, checkGuard, pauseOnRepeatedErrors } from "./guard";
 import { handOverChat } from "./handover";
+import { waitingForIntroMessages } from "../whatsapp/messaging";
 
 export const BOT_EVENT = "message.received";
 /** Wait this long after the newest message before answering. */
@@ -17,7 +18,7 @@ const MIN = 60_000;
 export async function processBotInbox(deps: BrainDeps, limit = 10) {
   const { prisma } = deps;
   const now = (deps.now ?? (() => new Date()))();
-  const result = { answered: 0, handedOver: 0, failed: 0, skipped: 0, limited: 0 };
+  const result = { answered: 0, handedOver: 0, failed: 0, skipped: 0, limited: 0, waiting: 0 };
 
   const due = await prisma.botDelivery.findMany({
     where: { event: BOT_EVENT, status: { in: ["PENDING", "FAILED"] }, nextAttemptAt: { lte: now } },
@@ -38,8 +39,17 @@ export async function processBotInbox(deps: BrainDeps, limit = 10) {
     if (runs >= limit) break;
     const newest = list[0].lead?.lastInboundAt?.getTime() ?? 0;
     if (now.getTime() - newest < DEBOUNCE_MS) continue;
-    runs++;
     const ids = list.map((d) => d.id);
+    // The bot takes over only after the last opening message went out
+    if (await waitingForIntroMessages(prisma, leadId, now)) {
+      await prisma.botDelivery.updateMany({
+        where: { id: { in: ids } },
+        data: { nextAttemptAt: new Date(now.getTime() + 2 * MIN) },
+      });
+      result.waiting++;
+      continue;
+    }
+    runs++;
     const markDone = (lastError: string | null) =>
       prisma.botDelivery.updateMany({
         where: { id: { in: ids } },

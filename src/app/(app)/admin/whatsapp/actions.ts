@@ -53,6 +53,8 @@ const settingsSchema = z
     warmupIncreasePerDay: int(0, 10000),
     noResponseAfterHours: int(1, 24 * 30),
     firstContactTemplateId: z.string().optional().default(""),
+    quietHoursStart: z.string().optional().default("21:00"),
+    quietHoursEnd: z.string().optional().default("08:00"),
   })
   .refine((v) => v.maxGapSeconds >= v.minGapSeconds, {
     message: "Der maximale Abstand muss ≥ dem minimalen sein.",
@@ -85,6 +87,8 @@ export async function updateMessagingSettings(
     });
     if (!t) return { ok: false, message: "Template für den Erstkontakt nicht gefunden." };
   }
+  for (const t of [v.quietHoursStart, v.quietHoursEnd])
+    if (parseTimeOfDay(t) === null) return { ok: false, message: `Ungültige Uhrzeit „${t}“.` };
 
   await loadMessagingSettings(prisma);
   await prisma.messagingSettings.update({
@@ -94,6 +98,8 @@ export async function updateMessagingSettings(
       sendTimes: parseSendTimes(raw) as unknown as Prisma.InputJsonValue,
       warmupStartDate: v.warmupStartDate ? new Date(`${v.warmupStartDate}T00:00:00Z`) : null,
       firstContactTemplateId: v.firstContactTemplateId || null,
+      firstContactImmediate: formData.get("firstContactImmediate") === "on",
+      quietHoursEnabled: formData.get("quietHoursEnabled") === "on",
     },
   });
   return ok("Gespeichert.");
@@ -219,4 +225,44 @@ export async function deleteAfterRule(id: string): Promise<ActionState> {
     prisma.afterConsultationRule.delete({ where: { id } }),
   ]);
   return ok("Nachricht nach dem Termin entfernt.");
+}
+
+/** Adds a further opening message after the first contact (always sent, bot waits for it). */
+export async function addIntroStep(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  await requireAdmin();
+  const minDelayMinutes = Number(formData.get("minDelayMinutes"));
+  const templateId = String(formData.get("templateId") ?? "");
+  if (!Number.isInteger(minDelayMinutes) || minDelayMinutes < 0 || minDelayMinutes > 2880)
+    return { ok: false, message: "Abstand: 0 bis 2880 Minuten." };
+  const t = await prisma.whatsAppTemplate.findFirst({
+    where: { id: templateId, purpose: { in: ["FIRST_CONTACT", "FOLLOW_UP"] } },
+  });
+  if (!t) return { ok: false, message: "Bitte ein Template wählen." };
+  const last = await prisma.introStep.findFirst({ orderBy: { position: "desc" } });
+  await prisma.introStep.create({
+    data: { position: (last?.position ?? 1) + 1, templateId, minDelayMinutes },
+  });
+  return ok("Erstnachricht hinzugefügt.");
+}
+
+/** Removes an opening message; the following ones move up. */
+export async function deleteIntroStep(id: string): Promise<ActionState> {
+  await requireAdmin();
+  const step = await prisma.introStep.findUnique({ where: { id } });
+  if (!step) return { ok: false, message: "Nicht gefunden." };
+  const rest = await prisma.introStep.findMany({
+    where: { position: { gt: step.position } },
+    orderBy: { position: "asc" },
+  });
+  await prisma.$transaction([
+    prisma.introStep.delete({ where: { id } }),
+    // Two passes avoid clashes with the unique position
+    ...rest.map((r) =>
+      prisma.introStep.update({ where: { id: r.id }, data: { position: -r.position } }),
+    ),
+    ...rest.map((r) =>
+      prisma.introStep.update({ where: { id: r.id }, data: { position: r.position - 1 } }),
+    ),
+  ]);
+  return ok("Erstnachricht entfernt.");
 }

@@ -22,7 +22,7 @@ type ChatMessage = {
 
 type Planned = {
   id: string;
-  kind: "FIRST_CONTACT" | "FOLLOW_UP" | "REMINDER" | "AFTER_CONSULTATION";
+  kind: "FIRST_CONTACT" | "INTRO_MESSAGE" | "FOLLOW_UP" | "REMINDER" | "AFTER_CONSULTATION";
   status: "QUEUED" | "SENT" | "FAILED" | "CANCELLED";
   step: number;
   notBefore: Date;
@@ -167,7 +167,7 @@ export function ChatSection({
                 </Badge>
                 <span>
                   {OUTBOUND_KIND_LABELS[p.kind]}
-                  {p.kind === "FOLLOW_UP" && ` ${p.step}`}
+                  {(p.kind === "FOLLOW_UP" || p.kind === "INTRO_MESSAGE") && ` ${p.step}`}
                   {p.kind === "REMINDER" && ` (${p.step} h vorher)`}
                   {p.kind === "AFTER_CONSULTATION" && ` (${p.step} h danach)`}
                 </span>

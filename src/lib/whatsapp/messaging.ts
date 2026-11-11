@@ -19,6 +19,7 @@ import {
 import {
   activeBatch,
   bulkDecision,
+  immediateDecision,
   parseSendTimes,
   randomGapMs,
   reminderDecision,
@@ -39,7 +40,44 @@ const MAX_ATTEMPTS = 5;
 /** Messages sent per worker run at most (the gap usually stops earlier). */
 const MAX_PER_RUN = 10;
 // Bulk messages: released only at send times and within the limits.
-const BULK_KINDS: OutboundKind[] = ["FIRST_CONTACT", "FOLLOW_UP", "AFTER_CONSULTATION"];
+const BULK_KINDS: OutboundKind[] = [
+  "FIRST_CONTACT",
+  "INTRO_MESSAGE",
+  "FOLLOW_UP",
+  "AFTER_CONSULTATION",
+];
+/** Further opening messages are only planned for first contacts younger than this. */
+const INTRO_MAX_AGE_MS = 7 * 24 * HOUR;
+/** Lead statuses in which opening messages still go out (also after a reply). */
+const INTRO_STATUSES = ["CONTACTED", "IN_CHAT", "NO_RESPONSE"] as const;
+
+type IntroRow = { kind: OutboundKind; step: number; status: string; sentAt: Date | null };
+
+/**
+ * Where a lead stands in the opening messages: the next step to plan (with its due time),
+ * whether one is still pending (planned or queued), and the time of the last one sent.
+ * Failed or cancelled steps count as done.
+ */
+export function introProgress(
+  steps: Array<{ position: number; templateId: string; minDelayMinutes: number }>,
+  firstSentAt: Date,
+  rows: IntroRow[],
+) {
+  let previous = firstSentAt;
+  for (const step of steps) {
+    const row = rows.find((r) => r.kind === "INTRO_MESSAGE" && r.step === step.position);
+    if (!row) {
+      return {
+        pending: true,
+        next: { step, due: new Date(previous.getTime() + step.minDelayMinutes * 60_000) },
+        lastSentAt: previous,
+      };
+    }
+    if (row.status === "QUEUED") return { pending: true, next: null, lastSentAt: previous };
+    if (row.status === "SENT" && row.sentAt) previous = row.sentAt;
+  }
+  return { pending: false, next: null, lastSentAt: previous };
+}
 /** After-consultation messages that are overdue by more than this are skipped. */
 const AFTER_MAX_LATE_MS = 7 * 24 * HOUR;
 const OPT_OUT_WORDS = new Set(["stop", "stopp", "abmelden", "keine nachrichten", "unsubscribe"]);
@@ -117,6 +155,49 @@ export async function planMessages(deps: MessagingDeps) {
     }
   }
 
+  // 1b. Further opening messages after the first contact, one after the other at send times –
+  // always, also when the customer has replied (the bot waits, see waitingForIntroMessages)
+  const introSteps = await prisma.introStep.findMany({ orderBy: { position: "asc" } });
+  if (introSteps.length) {
+    const leads = await prisma.lead.findMany({
+      where: {
+        status: { in: [...INTRO_STATUSES] },
+        ...eligibleLead,
+        firstContactedAt: { gte: new Date(now.getTime() - INTRO_MAX_AGE_MS) },
+      },
+      select: {
+        id: true,
+        outboundMessages: {
+          where: { kind: { in: ["FIRST_CONTACT", "INTRO_MESSAGE"] } },
+          select: { kind: true, step: true, status: true, sentAt: true },
+        },
+      },
+      take: 1000,
+    });
+    for (const lead of leads) {
+      const first = lead.outboundMessages.find(
+        (m) => m.kind === "FIRST_CONTACT" && m.status === "SENT" && m.sentAt,
+      );
+      if (!first?.sentAt) continue;
+      const { next } = introProgress(introSteps, first.sentAt, lead.outboundMessages);
+      if (!next) continue;
+      const res = await prisma.outboundMessage.createMany({
+        data: [
+          {
+            leadId: lead.id,
+            kind: "INTRO_MESSAGE" as const,
+            step: next.step.position,
+            dedupeKey: `intro:${lead.id}:${next.step.position}`,
+            templateId: next.step.templateId,
+            notBefore: next.due,
+          },
+        ],
+        skipDuplicates: true,
+      });
+      planned += res.count;
+    }
+  }
+
   // 2. Follow-ups for contacted leads without reply, then "keine Antwort"
   const steps = await prisma.followUpStep.findMany({ orderBy: { position: "asc" } });
   const contacted = await prisma.lead.findMany({
@@ -134,7 +215,10 @@ export async function planMessages(deps: MessagingDeps) {
     const sent = lead.outboundMessages.filter((m) => m.status === "SENT" && m.sentAt);
     const first = sent.find((m) => m.kind === "FIRST_CONTACT");
     if (!first?.sentAt) continue;
-    let previous = first.sentAt;
+    // Follow-ups start after the last opening message
+    const intro = introProgress(introSteps, first.sentAt, lead.outboundMessages);
+    if (intro.pending && now.getTime() - first.sentAt.getTime() < INTRO_MAX_AGE_MS) continue;
+    let previous = intro.lastSentAt;
     let done = true;
     for (const [index, step] of steps.entries()) {
       const position = index + 1;
@@ -332,6 +416,8 @@ async function stillApplicable(
   if (!lead || !lead.whatsappConsent || !lead.phoneValid || lead.whatsappOptOut || !lead.phoneE164)
     return false;
   if (o.kind === "FIRST_CONTACT") return lead.status === "NEW";
+  if (o.kind === "INTRO_MESSAGE")
+    return (INTRO_STATUSES as readonly string[]).includes(lead.status);
   if (o.kind === "FOLLOW_UP") return lead.status === "CONTACTED";
   if (!o.consultationId) return false;
   if (o.kind === "AFTER_CONSULTATION") {
@@ -376,13 +462,16 @@ export async function dispatchMessages(deps: MessagingDeps): Promise<DispatchRes
 
     const cfg = throttleConfig(settings, tz);
     const batch = activeBatch(now, cfg);
+    // First contacts go out right away (outside quiet hours) unless they wait for send times
+    const immediate = settings.firstContactImmediate;
+    const batchKinds = immediate ? BULK_KINDS.filter((k) => k !== "FIRST_CONTACT") : BULK_KINDS;
     const [sentToday, sentInBatch] = await Promise.all([
       prisma.outboundMessage.count({
         where: { status: "SENT", sentAt: { gte: startOfLocalDay(localDateOf(now, tz), tz) } },
       }),
       batch
         ? prisma.outboundMessage.count({
-            where: { status: "SENT", kind: { in: BULK_KINDS }, sentAt: { gte: batch.start } },
+            where: { status: "SENT", kind: { in: batchKinds }, sentAt: { gte: batch.start } },
           })
         : Promise.resolve(0),
     ]);
@@ -394,28 +483,54 @@ export async function dispatchMessages(deps: MessagingDeps): Promise<DispatchRes
       status: { not: "PAUSED" as const },
     };
 
-    // Reminders first (time-critical), then first contacts / follow-ups in arrival order.
-    let next = await prisma.outboundMessage.findFirst({
-      where: { status: "QUEUED", kind: "REMINDER", notBefore: { lte: now }, template: approved },
-      orderBy: { notBefore: "asc" },
-      include: { template: true },
-    });
-    let decision: Decision = reminderDecision(now, counters);
-    if (!next) {
-      next = await prisma.outboundMessage.findFirst({
+    // Reminders first (time-critical), then immediate first contacts, then the messages
+    // released at send times (first contacts / opening messages / follow-ups) in arrival order.
+    const queued = (kinds: OutboundKind[]) =>
+      prisma.outboundMessage.findFirst({
         where: {
           status: "QUEUED",
-          kind: { in: BULK_KINDS },
+          kind: { in: kinds },
           notBefore: { lte: now },
           template: approved,
         },
         orderBy: [{ kind: "asc" }, { notBefore: "asc" }],
         include: { template: true },
       });
-      decision = bulkDecision(now, cfg, counters);
+    const candidates: Array<{ kinds: OutboundKind[]; decide: () => Decision }> = [
+      { kinds: ["REMINDER"], decide: () => reminderDecision(now, counters) },
+      ...(immediate
+        ? [
+            {
+              kinds: ["FIRST_CONTACT"] as OutboundKind[],
+              decide: () =>
+                immediateDecision(
+                  now,
+                  cfg,
+                  counters,
+                  settings.quietHoursEnabled
+                    ? { start: settings.quietHoursStart, end: settings.quietHoursEnd }
+                    : null,
+                ),
+            },
+          ]
+        : []),
+      { kinds: batchKinds, decide: () => bulkDecision(now, cfg, counters) },
+    ];
+    let next: Awaited<ReturnType<typeof queued>> = null;
+    let waiting: string | null = null;
+    for (const c of candidates) {
+      const found = await queued(c.kinds);
+      if (!found) continue;
+      const decision = c.decide();
+      if (decision.send) {
+        next = found;
+        break;
+      }
+      waiting ??= decision.reason;
+      // Reminders block everything behind them only for the gap between messages
+      if (c.kinds[0] === "REMINDER") break;
     }
-    if (!next) return result;
-    if (!decision.send) return { ...result, waiting: decision.reason };
+    if (!next) return waiting ? { ...result, waiting } : result;
 
     if (!(await stillApplicable(prisma, next, now))) {
       await prisma.outboundMessage.update({
@@ -572,4 +687,34 @@ export async function cancelQueued(prisma: PrismaClient, leadId: string, kinds: 
     where: { leadId, status: "QUEUED", kind: { in: kinds } },
     data: { status: "CANCELLED" },
   });
+}
+
+/**
+ * The bot answers a lead only after the last opening message went out: true while one is
+ * queued or not yet planned for a recent first contact.
+ */
+export async function waitingForIntroMessages(
+  prisma: PrismaClient,
+  leadId: string,
+  now = new Date(),
+) {
+  const [lead, steps] = await Promise.all([
+    prisma.lead.findUnique({
+      where: { id: leadId },
+      select: {
+        whatsappOptOut: true,
+        outboundMessages: {
+          where: { kind: { in: ["FIRST_CONTACT", "INTRO_MESSAGE"] } },
+          select: { kind: true, step: true, status: true, sentAt: true },
+        },
+      },
+    }),
+    prisma.introStep.findMany({ orderBy: { position: "asc" } }),
+  ]);
+  if (!lead || lead.whatsappOptOut || !steps.length) return false;
+  const first = lead.outboundMessages.find(
+    (m) => m.kind === "FIRST_CONTACT" && m.status === "SENT" && m.sentAt,
+  );
+  if (!first?.sentAt || now.getTime() - first.sentAt.getTime() >= INTRO_MAX_AGE_MS) return false;
+  return introProgress(steps, first.sentAt, lead.outboundMessages).pending;
 }
