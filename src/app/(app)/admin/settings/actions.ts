@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { ActionState } from "@/lib/action-state";
-import { requireAdmin } from "@/lib/auth/session";
+import { requireAdmin, requireOperator } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { TEAMUP_PREFIX } from "@/lib/google/calendar";
 import { createTeamupClient } from "@/lib/google/client";
@@ -16,11 +16,12 @@ const schema = z.object({
   consentText: z.string().trim().max(5000),
 });
 
+/** Consent checkbox of the Meta form: maintained by the operator (Betreiber → Zugänge). */
 export async function updateConsentSettings(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireAdmin();
+  await requireOperator();
   const parsed = schema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message };
 
@@ -30,6 +31,7 @@ export async function updateConsentSettings(
   };
   await prisma.appSettings.upsert({ where: { id: 1 }, update: data, create: { id: 1, ...data } });
   revalidatePath("/admin/settings");
+  revalidatePath("/operator/zugaenge");
   return { ok: true, message: "Gespeichert. Gilt für alle ab jetzt eingehenden Leads." };
 }
 

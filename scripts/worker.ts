@@ -24,11 +24,12 @@ import { createMediaDownloader, downloadPendingAttachments } from "../src/lib/wh
 
 const INTERVAL_MS = 30_000;
 const prisma = createPrismaClient();
+// Declared before the first client is built (used inside createWhatsAppClientSafe)
+let lastWhatsAppError = "";
 // Rebuilt every tick: access data can change in the app at any time
 let whatsapp = createWhatsAppClientSafe();
 let calendarDeps = makeCalendarDeps();
 
-let lastWhatsAppError = "";
 function createWhatsAppClientSafe() {
   try {
     const client = createWhatsAppClient();
@@ -125,12 +126,14 @@ async function tick() {
   } catch (err) {
     console.error("[worker] calendar sync failed:", err);
   }
-  try {
-    const media = await downloadPendingAttachments(prisma, createMediaDownloader());
-    if (media.stored) console.info("[worker] stored attachments:", media.stored);
-  } catch (err) {
-    console.error("[worker] media download failed:", err);
-  }
+  // Customer images only arrive through WhatsApp
+  if (whatsapp)
+    try {
+      const media = await downloadPendingAttachments(prisma, createMediaDownloader());
+      if (media.stored) console.info("[worker] stored attachments:", media.stored);
+    } catch (err) {
+      console.error("[worker] media download failed:", err);
+    }
   try {
     const followUps = await notifyDueFollowUps(prisma, push);
     if (followUps) console.info(`[worker] follow-up reminders: ${followUps}`);
