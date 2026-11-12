@@ -27,6 +27,8 @@ export interface WhatsAppClient {
   sendText(input: { to: string; body: string }): Promise<{ messageId: string }>;
   submitTemplate(t: TemplateSubmission): Promise<{ id: string; status: MetaTemplateStatus }>;
   updateTemplate(metaId: string, t: TemplateSubmission): Promise<{ status: MetaTemplateStatus }>;
+  /** Deletes a template at Meta by name (all languages). */
+  deleteTemplate?(name: string): Promise<void>;
 }
 
 export class WhatsAppApiError extends Error {
@@ -94,16 +96,20 @@ export class CloudApiClient implements WhatsAppClient {
     },
   ) {}
 
-  private async post<T>(path: string, body: unknown): Promise<T> {
+  private async post<T>(
+    path: string,
+    body: unknown,
+    method: "POST" | "DELETE" = "POST",
+  ): Promise<T> {
     let res: Response;
     try {
       res = await fetch(`https://graph.facebook.com/${this.opts.apiVersion}/${path}`, {
-        method: "POST",
+        method,
         headers: {
           authorization: `Bearer ${this.opts.accessToken}`,
           "content-type": "application/json",
         },
-        body: JSON.stringify(body),
+        ...(method === "POST" ? { body: JSON.stringify(body) } : {}),
         signal: AbortSignal.timeout(20_000),
       });
     } catch (err) {
@@ -189,6 +195,14 @@ export class CloudApiClient implements WhatsAppClient {
     await this.post(metaId, { category: t.category, components: this.components(t) });
     return { status: "PENDING" as const };
   }
+
+  async deleteTemplate(name: string) {
+    await this.post(
+      `${this.opts.businessAccountId}/message_templates?name=${encodeURIComponent(name)}`,
+      null,
+      "DELETE",
+    );
+  }
 }
 
 /**
@@ -222,6 +236,8 @@ export class MockWhatsAppClient implements WhatsAppClient {
   async updateTemplate() {
     return { status: "APPROVED" as const };
   }
+
+  async deleteTemplate() {}
 }
 
 export function isWhatsAppMock(): boolean {

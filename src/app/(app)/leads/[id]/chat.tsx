@@ -27,7 +27,7 @@ type Planned = {
   step: number;
   notBefore: Date;
   lastError: string | null;
-  template: { name: string };
+  template: { name: string } | null;
 };
 
 export function ChatSection({

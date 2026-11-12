@@ -649,8 +649,9 @@ model OutboundMessage {
   afterRule      AfterConsultationRule? @relation(fields: [afterRuleId], references: [id], onDelete: SetNull)
   // Uniqueness key: lead (first contact/follow-up) or consultation (reminder)
   dedupeKey      String                 @unique
-  templateId     String
-  template       WhatsAppTemplate       @relation(fields: [templateId], references: [id])
+  // null once the template was deleted (the sent text stays in the chat history)
+  templateId     String?
+  template       WhatsAppTemplate?      @relation(fields: [templateId], references: [id], onDelete: SetNull)
   notBefore      DateTime
   status         OutboundStatus         @default(QUEUED)
   attempts       Int                    @default(0)
