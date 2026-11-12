@@ -70,10 +70,25 @@ export default async function TattooersPage() {
                 <h2 className="font-semibold">{t.name}</h2>
                 {t.role === "ADMIN" && <Badge tone="violet">Admin</Badge>}
                 {t.active ? <Badge tone="green">aktiv</Badge> : <Badge>deaktiviert</Badge>}
-                {t.tattooerProfile && isCalendarConnected(t.tattooerProfile) ? (
-                  <Badge tone="blue">{calendarLabel(t.tattooerProfile)} verbunden</Badge>
-                ) : (
-                  <Badge tone="amber">Kalender nicht verbunden</Badge>
+                {/* Every connected calendar; the one NEEDL writes appointments to is marked */}
+                {t.tattooerProfile?.googleConnectedAt && (
+                  <Badge tone={t.tattooerProfile.calendarProvider !== "TEAMUP" ? "blue" : "gray"}>
+                    Google verbunden
+                    {t.tattooerProfile.calendarProvider !== "TEAMUP" && " · Termine hier"}
+                  </Badge>
+                )}
+                {t.tattooerProfile?.teamupConnectedAt && (
+                  <Badge tone={t.tattooerProfile.calendarProvider === "TEAMUP" ? "blue" : "gray"}>
+                    TeamUp verbunden
+                    {t.tattooerProfile.calendarProvider === "TEAMUP" && " · Termine hier"}
+                  </Badge>
+                )}
+                {!(t.tattooerProfile && isCalendarConnected(t.tattooerProfile)) && (
+                  <Badge tone="amber">
+                    {t.tattooerProfile?.googleConnectedAt || t.tattooerProfile?.teamupConnectedAt
+                      ? `${t.tattooerProfile ? calendarLabel(t.tattooerProfile) : "Kalender"} gewählt, aber nicht verbunden`
+                      : "Kalender nicht verbunden"}
+                  </Badge>
                 )}
               </div>
               <p className="mb-3 text-xs text-ink-soft">
