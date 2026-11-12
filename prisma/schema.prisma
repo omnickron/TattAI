@@ -515,42 +515,49 @@ model WhatsAppTemplate {
 
 // Singleton (id = 1): sending schedule and anti-spam staggering.
 model MessagingSettings {
-  id                     Int       @id @default(1)
+  id                      Int       @id @default(1)
   // Master switch; nothing is sent while false
-  sendingEnabled         Boolean   @default(false)
+  sendingEnabled          Boolean   @default(false)
   // Set automatically on quality drops / spam-related errors, or manually
-  pausedAt               DateTime?
-  pausedReason           String?
+  pausedAt                DateTime?
+  pausedReason            String?
   // Fixed send times for first contact and follow-ups: [{ weekday: 1-7, time: "HH:MM" }]
-  sendTimes              Json      @default("[]")
+  sendTimes               Json      @default("[]")
   // A batch runs from a send time for at most this long
-  batchWindowMinutes     Int       @default(90)
-  maxPerBatch            Int       @default(15)
-  maxPerDay              Int       @default(40)
+  batchWindowMinutes      Int       @default(90)
+  maxPerBatch             Int       @default(15)
+  maxPerDay               Int       @default(40)
   // Random gap between two messages
-  minGapSeconds          Int       @default(60)
-  maxGapSeconds          Int       @default(180)
+  minGapSeconds           Int       @default(60)
+  maxGapSeconds           Int       @default(180)
   // Warm-up for a new number: start limit, increase per day until maxPerDay
-  warmupStartDate        DateTime? @db.Date
-  warmupStartPerDay      Int       @default(10)
-  warmupIncreasePerDay   Int       @default(5)
+  warmupStartDate         DateTime? @db.Date
+  warmupStartPerDay       Int       @default(10)
+  warmupIncreasePerDay    Int       @default(5)
   // Lead becomes "keine Antwort" this long after the last follow-up without reply
-  noResponseAfterHours   Int       @default(48)
-  firstContactTemplateId String?
+  noResponseAfterHours    Int       @default(48)
+  firstContactTemplateId  String?
   // First contact right after the lead comes in (outside quiet hours) instead of at send times
-  firstContactImmediate  Boolean   @default(true)
+  firstContactImmediate   Boolean   @default(true)
   // Quiet hours: no immediate first contact in between (local "HH:MM", e.g. 21:00–08:00)
-  quietHoursEnabled      Boolean   @default(true)
-  quietHoursStart        String    @default("21:00")
-  quietHoursEnd          String    @default("08:00")
+  quietHoursEnabled       Boolean   @default(true)
+  quietHoursStart         String    @default("21:00")
+  quietHoursEnd           String    @default("08:00")
   // Runtime state of the dispatcher
-  nextSendAllowedAt      DateTime?
+  nextSendAllowedAt       DateTime?
   // Lease so only one worker process dispatches at a time
-  workerLeaseUntil       DateTime?
-  lastWorkerRunAt        DateTime?
+  workerLeaseUntil        DateTime?
+  lastWorkerRunAt         DateTime?
   // Master switch for the chatbot in all chats
-  botGloballyEnabled     Boolean   @default(true)
-  updatedAt              DateTime  @updatedAt
+  botGloballyEnabled      Boolean   @default(true)
+  // Night rest of the bot: messages in between are answered at the end (local "HH:MM")
+  botQuietEnabled         Boolean   @default(true)
+  botQuietStart           String    @default("22:00")
+  botQuietEnd             String    @default("08:00")
+  // Extra random wait before the bot answers (seconds, on top of the short pause for typing)
+  botReplyDelayMinSeconds Int       @default(30)
+  botReplyDelayMaxSeconds Int       @default(120)
+  updatedAt               DateTime  @updatedAt
 }
 
 // Further opening messages after the first contact, in order (position 2, 3, …): each at least

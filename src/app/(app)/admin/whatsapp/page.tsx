@@ -40,6 +40,8 @@ import {
   resumeSending,
   setBotGloballyEnabled,
   setSendingEnabled,
+  updateBotTiming,
+  updateFirstContactSettings,
   updateMessagingSettings,
 } from "./actions";
 import { WhatsAppTabs } from "./tabs";
@@ -157,7 +159,7 @@ export default async function WhatsAppPage() {
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <Section title="Überblick" description="Status des Versands und was als Nächstes rausgeht.">
         <Card>
           <CardTitle
             action={
@@ -202,8 +204,8 @@ export default async function WhatsAppPage() {
             />
             <Stat
               label="In der Warteschlange"
-              value={(queued.FIRST_CONTACT ?? 0) + (queued.FOLLOW_UP ?? 0) + (queued.REMINDER ?? 0)}
-              hint={`${queued.FIRST_CONTACT ?? 0} Erstk. · ${queued.FOLLOW_UP ?? 0} Nachf. · ${queued.REMINDER ?? 0} Erinn.`}
+              value={Object.values(queued).reduce((sum, n) => sum + (n ?? 0), 0)}
+              hint={`${(queued.FIRST_CONTACT ?? 0) + (queued.INTRO_MESSAGE ?? 0)} Erstn. · ${queued.FOLLOW_UP ?? 0} Nachf. · ${queued.REMINDER ?? 0} Erinn.`}
             />
           </div>
           {workerStale && (
@@ -253,7 +255,7 @@ export default async function WhatsAppPage() {
                     </Link>
                     <span className="block text-xs text-ink-soft">
                       {OUTBOUND_KIND_LABELS[q.kind]}
-                      {q.kind === "FOLLOW_UP" && ` ${q.step}`}
+                      {(q.kind === "FOLLOW_UP" || q.kind === "INTRO_MESSAGE") && ` ${q.step}`}
                       {q.kind === "REMINDER" && ` ${q.step} h vorher`}
                       {q.kind === "AFTER_CONSULTATION" && ` ${q.step} h danach`} · ab{" "}
                       {formatDateTime(q.notBefore)}
@@ -288,16 +290,419 @@ export default async function WhatsAppPage() {
             </>
           )}
         </Card>
+      </Section>
 
+      <Section
+        title="Ablauf nach dem Lead-Formular"
+        description="Welche Nachrichten ein neuer Lead bekommt – und wann der Bot übernimmt."
+      >
+        <Card className="lg:col-span-2">
+          <CardTitle>1. Erstkontakt</CardTitle>
+          <ActionForm action={updateFirstContactSettings} className="space-y-3">
+            <Field label="1. Erstkontakt (Template)" htmlFor="firstContactTemplateId">
+              <Select
+                id="firstContactTemplateId"
+                name="firstContactTemplateId"
+                defaultValue={settings.firstContactTemplateId ?? ""}
+              >
+                <option value="">– keins (kein automatischer Erstkontakt) –</option>
+                {byPurpose("FIRST_CONTACT").map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} {t.approvedText ? "" : "(noch nicht genehmigt)"}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                name="firstContactImmediate"
+                defaultChecked={settings.firstContactImmediate}
+              />
+              Sofort nach dem Ausfüllen senden (sonst zur nächsten Sendezeit)
+            </label>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  name="quietHoursEnabled"
+                  defaultChecked={settings.quietHoursEnabled}
+                />
+                Ruhezeit beachten: keine Sofort-Nachrichten von
+              </label>
+              <TimeSelect
+                name="quietHoursStart"
+                defaultValue={settings.quietHoursStart}
+                aria-label="Ruhezeit Beginn"
+              />
+              <span className="text-ink-soft">bis</span>
+              <TimeSelect
+                name="quietHoursEnd"
+                defaultValue={settings.quietHoursEnd}
+                aria-label="Ruhezeit Ende"
+              />
+            </div>
+            <Button type="submit">Speichern</Button>
+          </ActionForm>
+        </Card>
+
+        <Card>
+          <CardTitle>2. Weitere Erstnachrichten</CardTitle>
+          <p className="mb-3 text-sm text-ink-soft">
+            Nach dem Erstkontakt (Nachricht 1) gehen diese Nachrichten nacheinander raus – je nach
+            Einstellung zur nächsten Sendezeit oder direkt nach der Wartezeit (dann gilt die
+            Ruhezeit). Sie gehen immer raus, auch wenn der Kunde schon geantwortet hat. Der Bot
+            antwortet erst nach der letzten. Ohne Einträge antwortet er sofort.
+          </p>
+          {introSteps.length > 0 && (
+            <ol className="mb-3 divide-y divide-line text-sm">
+              {introSteps.map((s) => (
+                <li key={s.id} className="flex items-center justify-between gap-2 py-2">
+                  <span>
+                    <span className="font-medium">{s.position}.</span>{" "}
+                    {s.atSendTime
+                      ? `frühestens ${s.minDelayMinutes} Min. nach Nachricht ${s.position - 1}, zur nächsten Sendezeit`
+                      : `${s.minDelayMinutes} Min. nach Nachricht ${s.position - 1}, direkt`}{" "}
+                    · <span className="text-ink-soft">{s.template.name}</span>
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <ActionForm action={toggleIntroStepSendTime.bind(null, s.id)}>
+                      <Button type="submit" variant="ghost" className="px-2 py-1 text-xs">
+                        {s.atSendTime ? "Direkt senden" : "Zur Sendezeit"}
+                      </Button>
+                    </ActionForm>
+                    <ActionForm action={deleteIntroStep.bind(null, s.id)}>
+                      <Button type="submit" variant="ghost" className="px-2 py-1 text-xs">
+                        Entfernen
+                      </Button>
+                    </ActionForm>
+                  </span>
+                </li>
+              ))}
+            </ol>
+          )}
+          <ActionForm
+            action={addIntroStep}
+            className="grid grid-cols-[7rem_1fr] items-end gap-2 space-y-0"
+          >
+            <Field label="Nach (Min.)" htmlFor="minDelayMinutes">
+              <Input
+                id="minDelayMinutes"
+                name="minDelayMinutes"
+                type="number"
+                min={0}
+                defaultValue={60}
+              />
+            </Field>
+            <Field
+              label="Template"
+              htmlFor="intro-template"
+              hint={
+                introTemplates.length
+                  ? undefined
+                  : "Noch keine Vorlage für Erstkontakt oder Nachfassen – zuerst unter „Templates“ anlegen."
+              }
+            >
+              <Select id="intro-template" name="templateId" disabled={!introTemplates.length}>
+                {introTemplates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} {t.approvedText ? "" : "(noch nicht genehmigt)"}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <label className="col-span-2 flex items-center gap-2 text-sm">
+              <input type="checkbox" name="atSendTime" defaultChecked />
+              Zur nächsten Sendezeit senden (sonst direkt nach der Wartezeit)
+            </label>
+            <div className="col-span-2">
+              <Button type="submit" variant="secondary" disabled={!introTemplates.length}>
+                Nachricht {introSteps.length + 2} hinzufügen
+              </Button>
+            </div>
+          </ActionForm>
+        </Card>
+
+        <Card>
+          <CardTitle>3. Nachfassen ohne Antwort</CardTitle>
+          {steps.length === 0 ? (
+            <p className="mb-3 text-sm text-ink-soft">Kein Nachfassen eingerichtet.</p>
+          ) : (
+            <ol className="mb-3 divide-y divide-line text-sm">
+              {steps.map((s) => (
+                <li key={s.id} className="flex items-center justify-between gap-2 py-2">
+                  <span>
+                    <span className="font-medium">{s.position}.</span> {s.delayHours} Std. nach der{" "}
+                    {s.position === 1
+                      ? introSteps.length
+                        ? "letzten Erstnachricht"
+                        : "Erstansprache"
+                      : "vorigen Nachricht"}{" "}
+                    · <span className="text-ink-soft">{s.template.name}</span>
+                  </span>
+                  <ActionForm action={deleteFollowUpStep.bind(null, s.id)}>
+                    <Button type="submit" variant="ghost" className="px-2 py-1 text-xs">
+                      Entfernen
+                    </Button>
+                  </ActionForm>
+                </li>
+              ))}
+            </ol>
+          )}
+          <p className="mb-3 text-xs text-ink-soft">
+            Antwortet der Kunde, entfallen alle weiteren Schritte. Nachfass-Nachrichten gehen
+            ebenfalls nur zu den Sendezeiten raus.
+          </p>
+          <ActionForm
+            action={addFollowUpStep}
+            className="grid grid-cols-[7rem_1fr] items-end gap-2 space-y-0"
+          >
+            <Field label="Nach (Std.)" htmlFor="delayHours">
+              <Input id="delayHours" name="delayHours" type="number" min={1} defaultValue={24} />
+            </Field>
+            <Field label="Template" htmlFor="follow-template">
+              <Select id="follow-template" name="templateId">
+                {byPurpose("FOLLOW_UP").map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <div className="col-span-2">
+              <Button type="submit" variant="secondary">
+                Schritt hinzufügen
+              </Button>
+            </div>
+          </ActionForm>
+        </Card>
+      </Section>
+
+      <Section title="Termine" description="Erinnerungen vor und Nachrichten nach der Beratung.">
+        <Card>
+          <CardTitle>Erinnerungen vor dem Termin</CardTitle>
+          {reminders.length === 0 ? (
+            <p className="mb-3 text-sm text-ink-soft">Keine Erinnerungen eingerichtet.</p>
+          ) : (
+            <ul className="mb-3 divide-y divide-line text-sm">
+              {reminders.map((r) => (
+                <li key={r.id} className="flex items-center justify-between gap-2 py-2">
+                  <span>
+                    {r.hoursBefore} Std. vorher ·{" "}
+                    <span className="text-ink-soft">{r.template.name}</span>
+                  </span>
+                  <ActionForm action={deleteReminderRule.bind(null, r.id)}>
+                    <Button type="submit" variant="ghost" className="px-2 py-1 text-xs">
+                      Entfernen
+                    </Button>
+                  </ActionForm>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mb-3 text-xs text-ink-soft">
+            Erinnerungen gehen pünktlich raus (auch außerhalb der Sendezeiten), halten aber den
+            Abstand ein.
+          </p>
+          <ActionForm
+            action={addReminderRule}
+            className="grid grid-cols-[7rem_1fr] items-end gap-2 space-y-0"
+          >
+            <Field label="Std. vorher" htmlFor="hoursBefore">
+              <Input id="hoursBefore" name="hoursBefore" type="number" min={1} defaultValue={24} />
+            </Field>
+            <Field label="Template" htmlFor="reminder-template">
+              <Select id="reminder-template" name="templateId">
+                {byPurpose("REMINDER").map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <div className="col-span-2">
+              <Button type="submit" variant="secondary">
+                Erinnerung hinzufügen
+              </Button>
+            </div>
+          </ActionForm>
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <CardTitle>Nach dem Termin</CardTitle>
+          {afterRules.length === 0 ? (
+            <p className="mb-3 text-sm text-ink-soft">
+              Keine Nachrichten nach dem Termin eingerichtet.
+            </p>
+          ) : (
+            <ul className="mb-3 divide-y divide-line text-sm">
+              {afterRules.map((r) => (
+                <li key={r.id} className="flex items-center justify-between gap-2 py-2">
+                  <span>
+                    {r.hoursAfter === 0 ? "Direkt" : `${r.hoursAfter} Std.`} nach der Beratung ·{" "}
+                    {AFTER_CONDITION_LABELS[r.condition]} ·{" "}
+                    <span className="text-ink-soft">{r.template.name}</span>
+                  </span>
+                  <ActionForm action={deleteAfterRule.bind(null, r.id)}>
+                    <Button type="submit" variant="ghost" className="px-2 py-1 text-xs">
+                      Entfernen
+                    </Button>
+                  </ActionForm>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mb-3 text-xs text-ink-soft">
+            Gesendet wird, sobald das Ergebnis der Beratung eingetragen ist und der Abstand erreicht
+            ist – zu den Sendezeiten und innerhalb der Limits. Passt das Ergebnis beim Versand nicht
+            mehr (z. B. korrigiert), entfällt die Nachricht; mehr als 7 Tage überfällige Nachrichten
+            werden nicht mehr verschickt.
+          </p>
+          <ActionForm
+            action={addAfterRule}
+            className="grid items-end gap-2 space-y-0 sm:grid-cols-[7rem_1fr_1fr_auto]"
+          >
+            <Field label="Std. danach" htmlFor="hoursAfter">
+              <Input id="hoursAfter" name="hoursAfter" type="number" min={0} defaultValue={2} />
+            </Field>
+            <Field label="Wann" htmlFor="condition">
+              <Select id="condition" name="condition" defaultValue="TATTOO_BOOKED">
+                {Object.entries(AFTER_CONDITION_LABELS).map(([k, v]) => (
+                  <option key={k} value={k}>
+                    {v}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Template" htmlFor="after-template">
+              <Select id="after-template" name="templateId">
+                {byPurpose("AFTER_CONSULTATION").length === 0 && (
+                  <option value="">– erst unter „Texte“ ein Template anlegen –</option>
+                )}
+                {byPurpose("AFTER_CONSULTATION").map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Button type="submit" variant="secondary">
+              Hinzufügen
+            </Button>
+          </ActionForm>
+        </Card>
+      </Section>
+
+      <Section title="Chatbot" description="Bot ein- und ausschalten, Nachtruhe und Antwortzeiten.">
+        <Card className="lg:col-span-2">
+          <CardTitle
+            action={
+              settings.botGloballyEnabled ? <Badge tone="green">aktiv</Badge> : <Badge>aus</Badge>
+            }
+          >
+            Chatbot
+          </CardTitle>
+          <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-start">
+            <div className="space-y-1 text-sm text-ink-soft">
+              <p>
+                Der Bot beantwortet Kundennachrichten über die Bot-Schnittstelle. Sobald jemand im
+                Chat selbst antwortet, schaltet er sich dort ab; pro Chat lässt er sich auf der
+                Lead-Seite ein- und ausschalten.
+              </p>
+              <p>
+                Anbindung:{" "}
+                {botConfigured
+                  ? "eingerichtet"
+                  : "noch nicht eingerichtet (BOT_API_KEY, BOT_WEBHOOK_URL, BOT_WEBHOOK_SECRET)"}{" "}
+                · Chats ohne Bot: {takenOver} · Ereignisse: {botCount.PROCESSED ?? 0} zugestellt,{" "}
+                {botCount.PENDING ?? 0} offen, {botCount.FAILED ?? 0} mit Fehler,{" "}
+                {botCount.DEAD ?? 0} verworfen
+              </p>
+            </div>
+            <ActionForm
+              action={setBotGloballyEnabled.bind(null, !settings.botGloballyEnabled)}
+              confirm={
+                settings.botGloballyEnabled ? "Bot wirklich für alle Chats ausschalten?" : undefined
+              }
+            >
+              <Button type="submit" variant={settings.botGloballyEnabled ? "danger" : "primary"}>
+                {settings.botGloballyEnabled ? "Bot überall ausschalten" : "Bot wieder einschalten"}
+              </Button>
+            </ActionForm>
+          </div>
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <CardTitle>Antwortzeiten des Bots</CardTitle>
+          <ActionForm action={updateBotTiming} className="space-y-3">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  name="botQuietEnabled"
+                  defaultChecked={settings.botQuietEnabled}
+                />
+                Nachtruhe: keine Antworten von
+              </label>
+              <TimeSelect
+                name="botQuietStart"
+                defaultValue={settings.botQuietStart}
+                aria-label="Nachtruhe Beginn"
+              />
+              <span className="text-ink-soft">bis</span>
+              <TimeSelect
+                name="botQuietEnd"
+                defaultValue={settings.botQuietEnd}
+                aria-label="Nachtruhe Ende"
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+              <span>Zusätzliche Wartezeit vor jeder Antwort: zufällig</span>
+              <Input
+                name="botReplyDelayMinSeconds"
+                type="number"
+                min={0}
+                max={3600}
+                defaultValue={settings.botReplyDelayMinSeconds}
+                aria-label="Wartezeit von (Sekunden)"
+                className="w-24"
+              />
+              <span className="text-ink-soft">bis</span>
+              <Input
+                name="botReplyDelayMaxSeconds"
+                type="number"
+                min={0}
+                max={3600}
+                defaultValue={settings.botReplyDelayMaxSeconds}
+                aria-label="Wartezeit bis (Sekunden)"
+                className="w-24"
+              />
+              <span className="text-ink-soft">Sekunden</span>
+            </div>
+            <p className="text-xs text-ink-soft">
+              Der Bot wartet immer 20 Sekunden, ob noch etwas nachkommt, dann zusätzlich die
+              Wartezeit. Nachrichten in der Nachtruhe beantwortet er an deren Ende, gestaffelt um
+              dieselbe Wartezeit.
+            </p>
+            <Button type="submit">Speichern</Button>
+          </ActionForm>
+        </Card>
+      </Section>
+
+      <Section
+        title="Sendezeiten und Schutz vor Spam"
+        description="Wann gesammelte Nachrichten rausgehen und wie viele – damit die Nummer nicht als Spam auffällt."
+      >
         <Card className="lg:col-span-2">
           <CardTitle>Sendezeiten und Staffelung</CardTitle>
           <ActionForm action={updateMessagingSettings}>
             <div className="grid gap-6 lg:grid-cols-2">
               <div className="space-y-2">
                 <p className="text-sm text-ink-soft">
-                  Die zweite Nachricht und das Nachfassen werden nur ab diesen Uhrzeiten verschickt,
-                  die Erstansprache nur, wenn sie nicht sofort rausgeht (mehrere mit Komma trennen,
-                  leer = an diesem Tag nicht).
+                  Weitere Erstnachrichten (wenn „zur Sendezeit“), Nachfassen und Nachrichten nach
+                  dem Termin gehen nur ab diesen Uhrzeiten raus; die Erstansprache nur, wenn sie
+                  nicht sofort gesendet wird. Mehrere Uhrzeiten mit Komma trennen, leer = an diesem
+                  Tag nicht.
                 </p>
                 {Object.entries(WEEKDAY_LABELS).map(([n, label]) => (
                   <div key={n} className="grid grid-cols-[6.5rem_1fr] items-center gap-2">
@@ -418,344 +823,31 @@ export default async function WhatsAppPage() {
                     </Field>
                   </div>
                 </div>
-                <div className="col-span-2 space-y-3 rounded-lg bg-muted/60 p-3">
-                  <p className="text-sm font-medium">Ablauf nach dem Lead-Formular</p>
-                  <Field label="1. Erstkontakt (Template)" htmlFor="firstContactTemplateId">
-                    <Select
-                      id="firstContactTemplateId"
-                      name="firstContactTemplateId"
-                      defaultValue={settings.firstContactTemplateId ?? ""}
-                    >
-                      <option value="">– keins (kein automatischer Erstkontakt) –</option>
-                      {byPurpose("FIRST_CONTACT").map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.name} {t.approvedText ? "" : "(noch nicht genehmigt)"}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      name="firstContactImmediate"
-                      defaultChecked={settings.firstContactImmediate}
-                    />
-                    Sofort nach dem Ausfüllen senden (sonst zur nächsten Sendezeit)
-                  </label>
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        name="quietHoursEnabled"
-                        defaultChecked={settings.quietHoursEnabled}
-                      />
-                      Ruhezeit beachten: keine Sofort-Nachrichten von
-                    </label>
-                    <TimeSelect
-                      name="quietHoursStart"
-                      defaultValue={settings.quietHoursStart}
-                      aria-label="Ruhezeit Beginn"
-                    />
-                    <span className="text-ink-soft">bis</span>
-                    <TimeSelect
-                      name="quietHoursEnd"
-                      defaultValue={settings.quietHoursEnd}
-                      aria-label="Ruhezeit Ende"
-                    />
-                  </div>
-                  <p className="text-xs text-ink-soft">
-                    Weitere Erstnachrichten legst du im Kasten „Weitere Erstnachrichten“ an.
-                    Antwortet der Kunde danach nicht, folgt das Nachfassen – gerechnet ab der
-                    letzten Erstnachricht.
-                  </p>
-                </div>
               </div>
             </div>
             <Button type="submit">Speichern</Button>
           </ActionForm>
         </Card>
-
-        <Card>
-          <CardTitle>Weitere Erstnachrichten</CardTitle>
-          <p className="mb-3 text-sm text-ink-soft">
-            Nach dem Erstkontakt (Nachricht 1) gehen diese Nachrichten nacheinander raus – je nach
-            Einstellung zur nächsten Sendezeit oder direkt nach der Wartezeit (dann gilt die
-            Ruhezeit). Sie gehen immer raus, auch wenn der Kunde schon geantwortet hat. Der Bot
-            antwortet erst nach der letzten. Ohne Einträge antwortet er sofort.
-          </p>
-          {introSteps.length > 0 && (
-            <ol className="mb-3 divide-y divide-line text-sm">
-              {introSteps.map((s) => (
-                <li key={s.id} className="flex items-center justify-between gap-2 py-2">
-                  <span>
-                    <span className="font-medium">{s.position}.</span>{" "}
-                    {s.atSendTime
-                      ? `frühestens ${s.minDelayMinutes} Min. nach Nachricht ${s.position - 1}, zur nächsten Sendezeit`
-                      : `${s.minDelayMinutes} Min. nach Nachricht ${s.position - 1}, direkt`}{" "}
-                    · <span className="text-ink-soft">{s.template.name}</span>
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <ActionForm action={toggleIntroStepSendTime.bind(null, s.id)}>
-                      <Button type="submit" variant="ghost" className="px-2 py-1 text-xs">
-                        {s.atSendTime ? "Direkt senden" : "Zur Sendezeit"}
-                      </Button>
-                    </ActionForm>
-                    <ActionForm action={deleteIntroStep.bind(null, s.id)}>
-                      <Button type="submit" variant="ghost" className="px-2 py-1 text-xs">
-                        Entfernen
-                      </Button>
-                    </ActionForm>
-                  </span>
-                </li>
-              ))}
-            </ol>
-          )}
-          <ActionForm
-            action={addIntroStep}
-            className="grid grid-cols-[7rem_1fr] items-end gap-2 space-y-0"
-          >
-            <Field label="Nach (Min.)" htmlFor="minDelayMinutes">
-              <Input
-                id="minDelayMinutes"
-                name="minDelayMinutes"
-                type="number"
-                min={0}
-                defaultValue={60}
-              />
-            </Field>
-            <Field
-              label="Template"
-              htmlFor="intro-template"
-              hint={
-                introTemplates.length
-                  ? undefined
-                  : "Noch keine Vorlage für Erstkontakt oder Nachfassen – zuerst unter „Templates“ anlegen."
-              }
-            >
-              <Select id="intro-template" name="templateId" disabled={!introTemplates.length}>
-                {introTemplates.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} {t.approvedText ? "" : "(noch nicht genehmigt)"}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <label className="col-span-2 flex items-center gap-2 text-sm">
-              <input type="checkbox" name="atSendTime" defaultChecked />
-              Zur nächsten Sendezeit senden (sonst direkt nach der Wartezeit)
-            </label>
-            <div className="col-span-2">
-              <Button type="submit" variant="secondary" disabled={!introTemplates.length}>
-                Nachricht {introSteps.length + 2} hinzufügen
-              </Button>
-            </div>
-          </ActionForm>
-        </Card>
-
-        <Card>
-          <CardTitle>Nachfassen ohne Antwort</CardTitle>
-          {steps.length === 0 ? (
-            <p className="mb-3 text-sm text-ink-soft">Kein Nachfassen eingerichtet.</p>
-          ) : (
-            <ol className="mb-3 divide-y divide-line text-sm">
-              {steps.map((s) => (
-                <li key={s.id} className="flex items-center justify-between gap-2 py-2">
-                  <span>
-                    <span className="font-medium">{s.position}.</span> {s.delayHours} Std. nach der{" "}
-                    {s.position === 1
-                      ? introSteps.length
-                        ? "letzten Erstnachricht"
-                        : "Erstansprache"
-                      : "vorigen Nachricht"}{" "}
-                    · <span className="text-ink-soft">{s.template.name}</span>
-                  </span>
-                  <ActionForm action={deleteFollowUpStep.bind(null, s.id)}>
-                    <Button type="submit" variant="ghost" className="px-2 py-1 text-xs">
-                      Entfernen
-                    </Button>
-                  </ActionForm>
-                </li>
-              ))}
-            </ol>
-          )}
-          <p className="mb-3 text-xs text-ink-soft">
-            Antwortet der Kunde, entfallen alle weiteren Schritte. Nachfass-Nachrichten gehen
-            ebenfalls nur zu den Sendezeiten raus.
-          </p>
-          <ActionForm
-            action={addFollowUpStep}
-            className="grid grid-cols-[7rem_1fr] items-end gap-2 space-y-0"
-          >
-            <Field label="Nach (Std.)" htmlFor="delayHours">
-              <Input id="delayHours" name="delayHours" type="number" min={1} defaultValue={24} />
-            </Field>
-            <Field label="Template" htmlFor="follow-template">
-              <Select id="follow-template" name="templateId">
-                {byPurpose("FOLLOW_UP").map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <div className="col-span-2">
-              <Button type="submit" variant="secondary">
-                Schritt hinzufügen
-              </Button>
-            </div>
-          </ActionForm>
-        </Card>
-
-        <Card>
-          <CardTitle>Erinnerungen vor dem Termin</CardTitle>
-          {reminders.length === 0 ? (
-            <p className="mb-3 text-sm text-ink-soft">Keine Erinnerungen eingerichtet.</p>
-          ) : (
-            <ul className="mb-3 divide-y divide-line text-sm">
-              {reminders.map((r) => (
-                <li key={r.id} className="flex items-center justify-between gap-2 py-2">
-                  <span>
-                    {r.hoursBefore} Std. vorher ·{" "}
-                    <span className="text-ink-soft">{r.template.name}</span>
-                  </span>
-                  <ActionForm action={deleteReminderRule.bind(null, r.id)}>
-                    <Button type="submit" variant="ghost" className="px-2 py-1 text-xs">
-                      Entfernen
-                    </Button>
-                  </ActionForm>
-                </li>
-              ))}
-            </ul>
-          )}
-          <p className="mb-3 text-xs text-ink-soft">
-            Erinnerungen gehen pünktlich raus (auch außerhalb der Sendezeiten), halten aber den
-            Abstand ein.
-          </p>
-          <ActionForm
-            action={addReminderRule}
-            className="grid grid-cols-[7rem_1fr] items-end gap-2 space-y-0"
-          >
-            <Field label="Std. vorher" htmlFor="hoursBefore">
-              <Input id="hoursBefore" name="hoursBefore" type="number" min={1} defaultValue={24} />
-            </Field>
-            <Field label="Template" htmlFor="reminder-template">
-              <Select id="reminder-template" name="templateId">
-                {byPurpose("REMINDER").map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <div className="col-span-2">
-              <Button type="submit" variant="secondary">
-                Erinnerung hinzufügen
-              </Button>
-            </div>
-          </ActionForm>
-        </Card>
-        <Card className="lg:col-span-2">
-          <CardTitle>Nach dem Termin</CardTitle>
-          {afterRules.length === 0 ? (
-            <p className="mb-3 text-sm text-ink-soft">
-              Keine Nachrichten nach dem Termin eingerichtet.
-            </p>
-          ) : (
-            <ul className="mb-3 divide-y divide-line text-sm">
-              {afterRules.map((r) => (
-                <li key={r.id} className="flex items-center justify-between gap-2 py-2">
-                  <span>
-                    {r.hoursAfter === 0 ? "Direkt" : `${r.hoursAfter} Std.`} nach der Beratung ·{" "}
-                    {AFTER_CONDITION_LABELS[r.condition]} ·{" "}
-                    <span className="text-ink-soft">{r.template.name}</span>
-                  </span>
-                  <ActionForm action={deleteAfterRule.bind(null, r.id)}>
-                    <Button type="submit" variant="ghost" className="px-2 py-1 text-xs">
-                      Entfernen
-                    </Button>
-                  </ActionForm>
-                </li>
-              ))}
-            </ul>
-          )}
-          <p className="mb-3 text-xs text-ink-soft">
-            Gesendet wird, sobald das Ergebnis der Beratung eingetragen ist und der Abstand erreicht
-            ist – zu den Sendezeiten und innerhalb der Limits. Passt das Ergebnis beim Versand nicht
-            mehr (z. B. korrigiert), entfällt die Nachricht; mehr als 7 Tage überfällige Nachrichten
-            werden nicht mehr verschickt.
-          </p>
-          <ActionForm
-            action={addAfterRule}
-            className="grid items-end gap-2 space-y-0 sm:grid-cols-[7rem_1fr_1fr_auto]"
-          >
-            <Field label="Std. danach" htmlFor="hoursAfter">
-              <Input id="hoursAfter" name="hoursAfter" type="number" min={0} defaultValue={2} />
-            </Field>
-            <Field label="Wann" htmlFor="condition">
-              <Select id="condition" name="condition" defaultValue="TATTOO_BOOKED">
-                {Object.entries(AFTER_CONDITION_LABELS).map(([k, v]) => (
-                  <option key={k} value={k}>
-                    {v}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Template" htmlFor="after-template">
-              <Select id="after-template" name="templateId">
-                {byPurpose("AFTER_CONSULTATION").length === 0 && (
-                  <option value="">– erst unter „Texte“ ein Template anlegen –</option>
-                )}
-                {byPurpose("AFTER_CONSULTATION").map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Button type="submit" variant="secondary">
-              Hinzufügen
-            </Button>
-          </ActionForm>
-        </Card>
-
-        <Card className="lg:col-span-2">
-          <CardTitle
-            action={
-              settings.botGloballyEnabled ? <Badge tone="green">aktiv</Badge> : <Badge>aus</Badge>
-            }
-          >
-            Chatbot
-          </CardTitle>
-          <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-start">
-            <div className="space-y-1 text-sm text-ink-soft">
-              <p>
-                Der Bot beantwortet Kundennachrichten über die Bot-Schnittstelle. Sobald jemand im
-                Chat selbst antwortet, schaltet er sich dort ab; pro Chat lässt er sich auf der
-                Lead-Seite ein- und ausschalten.
-              </p>
-              <p>
-                Anbindung:{" "}
-                {botConfigured
-                  ? "eingerichtet"
-                  : "noch nicht eingerichtet (BOT_API_KEY, BOT_WEBHOOK_URL, BOT_WEBHOOK_SECRET)"}{" "}
-                · Chats ohne Bot: {takenOver} · Ereignisse: {botCount.PROCESSED ?? 0} zugestellt,{" "}
-                {botCount.PENDING ?? 0} offen, {botCount.FAILED ?? 0} mit Fehler,{" "}
-                {botCount.DEAD ?? 0} verworfen
-              </p>
-            </div>
-            <ActionForm
-              action={setBotGloballyEnabled.bind(null, !settings.botGloballyEnabled)}
-              confirm={
-                settings.botGloballyEnabled ? "Bot wirklich für alle Chats ausschalten?" : undefined
-              }
-            >
-              <Button type="submit" variant={settings.botGloballyEnabled ? "danger" : "primary"}>
-                {settings.botGloballyEnabled ? "Bot überall ausschalten" : "Bot wieder einschalten"}
-              </Button>
-            </ActionForm>
-          </div>
-        </Card>
-      </div>
+      </Section>
     </>
+  );
+}
+
+/** A titled block of cards on the page. */
+function Section({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="mb-10">
+      <h2 className="text-lg font-semibold">{title}</h2>
+      <p className="mb-3 text-sm text-ink-soft">{description}</p>
+      <div className="grid gap-4 lg:grid-cols-2">{children}</div>
+    </section>
   );
 }

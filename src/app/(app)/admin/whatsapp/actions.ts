@@ -52,9 +52,6 @@ const settingsSchema = z
     warmupStartPerDay: int(1, 10000),
     warmupIncreasePerDay: int(0, 10000),
     noResponseAfterHours: int(1, 24 * 30),
-    firstContactTemplateId: z.string().optional().default(""),
-    quietHoursStart: z.string().optional().default("21:00"),
-    quietHoursEnd: z.string().optional().default("08:00"),
   })
   .refine((v) => v.maxGapSeconds >= v.minGapSeconds, {
     message: "Der maximale Abstand muss ≥ dem minimalen sein.",
@@ -81,15 +78,6 @@ export async function updateMessagingSettings(
   }
   if (v.warmupStartDate && !isLocalDate(v.warmupStartDate))
     return { ok: false, message: "Ungültiges Startdatum." };
-  if (v.firstContactTemplateId) {
-    const t = await prisma.whatsAppTemplate.findFirst({
-      where: { id: v.firstContactTemplateId, purpose: "FIRST_CONTACT" },
-    });
-    if (!t) return { ok: false, message: "Template für den Erstkontakt nicht gefunden." };
-  }
-  for (const t of [v.quietHoursStart, v.quietHoursEnd])
-    if (parseTimeOfDay(t) === null) return { ok: false, message: `Ungültige Uhrzeit „${t}“.` };
-
   await loadMessagingSettings(prisma);
   await prisma.messagingSettings.update({
     where: { id: 1 },
@@ -97,9 +85,66 @@ export async function updateMessagingSettings(
       ...v,
       sendTimes: parseSendTimes(raw) as unknown as Prisma.InputJsonValue,
       warmupStartDate: v.warmupStartDate ? new Date(`${v.warmupStartDate}T00:00:00Z`) : null,
-      firstContactTemplateId: v.firstContactTemplateId || null,
+    },
+  });
+  return ok("Gespeichert.");
+}
+
+/** First contact: template, right away or at send times, quiet hours. */
+export async function updateFirstContactSettings(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireAdmin();
+  const templateId = String(formData.get("firstContactTemplateId") ?? "");
+  const start = String(formData.get("quietHoursStart") ?? "21:00");
+  const end = String(formData.get("quietHoursEnd") ?? "08:00");
+  if (templateId) {
+    const t = await prisma.whatsAppTemplate.findFirst({
+      where: { id: templateId, purpose: "FIRST_CONTACT" },
+    });
+    if (!t) return { ok: false, message: "Template für den Erstkontakt nicht gefunden." };
+  }
+  for (const t of [start, end])
+    if (parseTimeOfDay(t) === null) return { ok: false, message: `Ungültige Uhrzeit „${t}“.` };
+  await loadMessagingSettings(prisma);
+  await prisma.messagingSettings.update({
+    where: { id: 1 },
+    data: {
+      firstContactTemplateId: templateId || null,
       firstContactImmediate: formData.get("firstContactImmediate") === "on",
       quietHoursEnabled: formData.get("quietHoursEnabled") === "on",
+      quietHoursStart: start,
+      quietHoursEnd: end,
+    },
+  });
+  return ok("Gespeichert.");
+}
+
+/** Bot: night rest and extra random wait before answering. */
+export async function updateBotTiming(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireAdmin();
+  const start = String(formData.get("botQuietStart") ?? "22:00");
+  const end = String(formData.get("botQuietEnd") ?? "08:00");
+  for (const t of [start, end])
+    if (parseTimeOfDay(t) === null) return { ok: false, message: `Ungültige Uhrzeit „${t}“.` };
+  const min = Number(formData.get("botReplyDelayMinSeconds"));
+  const max = Number(formData.get("botReplyDelayMaxSeconds"));
+  if (![min, max].every((n) => Number.isInteger(n) && n >= 0 && n <= 3600))
+    return { ok: false, message: "Wartezeit: 0 bis 3600 Sekunden." };
+  if (max < min) return { ok: false, message: "„Bis“ muss mindestens so groß sein wie „von“." };
+  await loadMessagingSettings(prisma);
+  await prisma.messagingSettings.update({
+    where: { id: 1 },
+    data: {
+      botQuietEnabled: formData.get("botQuietEnabled") === "on",
+      botQuietStart: start,
+      botQuietEnd: end,
+      botReplyDelayMinSeconds: min,
+      botReplyDelayMaxSeconds: max,
     },
   });
   return ok("Gespeichert.");
