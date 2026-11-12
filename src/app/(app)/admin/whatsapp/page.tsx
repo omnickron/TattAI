@@ -385,7 +385,7 @@ export default async function WhatsAppPage() {
           )}
           <ActionForm
             action={addIntroStep}
-            className="grid grid-cols-[7rem_1fr] items-end gap-2 space-y-0"
+            className="grid grid-cols-[7rem_1fr] items-start gap-2 space-y-0"
           >
             <Field label="Nach (Min.)" htmlFor="minDelayMinutes">
               <Input
@@ -396,16 +396,9 @@ export default async function WhatsAppPage() {
                 defaultValue={60}
               />
             </Field>
-            <Field
-              label="Template"
-              htmlFor="intro-template"
-              hint={
-                introTemplates.length
-                  ? undefined
-                  : "Noch keine Vorlage für Erstkontakt oder Nachfassen – zuerst unter „Templates“ anlegen."
-              }
-            >
+            <Field label="Template" htmlFor="intro-template">
               <Select id="intro-template" name="templateId" disabled={!introTemplates.length}>
+                {introTemplates.length === 0 && <option value="">– noch keine Vorlage –</option>}
                 {introTemplates.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name} {t.approvedText ? "" : "(noch nicht genehmigt)"}
@@ -413,6 +406,12 @@ export default async function WhatsAppPage() {
                 ))}
               </Select>
             </Field>
+            {introTemplates.length === 0 && (
+              <p className="col-span-2 text-xs text-ink-soft">
+                Noch keine Vorlage für Erstkontakt oder Nachfassen – zuerst unter „Texte
+                (Templates)“ anlegen.
+              </p>
+            )}
             <label className="col-span-2 flex items-center gap-2 text-sm">
               <input type="checkbox" name="atSendTime" defaultChecked />
               Zur nächsten Sendezeit senden (sonst direkt nach der Wartezeit)

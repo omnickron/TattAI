@@ -110,7 +110,7 @@ User (Rolle), TattooerProfile (Google-Verbindung, Beratungsdauer, Puffer), Avail
 - Einwilligung für WhatsApp-Kontakt speichern. Löschkonzept: Leads ohne Beratung/Termin werden 10 Monate nach der letzten Aktivität automatisch gelöscht (Entscheidung vom 07.11.2026); einzelne Leads löscht der Admin von Hand.
 - Beratungsformen: vor Ort und telefonisch, in den Einstellungen pflegbar; Beratung kostenlos (Entscheidung vom 06.11.2026).
 - Auftragsverarbeitungsverträge mit Google (Workspace), Meta und dem Hosting-Anbieter.
-- Kalendereinträge enthalten Kundendaten: Zugriff nur für den zuständigen Tätowierer und den Admin.
+- Kalendereinträge enthalten Kundendaten: Zugriff nur für den zuständigen Tätowierer und den Admin. Im NEEDL-Kalender sehen Tätowierer auch die Termine der anderen, damit die Plätze im Studio nicht überbucht werden – aber nur Art, Zeit und Person, ohne Kundendaten (Entscheidung vom 12.11.2026).
 - Referenzbilder von Kunden sicher speichern (privater Speicher, keine öffentlichen Links).
 
 ## Phasen

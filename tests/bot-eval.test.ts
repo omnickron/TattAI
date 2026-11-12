@@ -5,7 +5,7 @@ import type {
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { BrainClient } from "@/lib/bot/brain";
 import { PERSONAS } from "@/lib/bot/eval/personas";
-import { hardChecks, runBotEval, TEST_LEAD_PREFIX } from "@/lib/bot/eval/run";
+import { hardChecks, openingMessages, runBotEval, TEST_LEAD_PREFIX } from "@/lib/bot/eval/run";
 import { botSpend } from "@/lib/bot/guard";
 import { createTestPrisma, resetDatabase } from "./db";
 
@@ -140,6 +140,41 @@ describe("bot test with AI customers", () => {
     expect(spend.dayMicros).toBe(done.costMicros);
     expect(spend.monthMicros).toBe(done.costMicros);
     expect(spend.evalDayMicros).toBe(done.costMicros);
+  });
+
+  it("starts with the configured first contact and further opening messages", async () => {
+    const tpl = (name: string, purpose: "FIRST_CONTACT" | "FOLLOW_UP", text: string) =>
+      prisma.whatsAppTemplate.create({
+        data: {
+          name,
+          purpose,
+          bodyText: text,
+          approvedText: text,
+          approvedName: name,
+          status: "APPROVED",
+        },
+      });
+    const first = await tpl(
+      "erst",
+      "FIRST_CONTACT",
+      "Hey {{Vorname}}, danke für deine Anfrage bei {{Studio}}!",
+    );
+    const second = await tpl("zweit", "FOLLOW_UP", "Erzähl mal, {{Vorname}}: was schwebt dir vor?");
+    await prisma.appSettings.upsert({
+      where: { id: 1 },
+      update: { studioName: "Ink Studio" },
+      create: { id: 1, studioName: "Ink Studio" },
+    });
+    await prisma.messagingSettings.upsert({
+      where: { id: 1 },
+      update: { firstContactTemplateId: first.id },
+      create: { id: 1, firstContactTemplateId: first.id },
+    });
+    await prisma.introStep.create({ data: { position: 2, templateId: second.id } });
+    expect(await openingMessages(prisma, "Lena")).toEqual([
+      { text: "Hey Lena, danke für deine Anfrage bei Ink Studio!", templateName: "erst" },
+      { text: "Erzähl mal, Lena: was schwebt dir vor?", templateName: "zweit" },
+    ]);
   });
 
   it("checks the hard rules itself", () => {

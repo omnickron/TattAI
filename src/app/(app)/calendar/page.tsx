@@ -1,3 +1,4 @@
+import type { CSSProperties, ReactNode } from "react";
 import { sessionRevenueCents } from "@/lib/outcomes/session-revenue";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -25,12 +26,6 @@ import {
 
 export const metadata: Metadata = { title: "Kalender" };
 
-const dayHeader = new Intl.DateTimeFormat("de-DE", {
-  timeZone: "UTC",
-  weekday: "short",
-  day: "2-digit",
-  month: "2-digit",
-});
 const weekdayShort = new Intl.DateTimeFormat("de-DE", { timeZone: "UTC", weekday: "short" });
 const longDay = new Intl.DateTimeFormat("de-DE", {
   timeZone: "UTC",
@@ -76,6 +71,39 @@ const BLOCK_TEXTURE = {
     "repeating-linear-gradient(45deg, transparent 0 5px, color-mix(in srgb, currentColor 10%, transparent) 5px 10px)",
 };
 
+/** Light tint of a tattooer's color for read-only entries from their own calendar. */
+function tintStyle(color?: string): CSSProperties {
+  if (!color || !/^#[0-9a-f]{6}$/i.test(color)) return {};
+  return { backgroundColor: `${color}33`, borderLeftColor: color };
+}
+
+/** Appointment block: clickable with details, or a plain block for other people's appointments. */
+function ItemChip({
+  item,
+  title,
+  className,
+  style,
+  children,
+}: {
+  item: Item;
+  title: string;
+  className: string;
+  style: CSSProperties;
+  children: ReactNode;
+}) {
+  if (item.foreign || !item.detail)
+    return (
+      <div title={title} className={className} style={style}>
+        {children}
+      </div>
+    );
+  return (
+    <EntryChip detail={item.detail} title={title} className={className} style={style}>
+      {children}
+    </EntryChip>
+  );
+}
+
 type Item = {
   id: string;
   kind: "CONSULTATION" | "TATTOO" | "BLOCKER";
@@ -91,6 +119,8 @@ type Item = {
   tone: string;
   /** Background of consultations and tattoo sessions (tattooer's calendar color). */
   color?: string;
+  /** Another tattooer's appointment seen by a tattooer: no customer data, not clickable */
+  foreign?: boolean;
   status: string;
   mode: "ON_SITE" | "PHONE" | null;
   day: string;
@@ -159,20 +189,22 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
   const dayCount = view === "week" ? 7 : 1;
   const days = Array.from({ length: dayCount }, (_, i) => addDays(first, i));
 
-  const tattooers = isAdmin
-    ? await prisma.tattooerProfile.findMany({
-        where: { user: { active: true } },
-        select: { id: true, user: { select: { name: true } } },
-        orderBy: { createdAt: "asc" },
-      })
-    : [];
+  // Everyone sees all tattooers' appointments (seats in the studio must not be double
+  // booked); tattooers see other people's appointments without customer data.
+  const tattooers = await prisma.tattooerProfile.findMany({
+    where: { user: { active: true } },
+    select: { id: true, user: { select: { name: true } } },
+    orderBy: { createdAt: "asc" },
+  });
   const filter =
-    isAdmin &&
-    typeof params.tattooer === "string" &&
-    tattooers.some((t) => t.id === params.tattooer)
+    typeof params.tattooer === "string" && tattooers.some((t) => t.id === params.tattooer)
       ? params.tattooer
       : null;
-  const scopeTattooer = isAdmin ? filter : (user.tattooerProfile?.id ?? "__none__");
+  const scopeTattooer = filter;
+  const ownId = user.tattooerProfile?.id ?? null;
+  const isForeign = (tattooerId: string) => !isAdmin && tattooerId !== ownId;
+  // Names on entries whenever several people are visible
+  const showNames = !filter;
 
   const consultations = await prisma.consultation.findMany({
     where: {
@@ -256,7 +288,9 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
       id: c.id,
       kind: "CONSULTATION" as const,
       leadId: c.lead.id,
-      leadName: c.lead.name,
+      leadName: isForeign(c.tattooer.id) ? "" : c.lead.name,
+      tattooerId: c.tattooer.id,
+      foreign: isForeign(c.tattooer.id),
       tattooerName: c.tattooer.user.name,
       tone: "",
       color: colorFor(c.tattooer.id),
@@ -303,7 +337,9 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
       kind: "TATTOO" as const,
       sessionNumber: sn.sessionNumber,
       leadId: sn.consultation.lead.id,
-      leadName: sn.consultation.lead.name,
+      leadName: isForeign(t.id) ? "" : sn.consultation.lead.name,
+      tattooerId: t.id,
+      foreign: isForeign(t.id),
       tattooerName: t.user.name,
       tone: "",
       color: colorFor(t.id),
@@ -420,16 +456,20 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
       const dayStart = startOfLocalDay(d, APP_TIMEZONE);
       const dayEnd = startOfLocalDay(addDays(d, 1), APP_TIMEZONE);
       if (e.start >= dayEnd || e.end <= dayStart) continue;
+      // Private Google entries of other people show only "Belegt"; the shared TeamUp
+      // calendar is visible to the whole studio anyway
+      const title = e.source === "Google" && isForeign(e.tattooerId) ? null : e.title;
       const base = {
         id: `ext-${n}-${d}`,
         kind: "BLOCKER" as const,
         external: e.source,
-        note: e.title ?? "Belegt",
+        note: title ?? "Belegt",
         tattooerId: e.tattooerId,
         leadId: "",
-        leadName: e.title ?? "Belegt",
+        leadName: title ?? "Belegt",
         tattooerName: e.tattooerName,
-        tone: BLOCK_TONE,
+        tone: "",
+        color: colorFor(e.tattooerId),
         status: "BLOCKER",
         mode: null,
         day: d,
@@ -492,7 +532,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
         description={
           isAdmin
             ? "Beratungen, Tattoo-Termine, Blocker und belegte Zeiten aus TeamUp/Google aller Tätowierer – mit „+ Termin“ oder einem Klick auf eine freie Stelle trägst du etwas ein."
-            : "Deine Beratungen, Tattoo-Termine, Blocker und belegte Zeiten aus deinem Kalender – mit „+ Termin“ oder einem Klick auf eine freie Stelle trägst du etwas ein."
+            : "Alle Termine im Studio, damit nichts doppelt belegt wird – bei anderen nur Art und Person, deine eigenen mit allen Details. Mit „+ Termin“ oder einem Klick auf eine freie Stelle trägst du etwas ein."
         }
       />
       {external.failed.length > 0 && (
@@ -542,7 +582,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
             </Link>
           ))}
         </div>
-        {isAdmin && (
+        {tattooers.length > 1 && (
           <form className="flex gap-2">
             <input type="hidden" name="view" value={view} />
             <input type="hidden" name="date" value={date} />
@@ -617,28 +657,32 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
                         canDelete={canDeleteBlock(i)}
                         className={cn(
                           "block w-full truncate rounded-md border-l-4 px-1 py-1 text-xs font-medium",
-                          i.tone,
+                          i.external ? "text-ink" : i.tone,
                         )}
-                        style={BLOCK_TEXTURE}
+                        style={i.external ? tintStyle(i.color) : BLOCK_TEXTURE}
                       >
                         {i.note || (i.external ? "Belegt" : "Blocker")}
-                        {isAdmin && (
+                        {showNames && (
                           <span className="hidden md:inline">{` · ${i.tattooerName}`}</span>
                         )}
                       </BlockerChip>
                     ) : (
-                      <EntryChip
+                      <ItemChip
                         key={i.id}
-                        detail={i.detail!}
-                        title={`Tattoo-Termin ${i.sessionNumber} · ${i.leadName} · ${i.tattooerName} (ohne Uhrzeit)`}
+                        item={i}
+                        title={
+                          i.foreign
+                            ? `Tattoo-Termin · ${i.tattooerName} (ohne Uhrzeit)`
+                            : `Tattoo-Termin ${i.sessionNumber} · ${i.leadName} · ${i.tattooerName} (ohne Uhrzeit)`
+                        }
                         className={cn(
                           "block w-full truncate rounded-md px-1 py-1 text-xs font-medium",
                           i.tone,
                         )}
                         style={{ ...TATTOO_TEXTURE, ...colorStyle(i) }}
                       >
-                        {i.leadName}
-                      </EntryChip>
+                        {i.foreign ? `Tattoo · ${i.tattooerName}` : i.leadName}
+                      </ItemChip>
                     ),
                   )}
               </div>
@@ -690,25 +734,29 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
                         className={cn(
                           "absolute z-[1] overflow-hidden rounded-md border-l-4 px-1 py-1 text-xs leading-tight",
                           WRAP,
-                          i.tone,
+                          i.external ? "text-ink" : i.tone,
                         )}
-                        style={{ ...BLOCK_TEXTURE, ...box }}
+                        style={{ ...(i.external ? tintStyle(i.color) : BLOCK_TEXTURE), ...box }}
                       >
                         <span className="block font-medium">
                           {i.note || (i.external ? "Belegt" : "Blocker")}
                         </span>
                         <span className="hidden opacity-80 tabular-nums md:block">
                           {formatTimeOfDay(i.startMin)}–{formatTimeOfDay(i.endMin % 1440)}
-                          {isAdmin && ` · ${i.tattooerName}`}
+                          {showNames && ` · ${i.tattooerName}`}
                         </span>
                       </BlockerChip>
                     );
                   }
                   return (
-                    <EntryChip
+                    <ItemChip
                       key={i.id}
-                      detail={i.detail!}
-                      title={`${i.kind === "TATTOO" ? `Tattoo-Termin ${i.sessionNumber}` : "Beratung"} · ${i.leadName} · ${i.tattooerName}`}
+                      item={i}
+                      title={
+                        i.foreign
+                          ? `${i.kind === "TATTOO" ? "Tattoo-Termin" : "Beratung"} · ${i.tattooerName}`
+                          : `${i.kind === "TATTOO" ? `Tattoo-Termin ${i.sessionNumber}` : "Beratung"} · ${i.leadName} · ${i.tattooerName}`
+                      }
                       className={cn(
                         "absolute z-[1] overflow-hidden rounded-md px-1 py-1 text-left text-xs leading-tight shadow-sm hover:z-10 hover:shadow md:text-[13px]",
                         WRAP,
@@ -721,15 +769,23 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
                       }}
                     >
                       <span className="block font-medium">
-                        {i.kind === "TATTOO" ? "Tattoo: " : "Beratung: "}
-                        {i.mode === "PHONE" && "☎ "}
-                        {i.leadName}
-                        {isAdmin && !filter && ` (${i.tattooerName})`}
+                        {i.foreign ? (
+                          `${i.kind === "TATTOO" ? "Tattoo" : "Beratung"} · ${i.tattooerName}`
+                        ) : (
+                          <>
+                            {i.kind === "TATTOO" ? "Tattoo: " : "Beratung: "}
+                            {i.mode === "PHONE" && "☎ "}
+                            {i.leadName}
+                            {showNames &&
+                              (isAdmin || i.tattooerId !== ownId) &&
+                              ` (${i.tattooerName})`}
+                          </>
+                        )}
                       </span>
                       <span className="hidden opacity-80 tabular-nums md:block">
                         {formatTimeOfDay(i.startMin)}–{formatTimeOfDay(i.endMin % 1440)}
                       </span>
-                    </EntryChip>
+                    </ItemChip>
                   );
                 })}
               {d === today && nowMin >= startHour * 60 && nowMin <= endHour * 60 && (
