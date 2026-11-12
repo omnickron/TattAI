@@ -8,14 +8,13 @@ import {
   Field,
   Input,
   PageHeader,
-  Textarea,
 } from "@/components/ui";
 import { requireAdmin } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { formatDateTime } from "@/lib/format";
 import { loadConsultationOptions } from "@/lib/consultation-options";
 import { LEAD_RETENTION_MONTHS } from "@/lib/leads/retention";
-import { updateConsentSettings, updateConsultationSettings, updateStudioSettings } from "./actions";
+import { updateConsultationSettings, updateStudioSettings } from "./actions";
 import { TeamupCard } from "./teamup-card";
 import { setting } from "@/lib/integrations/store";
 
@@ -39,36 +38,31 @@ export default async function SettingsPage() {
       <PageHeader title="Einstellungen" />
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <CardTitle>WhatsApp-Einwilligung (Meta-Formular)</CardTitle>
-          <p className="mb-4 text-sm text-ink-soft">
-            Das Häkchen im Instant-Formular wird über seinen Schlüssel erkannt. Der Wortlaut wird
-            bei jedem neuen Lead zusammen mit dem Zeitpunkt gespeichert. Er muss exakt dem Text im
-            Formular entsprechen.
+          <CardTitle
+            action={
+              settings?.consentCheckboxKey ? (
+                <Badge tone="green">eingerichtet</Badge>
+              ) : (
+                <Badge tone="amber">nicht eingerichtet</Badge>
+              )
+            }
+          >
+            WhatsApp-Einwilligung (Meta-Formular)
+          </CardTitle>
+          <p className="mb-3 text-sm text-ink-soft">
+            Diesen Text bestätigen eure Kundinnen und Kunden im Lead-Formular. Er wird bei jedem
+            neuen Lead mit Zeitpunkt gespeichert. Eingerichtet wird er vom Betreiber von NEEDL,
+            passend zum Formular bei Meta – Änderungswünsche bitte dort melden.
           </p>
-          <ActionForm action={updateConsentSettings}>
-            <Field
-              label="Schlüssel des Häkchens"
-              htmlFor="consentCheckboxKey"
-              hint="Im Meta-Formular unter „Eigener Haftungsausschluss“ → Kontrollkästchen. Ohne Schlüssel wird keine Einwilligung gespeichert."
-            >
-              <Input
-                id="consentCheckboxKey"
-                name="consentCheckboxKey"
-                defaultValue={settings?.consentCheckboxKey ?? ""}
-                placeholder="z. B. whatsapp_consent"
-              />
-            </Field>
-            <Field label="Wortlaut der Einwilligung" htmlFor="consentText">
-              <Textarea
-                id="consentText"
-                name="consentText"
-                defaultValue={settings?.consentText ?? ""}
-                placeholder="Ich bin damit einverstanden, dass mich … per WhatsApp kontaktiert …"
-                rows={5}
-              />
-            </Field>
-            <Button type="submit">Speichern</Button>
-          </ActionForm>
+          {settings?.consentText ? (
+            <blockquote className="whitespace-pre-wrap rounded-lg bg-muted/60 p-3 text-sm">
+              {settings.consentText}
+            </blockquote>
+          ) : (
+            <p className="text-sm text-amber-700 dark:text-amber-400">
+              Noch kein Wortlaut hinterlegt – bis dahin wird keine Einwilligung gespeichert.
+            </p>
+          )}
         </Card>
 
         <Card>
