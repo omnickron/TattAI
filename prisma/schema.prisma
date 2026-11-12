@@ -950,3 +950,20 @@ model IntegrationSettingLog {
 
   @@index([createdAt])
 }
+
+// Sign of life of the background worker (one row), shown to the operator
+model WorkerHeartbeat {
+  id          Int       @id @default(1)
+  // Last start of the worker process and how often it started so far
+  startedAt   DateTime?
+  startCount  Int       @default(0)
+  // End of the last complete run (every 30 s); stale = worker down or stuck
+  lastTickAt  DateTime?
+  tickMs      Int?
+  // Jobs that failed in the last run: [{ job, message }]
+  failures    Json?
+  // Last crash of the process (best effort, written while exiting)
+  crashedAt   DateTime?
+  crashError  String?
+  updatedAt   DateTime  @updatedAt
+}

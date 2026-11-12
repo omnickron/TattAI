@@ -21,6 +21,12 @@ import { notifyMissingOutcomes } from "../src/lib/outcomes/reminders";
 import { refreshIntegrationSettings } from "../src/lib/integrations/store";
 import { failStaleEvalRuns, runBotEval } from "../src/lib/bot/eval/run";
 import { createMediaDownloader, downloadPendingAttachments } from "../src/lib/whatsapp/media";
+import {
+  recordWorkerCrash,
+  recordWorkerStart,
+  recordWorkerTick,
+  type WorkerFailure,
+} from "../src/lib/worker/health";
 
 const INTERVAL_MS = 30_000;
 const prisma = createPrismaClient();
@@ -60,11 +66,16 @@ let evalRunning = false;
 let lastLeadRetry = 0;
 let lastRetention = 0;
 
+// Jobs that failed in the current run (shown to the operator)
+let failures: WorkerFailure[] = [];
+function fail(job: string, err: unknown) {
+  console.error(`[worker] ${job} failed:`, err);
+  failures.push({ job, message: err instanceof Error ? err.message : String(err) });
+}
+
 async function tick() {
   // Access data maintained in the app (TeamUp, WhatsApp, Meta)
-  await refreshIntegrationSettings(prisma).catch((err) =>
-    console.error("[worker] integration settings:", err),
-  );
+  await refreshIntegrationSettings(prisma).catch((err) => fail("settings", err));
   whatsapp = createWhatsAppClientSafe();
   calendarDeps = makeCalendarDeps();
   if (whatsapp)
@@ -81,19 +92,24 @@ async function tick() {
         console.info(`[worker] ${new Date().toISOString()}`, result);
       }
     } catch (err) {
-      console.error("[worker] messaging run failed:", err);
+      fail("messaging", err);
     }
   if (brain && !evalRunning) {
-    const run = await prisma.botEvalRun
-      .findFirst({ where: { status: "PENDING" }, orderBy: { createdAt: "asc" } })
-      .catch(() => null);
-    if (run) {
-      evalRunning = true;
-      console.info(`[worker] bot test ${run.id} started`);
-      runBotEval({ prisma, brain, config: brainConfigFromEnv() }, run.id)
-        .then((r) => console.info(`[worker] bot test ${run.id}: ${r.status}`))
-        .catch((err) => console.error("[worker] bot test failed:", err))
-        .finally(() => (evalRunning = false));
+    try {
+      const run = await prisma.botEvalRun.findFirst({
+        where: { status: "PENDING" },
+        orderBy: { createdAt: "asc" },
+      });
+      if (run) {
+        evalRunning = true;
+        console.info(`[worker] bot test ${run.id} started`);
+        runBotEval({ prisma, brain, config: brainConfigFromEnv() }, run.id)
+          .then((r) => console.info(`[worker] bot test ${run.id}: ${r.status}`))
+          .catch((err) => console.error("[worker] bot test failed:", err))
+          .finally(() => (evalRunning = false));
+      }
+    } catch (err) {
+      fail("evalStart", err);
     }
   }
   if (brain && whatsapp) {
@@ -107,7 +123,7 @@ async function tick() {
       });
       if (inbox.answered || inbox.handedOver || inbox.failed) console.info("[worker] bot:", inbox);
     } catch (err) {
-      console.error("[worker] bot run failed:", err);
+      fail("botInbox", err);
     }
   }
   try {
@@ -117,14 +133,14 @@ async function tick() {
     });
     if (bot.delivered || bot.failed) console.info("[worker] bot events:", bot);
   } catch (err) {
-    console.error("[worker] bot delivery failed:", err);
+    fail("botEvents", err);
   }
   try {
     await ensureCalendarNames(calendarDeps);
     const cal = await syncPendingSessions(calendarDeps);
     if (cal.synced || cal.deleted) console.info("[worker] calendar:", cal);
   } catch (err) {
-    console.error("[worker] calendar sync failed:", err);
+    fail("calendar", err);
   }
   // Customer images only arrive through WhatsApp
   if (whatsapp)
@@ -132,13 +148,13 @@ async function tick() {
       const media = await downloadPendingAttachments(prisma, createMediaDownloader());
       if (media.stored) console.info("[worker] stored attachments:", media.stored);
     } catch (err) {
-      console.error("[worker] media download failed:", err);
+      fail("media", err);
     }
   try {
     const followUps = await notifyDueFollowUps(prisma, push);
     if (followUps) console.info(`[worker] follow-up reminders: ${followUps}`);
   } catch (err) {
-    console.error("[worker] follow-up reminders failed:", err);
+    fail("followUps", err);
   }
   try {
     const outcomes = await notifyMissingOutcomes(
@@ -149,7 +165,7 @@ async function tick() {
     );
     if (outcomes) console.info(`[worker] missing-outcome reminders: ${outcomes}`);
   } catch (err) {
-    console.error("[worker] missing-outcome reminders failed:", err);
+    fail("outcomes", err);
   }
   // GDPR retention: once every 6 hours
   if (Date.now() - lastRetention > 6 * 3600_000) {
@@ -158,7 +174,7 @@ async function tick() {
       const purged = await purgeStaleLeads(prisma);
       if (purged.deleted) console.info(`[worker] retention: ${purged.deleted} old leads deleted`);
     } catch (err) {
-      console.error("[worker] retention failed:", err);
+      fail("retention", err);
     }
   }
   if (Date.now() - lastLeadRetry > 5 * 60_000) {
@@ -171,18 +187,25 @@ async function tick() {
       });
       if (retried.length) console.info("[worker] retried Meta lead fetches:", retried);
     } catch (err) {
-      console.error("[worker] lead retry failed:", err);
+      fail("leadRetry", err);
     }
   }
 }
 
 async function main() {
   await failStaleEvalRuns(prisma).catch(() => undefined);
+  await recordWorkerStart(prisma).catch((err) => console.error("[worker] heartbeat:", err));
   console.info(
     `[worker] started (WhatsApp ${!whatsapp ? "nicht eingerichtet" : whatsapp.mock ? "mock" : "live"}, Bot ${brain ? "NEEDL" : "aus/extern"})`,
   );
   while (!stopping) {
+    const started = Date.now();
+    failures = [];
     await tick();
+    // Sign of life for the operator page
+    await recordWorkerTick(prisma, Date.now() - started, failures).catch((err) =>
+      console.error("[worker] heartbeat:", err),
+    );
     await new Promise((resolve) => setTimeout(resolve, INTERVAL_MS));
   }
   await prisma.$disconnect();
@@ -195,7 +218,13 @@ for (const signal of ["SIGINT", "SIGTERM"]) {
   });
 }
 
-main().catch((err) => {
+async function crash(err: unknown) {
   console.error(err);
+  // Best effort, so the operator sees why the worker stopped
+  await recordWorkerCrash(prisma, err).catch(() => undefined);
   process.exit(1);
-});
+}
+process.on("uncaughtException", crash);
+process.on("unhandledRejection", crash);
+
+main().catch(crash);
