@@ -18,10 +18,39 @@ import { loadConsultationOptions } from "../../consultation-options";
 import { FIXED_RULES, toKnowledge } from "../knowledge";
 import { AI_DISCLOSURE, knowledgeText } from "../prompt";
 import { PERSONAS, type Persona } from "./personas";
+import { renderTemplate } from "../../whatsapp/template-text";
 
 export const TEST_LEAD_PREFIX = "[Bot-Test] ";
 const GREETING = (name: string) =>
   `Hey ${name}, danke für deine Anfrage! 🙌 Erzähl mal, was für ein Tattoo schwebt dir vor?`;
+
+/**
+ * The automatic opening messages as a new lead gets them (first contact plus the further
+ * opening messages from the WhatsApp settings), filled in for the test customer. Without a
+ * configured first contact the bot test starts with a generic greeting.
+ */
+export async function openingMessages(
+  prisma: Pick<
+    PrismaClient,
+    "messagingSettings" | "whatsAppTemplate" | "introStep" | "appSettings"
+  >,
+  firstName: string,
+): Promise<Array<{ text: string; templateName: string }>> {
+  const [settings, steps, app] = await Promise.all([
+    prisma.messagingSettings.findUnique({ where: { id: 1 } }),
+    prisma.introStep.findMany({ orderBy: { position: "asc" }, include: { template: true } }),
+    prisma.appSettings.findUnique({ where: { id: 1 } }),
+  ]);
+  const first = settings?.firstContactTemplateId
+    ? await prisma.whatsAppTemplate.findUnique({ where: { id: settings.firstContactTemplateId } })
+    : null;
+  if (!first) return [{ text: GREETING(firstName), templateName: "erstansprache" }];
+  const values = { Vorname: firstName, Name: firstName, Studio: app?.studioName || "unser Studio" };
+  return [first, ...steps.map((s) => s.template)].map((t) => ({
+    text: renderTemplate(t.approvedText ?? t.bodyText, values),
+    templateName: t.approvedName ?? t.name,
+  }));
+}
 
 export interface EvalDeps {
   prisma: PrismaClient;
@@ -286,7 +315,9 @@ async function runPersona(deps: EvalDeps, persona: Persona, index: number): Prom
   const calendar = new TestCalendar();
   const transcript: ChatLine[] = [];
   let cost = 0;
-  const greeting = GREETING(persona.firstName);
+  // The bot test starts where the real flow hands over: after all opening messages
+  const opening = await openingMessages(prisma, persona.firstName);
+  const start = now().getTime() - opening.length * 60_000;
   const lead = await prisma.lead.create({
     data: {
       source: "MANUAL",
@@ -299,11 +330,16 @@ async function runPersona(deps: EvalDeps, persona: Persona, index: number): Prom
       status: "IN_CHAT",
       firstContactedAt: now(),
       messages: {
-        create: { direction: "OUTBOUND", body: greeting, templateName: "erstansprache" },
+        create: opening.map((m, i) => ({
+          direction: "OUTBOUND" as const,
+          body: m.text,
+          templateName: m.templateName,
+          sentAt: new Date(start + i * 60_000),
+        })),
       },
     },
   });
-  transcript.push({ from: "studio", text: greeting });
+  for (const m of opening) transcript.push({ from: "studio", text: m.text });
 
   const result: PersonaResult = {
     key: persona.key,

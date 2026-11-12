@@ -56,6 +56,8 @@ export async function EvalCard() {
         {PERSONAS.length} KI-Testkunden schreiben mit dem echten Bot (WhatsApp und Kalender nur
         simuliert, Testdaten werden danach gelöscht). Eine zweite KI vergibt pro Chat eine Note von
         1 bis 6; NEEDL prüft zusätzlich Preise, Alters- und Gesundheitsfragen und den KI-Hinweis.
+        Jeder Chat beginnt wie im echten Ablauf mit euren Erstnachrichten (Erstkontakt und weitere
+        Erstnachrichten aus den WhatsApp-Einstellungen, mit dem Vornamen des Testkunden).
       </p>
 
       {latest && (
