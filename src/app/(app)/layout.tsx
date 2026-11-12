@@ -11,6 +11,7 @@ import { APP_TIMEZONE } from "@/lib/format";
 import { ViewSwitch } from "@/components/view-switch";
 import { PushToggle } from "@/components/push-toggle";
 import { isOperator } from "@/lib/auth/operator";
+import { loadWorkerHealth } from "@/lib/worker/health";
 import { vapidPublicKey } from "@/lib/push";
 import { signOutAction } from "./actions";
 
@@ -44,6 +45,11 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       APP_TIMEZONE,
     ),
   });
+  // Operator: background worker down or failing
+  const workerProblem =
+    isOperator(user) && !user.viewingAsTattooer
+      ? (await loadWorkerHealth(prisma)).state !== "ok"
+      : false;
   const groups: NavGroup[] = [
     {
       items: [
@@ -83,7 +89,12 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           {
             label: "Betreiber",
             items: [
-              { href: "/operator/bot", label: "Bot-Betrieb", icon: "bot" as const },
+              {
+                href: "/operator/bot",
+                label: "Bot-Betrieb",
+                icon: "bot" as const,
+                badge: workerProblem ? 1 : 0,
+              },
               { href: "/operator/zugaenge", label: "Zugänge", icon: "operator" as const },
               {
                 href: "/operator/rechnungsdaten",

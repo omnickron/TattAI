@@ -5,6 +5,8 @@ import { LeadStatusBadge } from "@/components/lead-status-badge";
 import { OutcomePanel } from "@/components/outcome-panel";
 import { Badge, Card, cn } from "@/components/ui";
 import { requireUser } from "@/lib/auth/session";
+import { isOperator } from "@/lib/auth/operator";
+import { WorkerStatus } from "./operator/worker-status";
 import { ActionButton } from "./admin/billing/buttons";
 import { completeFollowUp, resolveHandover } from "./handover-actions";
 import { loadDashboard } from "@/lib/dashboard";
@@ -149,6 +151,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
               }.`}
         </p>
       </header>
+      {isOperator(user) && !user.viewingAsTattooer && <WorkerStatus link />}
 
       {saved && (
         <p
