@@ -233,7 +233,15 @@ export async function setBotGloballyEnabled(enabled: boolean): Promise<ActionSta
   );
 }
 
-const AFTER_CONDITIONS = ["HELD", "TATTOO_BOOKED", "UNDECIDED", "NO_TATTOO", "NO_SHOW"] as const;
+const AFTER_CONDITIONS = [
+  "HELD",
+  "TATTOO_BOOKED",
+  "UNDECIDED",
+  "NO_TATTOO",
+  "NO_SHOW",
+  "SESSION_ATTENDED",
+  "SESSION_NO_SHOW",
+] as const;
 
 export async function addAfterRule(_prev: ActionState, formData: FormData): Promise<ActionState> {
   await requireAdmin();
@@ -241,7 +249,7 @@ export async function addAfterRule(_prev: ActionState, formData: FormData): Prom
   const condition = String(formData.get("condition") ?? "") as (typeof AFTER_CONDITIONS)[number];
   const templateId = String(formData.get("templateId") ?? "");
   if (!Number.isInteger(hoursAfter) || hoursAfter < 0 || hoursAfter > 24 * 30) {
-    return { ok: false, message: "Abstand: 0 bis 720 Stunden nach der Beratung." };
+    return { ok: false, message: "Abstand: 0 bis 720 Stunden nach dem Termin." };
   }
   if (!AFTER_CONDITIONS.includes(condition))
     return { ok: false, message: "Bitte einen Anlass wählen." };

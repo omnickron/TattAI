@@ -296,7 +296,9 @@ export async function planMessages(deps: MessagingDeps) {
   }
 
   // 4. Messages after the consultation (depending on the outcome)
-  const afterRules = await prisma.afterConsultationRule.findMany();
+  const allAfterRules = await prisma.afterConsultationRule.findMany();
+  const afterRules = allAfterRules.filter((r) => !isSessionCondition(r.condition));
+  const sessionRules = allAfterRules.filter((r) => isSessionCondition(r.condition));
   if (afterRules.length) {
     const maxHours = Math.max(...afterRules.map((r) => r.hoursAfter));
     const recent = await prisma.consultation.findMany({
@@ -331,6 +333,53 @@ export async function planMessages(deps: MessagingDeps) {
       planned += (await prisma.outboundMessage.createMany({ data, skipDuplicates: true })).count;
   }
 
+  // 5. Messages after a tattoo session (depending on attendance), counted from its end
+  if (sessionRules.length) {
+    const maxHours = Math.max(...sessionRules.map((r) => r.hoursAfter));
+    const sessions = await prisma.tattooBooking.findMany({
+      where: {
+        cancelled: false,
+        attendance: { not: null },
+        attendanceRecordedAt: {
+          gte: new Date(now.getTime() - maxHours * HOUR - AFTER_MAX_LATE_MS - 24 * HOUR),
+        },
+        consultation: { lead: eligibleLead },
+      },
+      select: {
+        id: true,
+        consultationId: true,
+        endsAt: true,
+        attendance: true,
+        attendanceRecordedAt: true,
+        cancelled: true,
+        consultation: { select: { leadId: true } },
+      },
+    });
+    const data = sessions.flatMap((s) =>
+      sessionRules.flatMap((r) => {
+        if (!matchesSessionCondition(r.condition, s)) return [];
+        // Without a time slot the session counts as ended when attendance was recorded
+        const base = s.endsAt ?? s.attendanceRecordedAt!;
+        const due = new Date(base.getTime() + r.hoursAfter * HOUR);
+        if (due > now || now.getTime() - due.getTime() > AFTER_MAX_LATE_MS) return [];
+        return [
+          {
+            leadId: s.consultation.leadId,
+            consultationId: s.consultationId,
+            kind: "AFTER_CONSULTATION" as const,
+            step: r.hoursAfter,
+            afterRuleId: r.id,
+            dedupeKey: `after-session:${s.id}:${r.id}`,
+            templateId: r.templateId,
+            notBefore: due,
+          },
+        ];
+      }),
+    );
+    if (data.length)
+      planned += (await prisma.outboundMessage.createMany({ data, skipDuplicates: true })).count;
+  }
+
   return { planned, noResponse };
 }
 
@@ -350,7 +399,24 @@ export function matchesAfterCondition(
       return c.status === "HELD" && c.tattooBooked === false;
     case "NO_SHOW":
       return c.status === "NO_SHOW";
+    case "SESSION_ATTENDED":
+    case "SESSION_NO_SHOW":
+      return false; // checked per tattoo session (matchesSessionCondition)
   }
+}
+
+const isSessionCondition = (c: AfterConsultationCondition) =>
+  c === "SESSION_ATTENDED" || c === "SESSION_NO_SHOW";
+
+/** Does a tattoo session's recorded attendance match a session-based rule? */
+export function matchesSessionCondition(
+  condition: AfterConsultationCondition,
+  s: { attendance: string | null; cancelled: boolean },
+): boolean {
+  if (s.cancelled) return false;
+  if (condition === "SESSION_ATTENDED") return s.attendance === "ATTENDED";
+  if (condition === "SESSION_NO_SHOW") return s.attendance === "NO_SHOW";
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -429,6 +495,15 @@ async function stillApplicable(
         ? prisma.afterConsultationRule.findUnique({ where: { id: o.afterRuleId } })
         : null,
     ]);
+    if (rule && isSessionCondition(rule.condition)) {
+      // dedupeKey "after-session:<sessionId>:<ruleId>"
+      const sessionId = o.dedupeKey.split(":")[1];
+      const s = await prisma.tattooBooking.findUnique({
+        where: { id: sessionId },
+        select: { attendance: true, cancelled: true },
+      });
+      return Boolean(s && matchesSessionCondition(rule.condition, s));
+    }
     return Boolean(c && rule && matchesAfterCondition(rule.condition, c));
   }
   const c = await prisma.consultation.findUnique({ where: { id: o.consultationId } });

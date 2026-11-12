@@ -20,6 +20,7 @@ import { localDateOf, startOfLocalDay } from "@/lib/time";
 import { isWhatsAppMock } from "@/lib/whatsapp/client";
 import {
   AFTER_CONDITION_LABELS,
+  SESSION_CONDITIONS,
   OUTBOUND_KIND_LABELS,
   OUTBOUND_STATUS_LABELS,
 } from "@/lib/whatsapp/labels";
@@ -44,6 +45,7 @@ import {
   updateFirstContactSettings,
   updateMessagingSettings,
 } from "./actions";
+import { AfterRuleForm } from "./after-rule-form";
 import { WhatsAppTabs } from "./tabs";
 
 export const metadata: Metadata = { title: "WhatsApp" };
@@ -539,8 +541,11 @@ export default async function WhatsAppPage() {
               {afterRules.map((r) => (
                 <li key={r.id} className="flex items-center justify-between gap-2 py-2">
                   <span>
-                    {r.hoursAfter === 0 ? "Direkt" : `${r.hoursAfter} Std.`} nach der Beratung ·{" "}
-                    {AFTER_CONDITION_LABELS[r.condition]} ·{" "}
+                    {r.hoursAfter === 0 ? "Direkt" : `${r.hoursAfter} Std.`} nach{" "}
+                    {(SESSION_CONDITIONS as readonly string[]).includes(r.condition)
+                      ? "dem Tattoo-Termin"
+                      : "der Beratung"}{" "}
+                    · {AFTER_CONDITION_LABELS[r.condition]} ·{" "}
                     <span className="text-ink-soft">{r.template.name}</span>
                   </span>
                   <ActionForm action={deleteAfterRule.bind(null, r.id)}>
@@ -553,43 +558,16 @@ export default async function WhatsAppPage() {
             </ul>
           )}
           <p className="mb-3 text-xs text-ink-soft">
-            Gesendet wird, sobald das Ergebnis der Beratung eingetragen ist und der Abstand erreicht
-            ist – zu den Sendezeiten und innerhalb der Limits. Passt das Ergebnis beim Versand nicht
-            mehr (z. B. korrigiert), entfällt die Nachricht; mehr als 7 Tage überfällige Nachrichten
+            Wahlweise nach dem Beratungstermin (je nach Ergebnis) oder nach einem Tattoo-Termin (je
+            nach Erscheinen), z. B. Pflegehinweise oder die Bitte um eine Bewertung. Gesendet wird
+            zu den Sendezeiten und innerhalb der Limits. Passt das Ergebnis beim Versand nicht mehr
+            (z. B. korrigiert), entfällt die Nachricht; mehr als 7 Tage überfällige Nachrichten
             werden nicht mehr verschickt.
           </p>
-          <ActionForm
+          <AfterRuleForm
             action={addAfterRule}
-            className="grid items-end gap-2 space-y-0 sm:grid-cols-[7rem_1fr_1fr_auto]"
-          >
-            <Field label="Std. danach" htmlFor="hoursAfter">
-              <Input id="hoursAfter" name="hoursAfter" type="number" min={0} defaultValue={2} />
-            </Field>
-            <Field label="Wann" htmlFor="condition">
-              <Select id="condition" name="condition" defaultValue="TATTOO_BOOKED">
-                {Object.entries(AFTER_CONDITION_LABELS).map(([k, v]) => (
-                  <option key={k} value={k}>
-                    {v}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Template" htmlFor="after-template">
-              <Select id="after-template" name="templateId">
-                {byPurpose("AFTER_CONSULTATION").length === 0 && (
-                  <option value="">– erst unter „Texte“ ein Template anlegen –</option>
-                )}
-                {byPurpose("AFTER_CONSULTATION").map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Button type="submit" variant="secondary">
-              Hinzufügen
-            </Button>
-          </ActionForm>
+            templates={byPurpose("AFTER_CONSULTATION").map((t) => ({ id: t.id, name: t.name }))}
+          />
         </Card>
       </Section>
 

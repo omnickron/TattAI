@@ -610,6 +610,9 @@ enum AfterConsultationCondition {
   UNDECIDED // took place, customer still deciding
   NO_TATTOO // took place, no tattoo
   NO_SHOW // customer did not come
+  // Relative to a tattoo session instead of the consultation
+  SESSION_ATTENDED // the customer came to the tattoo session
+  SESSION_NO_SHOW // the customer did not come to the tattoo session
 }
 
 model AfterConsultationRule {
