@@ -6,6 +6,7 @@ import type {
   AfterConsultationCondition,
   MessagingSettings,
   OutboundKind,
+  Prisma,
   PrismaClient,
 } from "@/generated/prisma/client";
 import { DEFAULT_TIME_ZONE, localDateOf, startOfLocalDay } from "../time";
@@ -295,7 +296,9 @@ export async function planMessages(deps: MessagingDeps) {
   }
 
   // 4. Messages after the consultation (depending on the outcome)
-  const afterRules = await prisma.afterConsultationRule.findMany();
+  const allAfterRules = await prisma.afterConsultationRule.findMany();
+  const afterRules = allAfterRules.filter((r) => !isSessionCondition(r.condition));
+  const sessionRules = allAfterRules.filter((r) => isSessionCondition(r.condition));
   if (afterRules.length) {
     const maxHours = Math.max(...afterRules.map((r) => r.hoursAfter));
     const recent = await prisma.consultation.findMany({
@@ -330,6 +333,53 @@ export async function planMessages(deps: MessagingDeps) {
       planned += (await prisma.outboundMessage.createMany({ data, skipDuplicates: true })).count;
   }
 
+  // 5. Messages after a tattoo session (depending on attendance), counted from its end
+  if (sessionRules.length) {
+    const maxHours = Math.max(...sessionRules.map((r) => r.hoursAfter));
+    const sessions = await prisma.tattooBooking.findMany({
+      where: {
+        cancelled: false,
+        attendance: { not: null },
+        attendanceRecordedAt: {
+          gte: new Date(now.getTime() - maxHours * HOUR - AFTER_MAX_LATE_MS - 24 * HOUR),
+        },
+        consultation: { lead: eligibleLead },
+      },
+      select: {
+        id: true,
+        consultationId: true,
+        endsAt: true,
+        attendance: true,
+        attendanceRecordedAt: true,
+        cancelled: true,
+        consultation: { select: { leadId: true } },
+      },
+    });
+    const data = sessions.flatMap((s) =>
+      sessionRules.flatMap((r) => {
+        if (!matchesSessionCondition(r.condition, s)) return [];
+        // Without a time slot the session counts as ended when attendance was recorded
+        const base = s.endsAt ?? s.attendanceRecordedAt!;
+        const due = new Date(base.getTime() + r.hoursAfter * HOUR);
+        if (due > now || now.getTime() - due.getTime() > AFTER_MAX_LATE_MS) return [];
+        return [
+          {
+            leadId: s.consultation.leadId,
+            consultationId: s.consultationId,
+            kind: "AFTER_CONSULTATION" as const,
+            step: r.hoursAfter,
+            afterRuleId: r.id,
+            dedupeKey: `after-session:${s.id}:${r.id}`,
+            templateId: r.templateId,
+            notBefore: due,
+          },
+        ];
+      }),
+    );
+    if (data.length)
+      planned += (await prisma.outboundMessage.createMany({ data, skipDuplicates: true })).count;
+  }
+
   return { planned, noResponse };
 }
 
@@ -349,7 +399,24 @@ export function matchesAfterCondition(
       return c.status === "HELD" && c.tattooBooked === false;
     case "NO_SHOW":
       return c.status === "NO_SHOW";
+    case "SESSION_ATTENDED":
+    case "SESSION_NO_SHOW":
+      return false; // checked per tattoo session (matchesSessionCondition)
   }
+}
+
+const isSessionCondition = (c: AfterConsultationCondition) =>
+  c === "SESSION_ATTENDED" || c === "SESSION_NO_SHOW";
+
+/** Does a tattoo session's recorded attendance match a session-based rule? */
+export function matchesSessionCondition(
+  condition: AfterConsultationCondition,
+  s: { attendance: string | null; cancelled: boolean },
+): boolean {
+  if (s.cancelled) return false;
+  if (condition === "SESSION_ATTENDED") return s.attendance === "ATTENDED";
+  if (condition === "SESSION_NO_SHOW") return s.attendance === "NO_SHOW";
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -428,6 +495,15 @@ async function stillApplicable(
         ? prisma.afterConsultationRule.findUnique({ where: { id: o.afterRuleId } })
         : null,
     ]);
+    if (rule && isSessionCondition(rule.condition)) {
+      // dedupeKey "after-session:<sessionId>:<ruleId>"
+      const sessionId = o.dedupeKey.split(":")[1];
+      const s = await prisma.tattooBooking.findUnique({
+        where: { id: sessionId },
+        select: { attendance: true, cancelled: true },
+      });
+      return Boolean(s && matchesSessionCondition(rule.condition, s));
+    }
     return Boolean(c && rule && matchesAfterCondition(rule.condition, c));
   }
   const c = await prisma.consultation.findUnique({ where: { id: o.consultationId } });
@@ -465,13 +541,30 @@ export async function dispatchMessages(deps: MessagingDeps): Promise<DispatchRes
     // First contacts go out right away (outside quiet hours) unless they wait for send times
     const immediate = settings.firstContactImmediate;
     const batchKinds = immediate ? BULK_KINDS.filter((k) => k !== "FIRST_CONTACT") : BULK_KINDS;
+    // Opening messages that go out right after their delay instead of at send times
+    const directSteps = (
+      await prisma.introStep.findMany({ where: { atSendTime: false }, select: { position: true } })
+    ).map((st) => st.position);
+    const direct: Prisma.OutboundMessageWhereInput[] = [
+      ...(immediate ? [{ kind: "FIRST_CONTACT" as const }] : []),
+      ...(directSteps.length
+        ? [{ kind: "INTRO_MESSAGE" as const, step: { in: directSteps } }]
+        : []),
+    ];
     const [sentToday, sentInBatch] = await Promise.all([
       prisma.outboundMessage.count({
         where: { status: "SENT", sentAt: { gte: startOfLocalDay(localDateOf(now, tz), tz) } },
       }),
       batch
         ? prisma.outboundMessage.count({
-            where: { status: "SENT", kind: { in: batchKinds }, sentAt: { gte: batch.start } },
+            where: {
+              status: "SENT",
+              kind: { in: batchKinds },
+              sentAt: { gte: batch.start },
+              ...(directSteps.length
+                ? { NOT: { kind: "INTRO_MESSAGE", step: { in: directSteps } } }
+                : {}),
+            },
           })
         : Promise.resolve(0),
     ]);
@@ -485,41 +578,44 @@ export async function dispatchMessages(deps: MessagingDeps): Promise<DispatchRes
 
     // Reminders first (time-critical), then immediate first contacts, then the messages
     // released at send times (first contacts / opening messages / follow-ups) in arrival order.
-    const queued = (kinds: OutboundKind[]) =>
+    const queued = (filter: Prisma.OutboundMessageWhereInput) =>
       prisma.outboundMessage.findFirst({
         where: {
-          status: "QUEUED",
-          kind: { in: kinds },
-          notBefore: { lte: now },
-          template: approved,
+          AND: [{ status: "QUEUED", notBefore: { lte: now }, template: approved }, filter],
         },
         orderBy: [{ kind: "asc" }, { notBefore: "asc" }],
         include: { template: true },
       });
-    const candidates: Array<{ kinds: OutboundKind[]; decide: () => Decision }> = [
-      { kinds: ["REMINDER"], decide: () => reminderDecision(now, counters) },
-      ...(immediate
-        ? [
-            {
-              kinds: ["FIRST_CONTACT"] as OutboundKind[],
-              decide: () =>
-                immediateDecision(
-                  now,
-                  cfg,
-                  counters,
-                  settings.quietHoursEnabled
-                    ? { start: settings.quietHoursStart, end: settings.quietHoursEnd }
-                    : null,
-                ),
-            },
-          ]
+    const quiet = settings.quietHoursEnabled
+      ? { start: settings.quietHoursStart, end: settings.quietHoursEnd }
+      : null;
+    const candidates: Array<{
+      filter: Prisma.OutboundMessageWhereInput;
+      decide: () => Decision;
+      reminder?: boolean;
+    }> = [
+      {
+        filter: { kind: "REMINDER" },
+        decide: () => reminderDecision(now, counters),
+        reminder: true,
+      },
+      ...(direct.length
+        ? [{ filter: { OR: direct }, decide: () => immediateDecision(now, cfg, counters, quiet) }]
         : []),
-      { kinds: batchKinds, decide: () => bulkDecision(now, cfg, counters) },
+      {
+        filter: {
+          kind: { in: batchKinds },
+          ...(directSteps.length
+            ? { NOT: { kind: "INTRO_MESSAGE" as const, step: { in: directSteps } } }
+            : {}),
+        },
+        decide: () => bulkDecision(now, cfg, counters),
+      },
     ];
     let next: Awaited<ReturnType<typeof queued>> = null;
     let waiting: string | null = null;
     for (const c of candidates) {
-      const found = await queued(c.kinds);
+      const found = await queued(c.filter);
       if (!found) continue;
       const decision = c.decide();
       if (decision.send) {
@@ -528,7 +624,7 @@ export async function dispatchMessages(deps: MessagingDeps): Promise<DispatchRes
       }
       waiting ??= decision.reason;
       // Reminders block everything behind them only for the gap between messages
-      if (c.kinds[0] === "REMINDER") break;
+      if (c.reminder) break;
     }
     if (!next) return waiting ? { ...result, waiting } : result;
 

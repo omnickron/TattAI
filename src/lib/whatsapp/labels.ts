@@ -27,7 +27,12 @@ export const AFTER_CONDITION_LABELS = {
   UNDECIDED: "wenn der Kunde noch überlegt",
   NO_TATTOO: "wenn kein Tattoo gebucht wurde",
   NO_SHOW: "bei No-Show",
+  SESSION_ATTENDED: "wenn der Kunde zum Tattoo-Termin erschienen ist",
+  SESSION_NO_SHOW: "wenn der Kunde nicht zum Tattoo-Termin erschienen ist",
 } as const;
+
+/** Conditions that refer to a tattoo session instead of the consultation. */
+export const SESSION_CONDITIONS = ["SESSION_ATTENDED", "SESSION_NO_SHOW"] as const;
 
 export const OUTBOUND_STATUS_LABELS = {
   QUEUED: { label: "geplant", tone: "blue" },

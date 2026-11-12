@@ -397,6 +397,23 @@ describe("immediate first contact and further opening messages", () => {
     expect(wa.sent.map((m) => m.name)).toEqual(["erstkontakt", "zweite", "nachfassen"]);
   });
 
+  it("sends an opening message right after its delay when it does not wait for send times", async () => {
+    const second = await setup();
+    await prisma.introStep.updateMany({ data: { atSendTime: false, minDelayMinutes: 30 } });
+    clock = at(MON, "14:12");
+    const l = await lead();
+    await planMessages(deps);
+    await dispatchMessages(deps); // first contact
+    clock = at(MON, "14:41");
+    await planMessages(deps);
+    expect(await dispatchMessages(deps)).toMatchObject({ sent: 0 }); // 29 min: too early
+    clock = at(MON, "14:43");
+    expect(await dispatchMessages(deps)).toMatchObject({ sent: 1 }); // no send time needed
+    expect(wa.sent.map((m) => m.name)).toEqual(["erstkontakt", "zweite"]);
+    expect(await waitingForIntroMessages(prisma, l.id, clock)).toBe(false);
+    expect(second).toBeTruthy();
+  });
+
   it("does not hold the bot without opening messages or after a failed one", async () => {
     const l = await lead({ firstContactedAt: at(MON, "07:00"), status: "CONTACTED" });
     await prisma.outboundMessage.create({
@@ -799,6 +816,56 @@ describe("after the consultation", () => {
       name: "nach_beratung",
       parameters: ["Lena", "Donnerstag, 26. November", "14:00", "Alex"],
     });
+  });
+
+  it("sends after a tattoo session depending on attendance and drops it when corrected", async () => {
+    const care = await template(
+      "AFTER_CONSULTATION",
+      "pflege",
+      "Hi {{Vorname}}, so pflegst du dein Tattoo …",
+    );
+    await prisma.afterConsultationRule.create({
+      data: { hoursAfter: 3, condition: "SESSION_ATTENDED", templateId: care },
+    });
+    const { consultation } = await heldConsultation(true, at("2026-11-02", "09:30"));
+    const attended = await prisma.tattooBooking.create({
+      data: {
+        consultationId: consultation.id,
+        date: at(MON, "00:00"),
+        startsAt: at(MON, "10:00"),
+        endsAt: at(MON, "13:00"),
+        attendance: "ATTENDED",
+        attendanceRecordedAt: at(MON, "13:05"),
+      },
+    });
+    const other = await heldConsultation(true, at("2026-11-02", "08:00"));
+    await prisma.tattooBooking.create({
+      data: {
+        consultationId: other.consultation.id,
+        date: at(MON, "00:00"),
+        startsAt: at(MON, "10:00"),
+        endsAt: at(MON, "13:00"),
+        attendance: "NO_SHOW",
+        attendanceRecordedAt: at(MON, "13:05"),
+      },
+    });
+    clock = at(MON, "15:59"); // less than 3 h after the end
+    expect((await planMessages(deps)).planned).toBe(0);
+    clock = at(MON, "16:30");
+    expect((await planMessages(deps)).planned).toBe(1); // only the attended session
+    clock = at(MON, "17:00");
+    expect((await dispatchMessages(deps)).sent).toBe(1);
+    expect(wa.sent.at(-1)?.name).toBe("pflege");
+
+    // Corrected to "nicht erschienen" before sending → dropped
+    await prisma.outboundMessage.deleteMany();
+    await planMessages(deps);
+    await prisma.tattooBooking.update({
+      where: { id: attended.id },
+      data: { attendance: "NO_SHOW" },
+    });
+    clock = at(MON, "17:30");
+    expect(await dispatchMessages(deps)).toMatchObject({ sent: 0, cancelled: 1 });
   });
 
   it("drops the message if the outcome was corrected and skips long-overdue ones", async () => {
