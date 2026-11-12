@@ -4,6 +4,7 @@ import { Badge, Button, Card, CardTitle, Field, Input, PageHeader, Select } from
 import { requireAdmin } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { formatDateTime } from "@/lib/format";
+import { isWhatsAppMock } from "@/lib/whatsapp/client";
 import { PURPOSE_LABELS, TEMPLATE_STATUS_LABELS } from "@/lib/whatsapp/labels";
 import {
   ALLOWED_VARIABLES,
@@ -41,6 +42,13 @@ export default async function TemplatesPage({
         description="Automatische Nachrichten dürfen nur mit Texten verschickt werden, die Meta vorab genehmigt hat. Geänderte Texte werden als neue Version eingereicht; bis zur Genehmigung wird die bisherige Fassung verwendet."
       />
       <WhatsAppTabs active="texts" />
+      {isWhatsAppMock() && (
+        <p className="mb-4 rounded-lg border border-amber-600/30 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+          WhatsApp läuft im Testmodus (Betreiber → Zugänge): Templates werden nicht wirklich bei
+          Meta eingereicht, sondern gelten sofort als genehmigt. Echte Prüfungen durch Meta dauern
+          Minuten bis Stunden.
+        </p>
+      )}
       {created && (
         <p
           role="status"
@@ -68,6 +76,9 @@ export default async function TemplatesPage({
                   <Badge tone="violet">{PURPOSE_LABELS[t.purpose]}</Badge>
                   <Badge tone={status.tone}>{status.label}</Badge>
                   {t.category === "MARKETING" && <Badge>Marketing</Badge>}
+                  {t.metaTemplateId?.startsWith("mock-") && (
+                    <Badge tone="amber">nur Test-Genehmigung</Badge>
+                  )}
                   {changed && t.status !== "PENDING" && (
                     <Badge tone="amber">Änderung nicht eingereicht</Badge>
                   )}
@@ -119,17 +130,25 @@ export default async function TemplatesPage({
                       {t.submissionCount ? "Änderung einreichen" : "Bei Meta einreichen"}
                     </Button>
                   </ActionForm>
-                  {!t.approvedText && (
-                    <ActionForm
-                      action={deleteTemplate.bind(null, t.id)}
-                      confirm={`Template „${t.name}“ löschen?`}
-                    >
-                      <Button type="submit" variant="ghost">
-                        Löschen
-                      </Button>
-                    </ActionForm>
-                  )}
+                  <ActionForm
+                    action={deleteTemplate.bind(null, t.id)}
+                    confirm={
+                      t.submissionCount
+                        ? `Template „${t.name}“ löschen? Es wird auch bei Meta gelöscht; bereits verschickte Nachrichten bleiben im Chatverlauf.`
+                        : `Template „${t.name}“ löschen?`
+                    }
+                  >
+                    <Button type="submit" variant="ghost">
+                      Löschen
+                    </Button>
+                  </ActionForm>
                 </div>
+                {t.status !== "PENDING" && !canSubmit && (
+                  <p className="mt-2 text-xs text-ink-soft">
+                    Ändern: Text oben anpassen, „Speichern“ und dann „Änderung einreichen“. Bis Meta
+                    die neue Fassung genehmigt, wird die bisherige verwendet.
+                  </p>
+                )}
                 {t.status === "PENDING" && (
                   <p className="mt-2 text-xs text-ink-soft">
                     Eingereicht als {t.submittedName} am {formatDateTime(t.submittedAt)}.

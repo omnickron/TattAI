@@ -109,6 +109,7 @@ export async function deleteTemplate(id: string): Promise<ActionState> {
           followUpSteps: true,
           introSteps: true,
           reminderRules: true,
+          afterRules: true,
           outboundMessages: true,
         },
       },
@@ -116,14 +117,45 @@ export async function deleteTemplate(id: string): Promise<ActionState> {
   });
   if (!t) return { ok: false, message: "Template nicht gefunden." };
   const settings = await prisma.messagingSettings.findUnique({ where: { id: 1 } });
-  if (
-    t._count.followUpSteps ||
-    t._count.introSteps ||
-    t._count.reminderRules ||
-    t._count.outboundMessages ||
-    settings?.firstContactTemplateId === id
-  ) {
-    return { ok: false, message: "Das Template wird verwendet und kann nicht gelöscht werden." };
+  const usedBy = [
+    settings?.firstContactTemplateId === id && "Erstkontakt",
+    t._count.introSteps && "weitere Erstnachrichten",
+    t._count.followUpSteps && "Nachfassen",
+    t._count.reminderRules && "Erinnerungen",
+    t._count.afterRules && "Nachrichten nach dem Termin",
+  ].filter(Boolean);
+  if (usedBy.length)
+    return {
+      ok: false,
+      message: `Wird noch verwendet (${usedBy.join(", ")}) – dort zuerst entfernen bzw. ein anderes Template wählen.`,
+    };
+  // Templates are also removed at Meta (all versions); the chat history keeps the sent texts
+  if (t.submissionCount) {
+    const wa = createWhatsAppClient();
+    const names = [...new Set([t.approvedName, t.submittedName].filter(Boolean))] as string[];
+    try {
+      for (const name of names) await wa.deleteTemplate?.(name);
+    } catch (err) {
+      return {
+        ok: false,
+        message:
+          `Löschen bei Meta fehlgeschlagen: ${err instanceof Error ? err.message : String(err)}`.slice(
+            0,
+            300,
+          ),
+      };
+    }
+  }
+  // Sent messages keep their text in the chat history; only the link to the template goes
+  if (t._count.outboundMessages) {
+    const queued = await prisma.outboundMessage.count({
+      where: { templateId: id, status: "QUEUED" },
+    });
+    if (queued)
+      return {
+        ok: false,
+        message: `${queued} geplante Nachricht(en) nutzen dieses Template noch – bitte warten oder in der Warteschlange entfernen.`,
+      };
   }
   await prisma.whatsAppTemplate.delete({ where: { id } });
   revalidatePath(PATH);

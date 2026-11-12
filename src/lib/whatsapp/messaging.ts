@@ -637,13 +637,15 @@ export async function dispatchMessages(deps: MessagingDeps): Promise<DispatchRes
       continue;
     }
 
+    // Queued messages always have an approved template (see the query); narrow the type
+    const template = next.template!;
     const lead = await prisma.lead.findUniqueOrThrow({ where: { id: next.leadId } });
-    const text = next.template.approvedText!;
-    const compiled = compileTemplate(text, ALLOWED_VARIABLES[next.template.purpose]);
+    const text = template.approvedText!;
+    const compiled = compileTemplate(text, ALLOWED_VARIABLES[template.purpose]);
     if (!compiled.ok) {
       await pauseSending(
         prisma,
-        `Template „${next.template.name}“ ist fehlerhaft: ${compiled.error}`,
+        `Template „${template.name}“ ist fehlerhaft: ${compiled.error}`,
         now,
       );
       return { ...result, waiting: "Template fehlerhaft" };
@@ -655,8 +657,8 @@ export async function dispatchMessages(deps: MessagingDeps): Promise<DispatchRes
     try {
       const { messageId } = await whatsapp.sendTemplate({
         to: lead.phoneE164!,
-        name: next.template.approvedName!,
-        language: next.template.language,
+        name: template.approvedName!,
+        language: template.language,
         parameters,
       });
       await prisma.$transaction([
@@ -675,7 +677,7 @@ export async function dispatchMessages(deps: MessagingDeps): Promise<DispatchRes
             leadId: lead.id,
             direction: "OUTBOUND",
             waMessageId: messageId,
-            templateName: next.template.approvedName,
+            templateName: template.approvedName,
             body: renderTemplate(text, values),
             status: "sent",
             outboundId: next.id,
