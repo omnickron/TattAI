@@ -67,6 +67,32 @@ describe("artist matching and busy times", () => {
   });
 });
 
+describe("all-day entries", () => {
+  const allDay = (start_dt: string, end_dt: string) =>
+    busyOfArtist(
+      [ev({ custom: { artist: ["kim"] }, all_day: true, start_dt, end_dt })],
+      "artist",
+      "kim",
+      TZ,
+    ).map((b) => [b.start.toISOString(), b.end.toISOString()]);
+  const tuesday = ["2026-11-09T23:00:00.000Z", "2026-11-10T23:00:00.000Z"];
+
+  it("cover exactly their day, whatever the time zone of the TeamUp calendar", () => {
+    // Berlin calendar, end as 23:59 of the day
+    expect(allDay("2026-11-10T00:00:00+01:00", "2026-11-10T23:59:00+01:00")).toEqual([tuesday]);
+    // UTC calendar: 23:59 UTC is already the next day in Berlin – must not spill over
+    expect(allDay("2026-11-10T00:00:00+00:00", "2026-11-10T23:59:00+00:00")).toEqual([tuesday]);
+    // Calendar west of UTC
+    expect(allDay("2026-11-10T00:00:00-05:00", "2026-11-10T23:59:00-05:00")).toEqual([tuesday]);
+  });
+
+  it("span several days inclusively", () => {
+    expect(allDay("2026-11-10T00:00:00+00:00", "2026-11-12T23:59:00+00:00")).toEqual([
+      ["2026-11-09T23:00:00.000Z", "2026-11-12T23:00:00.000Z"],
+    ]);
+  });
+});
+
 describe("event body", () => {
   const input: CalendarEventInput = {
     summary: "Beratung: Mia",
