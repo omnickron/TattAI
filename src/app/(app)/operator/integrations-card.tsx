@@ -10,6 +10,7 @@ import {
   clearIntegrationSetting,
   saveIntegration,
   registerMetaWebhook,
+  registerWhatsAppNumber,
   registerWhatsAppWebhook,
   setIntegrationLive,
   subscribeMetaPage,
@@ -86,6 +87,30 @@ export async function IntegrationsCard() {
                 </span>
               </div>
               <p className="mb-3 text-sm text-ink-soft">{g.intro}</p>
+              {g.id === "whatsapp" && (
+                <ActionForm
+                  action={registerWhatsAppNumber}
+                  className="mb-3 flex flex-wrap items-end gap-2 space-y-0 rounded-md bg-muted p-3"
+                >
+                  <Field
+                    label="Nummer registrieren (einmalig bei einer neuen Nummer)"
+                    htmlFor="wa-pin"
+                    hint="6-stellige PIN frei wählen und notieren – sie schützt die Nummer (Bestätigung in zwei Schritten). Vorher Token und Telefonnummer-ID speichern."
+                  >
+                    <Input
+                      id="wa-pin"
+                      name="pin"
+                      inputMode="numeric"
+                      pattern="[0-9]{6}"
+                      maxLength={6}
+                      autoComplete="off"
+                      placeholder="123456"
+                      className="w-32"
+                    />
+                  </Field>
+                  <Button type="submit">Registrieren</Button>
+                </ActionForm>
+              )}
               {WEBHOOKS[g.id] && (
                 <p className="mb-3 text-xs text-ink-soft">
                   Webhook-Adresse für Meta:{" "}
