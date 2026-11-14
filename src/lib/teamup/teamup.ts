@@ -108,6 +108,11 @@ export function eventHasArtist(ev: TeamupEvent, fieldId: string, artist: string)
  * Busy intervals of one artist: entries with their artist value or in their own
  * sub-calendar (entries written by the app are ignored – NEEDL knows them itself).
  */
+/** Date of an all-day TeamUp value ("2026-11-10T23:59:00+00:00" -> "2026-11-10"). */
+function allDayDate(value: string, timeZone: string): string {
+  return /^\d{4}-\d{2}-\d{2}/.exec(value)?.[0] ?? localDateOf(new Date(value), timeZone);
+}
+
 export function busyOfArtist(
   events: TeamupEvent[],
   fieldId: string,
@@ -123,8 +128,11 @@ export function busyOfArtist(
       (ev.subcalendar_ids ?? []).some((id) => String(id) === String(ownSubcalendarId));
     if (!inOwn && !eventHasArtist(ev, fieldId, artist)) continue;
     if (ev.all_day) {
-      const startDay = localDateOf(new Date(ev.start_dt), timeZone);
-      const endDay = localDateOf(new Date(ev.end_dt), timeZone);
+      // All-day entries are calendar dates: read the date as written, without converting
+      // through a time zone (a TeamUp calendar in another zone would shift the end into
+      // the next day and make every all-day entry one day too long)
+      const startDay = allDayDate(ev.start_dt, timeZone);
+      const endDay = allDayDate(ev.end_dt, timeZone);
       busy.push({
         start: zonedTimeToUtc(startDay, 0, timeZone),
         end: zonedTimeToUtc(addDays(endDay, 1), 0, timeZone),
