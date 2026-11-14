@@ -76,7 +76,7 @@ async function graphGet(path: string, token: string, appSecret?: string) {
   const body = (await res.json().catch(() => ({}))) as Record<string, unknown> & {
     error?: { message?: string };
   };
-  if (!res.ok) throw new Error(body.error?.message ?? `HTTP ${res.status}`);
+  if (!res.ok) throw new Error(graphErrorText(body.error as GraphError | undefined, res.status));
   return body;
 }
 
@@ -263,9 +263,25 @@ async function graphPost(path: string, params: Record<string, string>) {
   });
   const json = (await res.json().catch(() => ({}))) as {
     success?: boolean;
-    error?: { message?: string };
+    error?: GraphError;
   };
-  if (!res.ok || !json.success) throw new Error(json.error?.message ?? `HTTP ${res.status}`);
+  if (!res.ok || !json.success) throw new Error(graphErrorText(json.error, res.status));
+}
+
+type GraphError = {
+  message?: string;
+  error_user_title?: string;
+  error_user_msg?: string;
+  error_data?: { details?: string } | string;
+};
+
+/** Meta's error with its details ("Invalid parameter" alone says little). */
+function graphErrorText(err: GraphError | undefined, status: number) {
+  if (!err) return `HTTP ${status}`;
+  const details = typeof err.error_data === "string" ? err.error_data : err.error_data?.details;
+  return [err.message, err.error_user_title, err.error_user_msg, details]
+    .filter((t, i, all) => t && all.indexOf(t) === i)
+    .join(" – ");
 }
 
 /**
@@ -339,6 +355,13 @@ export async function subscribeWhatsAppAccount(): Promise<ActionState> {
     await graphPost(`/${waba}/subscribed_apps`, { access_token: token });
     return { ok: true, message: "WhatsApp-Konto mit der App verbunden." };
   } catch (err) {
+    // Already connected (e.g. set up through the app dashboard): Meta may refuse a repeat
+    const app = appToken("whatsapp");
+    const subscribed = await graphGet(`/${waba}/subscribed_apps`, token)
+      .then((r) => (r as { data?: Array<{ whatsapp_business_api_data?: { id?: string } }> }).data)
+      .catch(() => null);
+    if (subscribed?.some((a) => !app || a.whatsapp_business_api_data?.id === app.id))
+      return { ok: true, message: "WhatsApp-Konto ist bereits mit der App verbunden." };
     return failed("Verbinden fehlgeschlagen", err);
   }
 }
