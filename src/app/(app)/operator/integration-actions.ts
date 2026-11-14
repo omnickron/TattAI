@@ -121,6 +121,8 @@ export async function testIntegration(group: IntegrationGroup): Promise<ActionSt
     const token = setting("META_PAGE_ACCESS_TOKEN");
     if (!token) return { ok: false, message: "Seiten-Zugriffstoken fehlt." };
     const secret = setting("META_APP_SECRET");
+    const problem = await pageTokenProblem(token, secret);
+    if (problem) return { ok: false, message: problem };
     const me = await graphGet("/me?fields=name", token, secret);
     // Listing the subscriptions needs pages_manage_metadata on the token; without it the
     // subscription itself may still work, so only the check is skipped
@@ -160,12 +162,28 @@ export async function testIntegration(group: IntegrationGroup): Promise<ActionSt
   }
 }
 
+/**
+ * The Meta-Leads token must be a page token. A user token (e.g. the extended token itself
+ * instead of the page token from me/accounts) makes Meta answer with puzzling errors.
+ */
+async function pageTokenProblem(token: string, secret?: string): Promise<string | null> {
+  const me = (await graphGet("/me?fields=id,name&metadata=1", token, secret).catch(() => null)) as {
+    metadata?: { type?: string };
+  } | null;
+  const type = me?.metadata?.type;
+  if (type && type !== "page")
+    return "Im Feld „Seiten-Zugriffstoken“ steht kein Seiten-Token, sondern ein Nutzer-Token. Im Graph API Explorer mit diesem Token „me/accounts“ abfragen und den access_token der Studio-Seite eintragen.";
+  return null;
+}
+
 /** Subscribes the app to the page's `leadgen` events (otherwise Meta sends no webhooks). */
 export async function subscribeMetaPage(): Promise<ActionState> {
   await requireOperator();
   const token = setting("META_PAGE_ACCESS_TOKEN");
   if (!token) return { ok: false, message: "Seiten-Zugriffstoken fehlt." };
   try {
+    const problem = await pageTokenProblem(token, setting("META_APP_SECRET"));
+    if (problem) return { ok: false, message: problem };
     const url = new URL(`${GRAPH()}/me/subscribed_apps`);
     url.searchParams.set("subscribed_fields", "leadgen");
     url.searchParams.set("access_token", token);
