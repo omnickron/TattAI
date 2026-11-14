@@ -78,11 +78,18 @@ export const SETTINGS: SettingDef[] = [
     secret: false,
   },
   {
+    key: "WHATSAPP_APP_ID",
+    group: "whatsapp",
+    label: "App-ID",
+    secret: false,
+    hint: "Nur wenn WhatsApp über eine eigene App läuft (leer = App von Meta-Leads)",
+  },
+  {
     key: "WHATSAPP_APP_SECRET",
     group: "whatsapp",
     label: "App-Geheimnis",
     secret: true,
-    hint: "Prüft die Signatur der WhatsApp-Webhooks (leer = App-Geheimnis von Meta-Leads)",
+    hint: "Geheimnis der App, über die WhatsApp läuft (leer = App von Meta-Leads)",
     envFallback: "META_APP_SECRET",
   },
   {
