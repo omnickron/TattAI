@@ -15,6 +15,6 @@ export function createLeadFetcher(): MetaLeadFetcher {
   return new GraphApiLeadFetcher({
     accessToken,
     appSecret,
-    apiVersion: process.env.META_GRAPH_API_VERSION || "v23.0",
+    apiVersion: process.env.META_GRAPH_API_VERSION || "v25.0",
   });
 }
