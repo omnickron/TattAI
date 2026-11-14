@@ -70,7 +70,7 @@ export function createMediaDownloader(): MediaDownloader {
   if (!accessToken) throw new Error("WHATSAPP_ACCESS_TOKEN must be set");
   return new CloudMediaDownloader({
     accessToken,
-    apiVersion: process.env.WHATSAPP_API_VERSION || process.env.META_GRAPH_API_VERSION || "v25.0",
+    apiVersion: process.env.WHATSAPP_API_VERSION || process.env.META_GRAPH_API_VERSION || "v27.0",
   });
 }
 
