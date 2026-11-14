@@ -258,6 +258,6 @@ export function createWhatsAppClient(): WhatsAppClient {
     accessToken,
     phoneNumberId,
     businessAccountId,
-    apiVersion: process.env.WHATSAPP_API_VERSION || process.env.META_GRAPH_API_VERSION || "v23.0",
+    apiVersion: process.env.WHATSAPP_API_VERSION || process.env.META_GRAPH_API_VERSION || "v25.0",
   });
 }

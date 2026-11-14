@@ -62,7 +62,7 @@ export async function setIntegrationLive(
   };
 }
 
-const GRAPH = () => `https://graph.facebook.com/${process.env.META_GRAPH_API_VERSION || "v23.0"}`;
+const GRAPH = () => `https://graph.facebook.com/${process.env.META_GRAPH_API_VERSION || "v25.0"}`;
 
 async function graphGet(path: string, token: string, appSecret?: string) {
   const url = new URL(`${GRAPH()}${path}`);
