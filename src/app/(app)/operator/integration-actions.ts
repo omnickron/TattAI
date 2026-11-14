@@ -122,15 +122,22 @@ export async function testIntegration(group: IntegrationGroup): Promise<ActionSt
     if (!token) return { ok: false, message: "Seiten-Zugriffstoken fehlt." };
     const secret = setting("META_APP_SECRET");
     const me = await graphGet("/me?fields=name", token, secret);
-    const apps = (await graphGet("/me/subscribed_apps", token, secret)) as {
+    // Listing the subscriptions needs pages_manage_metadata on the token; without it the
+    // subscription itself may still work, so only the check is skipped
+    const apps = (await graphGet("/me/subscribed_apps", token, secret).catch(() => null)) as {
       data?: Array<{ name?: string; subscribed_fields?: string[] }>;
-    };
-    const leadgen = (apps.data ?? []).filter((a) => a.subscribed_fields?.includes("leadgen"));
+    } | null;
+    const leadgen = (apps?.data ?? []).filter((a) => a.subscribed_fields?.includes("leadgen"));
     const leadHook = await appLeadgenWebhook().catch(() => null);
     if (leadHook === false)
       return {
         ok: false,
         message: `Seite „${me.name ?? "?"}“ erreichbar, aber der Webhook der App hat „leadgen“ noch nicht abonniert – „Webhook bei Meta eintragen“ drücken.`,
+      };
+    if (!apps)
+      return {
+        ok: true,
+        message: `Seite „${me.name ?? "?"}“ erreichbar, Webhook eingetragen. Ob die Seite Leads meldet, lässt sich mit diesem Token nicht prüfen (pages_manage_metadata fehlt) – am besten mit einem Test-Lead prüfen.`,
       };
     if (!leadgen.length)
       return {
