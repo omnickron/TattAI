@@ -325,3 +325,33 @@ export async function subscribeWhatsAppAccount(): Promise<ActionState> {
     return failed("Verbinden fehlgeschlagen", err);
   }
 }
+
+/**
+ * Registers the phone number for the Cloud API (once, after adding it in the WhatsApp
+ * Manager). The 6-digit PIN becomes the number's two-step verification PIN – it is needed
+ * again only when the number is registered anew, so the operator should note it.
+ */
+export async function registerWhatsAppNumber(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireOperator();
+  const pin = String(formData.get("pin") ?? "").trim();
+  if (!/^\d{6}$/.test(pin)) return { ok: false, message: "Die PIN muss genau 6 Ziffern haben." };
+  const token = setting("WHATSAPP_ACCESS_TOKEN");
+  const phoneId = setting("WHATSAPP_PHONE_NUMBER_ID");
+  if (!token || !phoneId) return { ok: false, message: "Token oder Telefonnummer-ID fehlt." };
+  try {
+    await graphPost(`/${phoneId}/register`, {
+      messaging_product: "whatsapp",
+      pin,
+      access_token: token,
+    });
+    return {
+      ok: true,
+      message: "Nummer registriert – sie kann jetzt über NEEDL senden. PIN bitte notieren.",
+    };
+  } catch (err) {
+    return failed("Registrieren fehlgeschlagen", err);
+  }
+}
