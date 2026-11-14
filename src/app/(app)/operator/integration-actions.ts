@@ -106,6 +106,7 @@ export async function testIntegration(group: IntegrationGroup): Promise<ActionSt
         "whatsapp_business_account",
         "/api/webhooks/whatsapp",
         "messages",
+        "whatsapp",
       ).catch(() => null);
       if (hook === false)
         return {
@@ -193,10 +194,19 @@ export async function subscribeMetaPage(): Promise<ActionState> {
   }
 }
 
-/** App access token "APP_ID|APP_SECRET" for app-level calls (webhook subscriptions). */
-function appToken() {
-  const id = setting("META_APP_ID");
-  const secret = setting("META_APP_SECRET");
+type AppKind = "meta" | "whatsapp";
+
+/**
+ * App access token "APP_ID|APP_SECRET" for app-level calls (webhook subscriptions).
+ * WhatsApp may run through its own app (e.g. one in the studio's portfolio until NEEDL is a
+ * tech provider); without its own App-ID it uses the Meta-Leads app.
+ */
+function appToken(kind: AppKind = "meta") {
+  const id =
+    (kind === "whatsapp" ? setting("WHATSAPP_APP_ID") : undefined) ?? setting("META_APP_ID");
+  const secret =
+    (kind === "whatsapp" ? setting("WHATSAPP_APP_SECRET") : undefined) ??
+    setting("META_APP_SECRET");
   return id && secret ? { id, token: `${id}|${secret}` } : null;
 }
 
@@ -211,8 +221,13 @@ const WA_FIELDS = [
  * true/false = the app's webhook for `object` points to NEEDL (`path`) with `field`;
  * null = App-ID or App-Geheimnis missing.
  */
-async function appWebhook(object: string, path: string, field: string): Promise<boolean | null> {
-  const app = appToken();
+async function appWebhook(
+  object: string,
+  path: string,
+  field: string,
+  kind: AppKind = "meta",
+): Promise<boolean | null> {
+  const app = appToken(kind);
   if (!app) return null;
   const subs = (await graphGet(`/${app.id}/subscriptions`, app.token)) as {
     data?: Array<{
@@ -262,9 +277,10 @@ async function registerAppWebhook(
   path: string,
   fields: string[],
   verifyToken: string | undefined,
+  kind: AppKind = "meta",
 ) {
-  const app = appToken();
-  if (!app) throw new Error("App-ID (bei Meta-Leads) oder App-Geheimnis fehlt");
+  const app = appToken(kind);
+  if (!app) throw new Error("App-ID oder App-Geheimnis fehlt");
   if (!verifyToken) throw new Error("Verify-Token fehlt");
   await graphPost(`/${app.id}/subscriptions`, {
     object,
@@ -301,6 +317,7 @@ export async function registerWhatsAppWebhook(): Promise<ActionState> {
       "/api/webhooks/whatsapp",
       WA_FIELDS,
       setting("WHATSAPP_VERIFY_TOKEN"),
+      "whatsapp",
     );
     return {
       ok: true,
