@@ -141,6 +141,10 @@ export class CloudApiClient implements WhatsAppClient {
       `${this.opts.phoneNumberId}/messages`,
       {
         messaging_product: "whatsapp",
+        // Meta's messaging-account model: billing and templates belong to this account.
+        // Without it Meta may pick another messaging account of the number (e.g. one without
+        // a payment method → error 131042)
+        messaging_account_id: this.opts.businessAccountId,
         to: this.to(input.to),
         type: "template",
         template: {
@@ -165,6 +169,7 @@ export class CloudApiClient implements WhatsAppClient {
       `${this.opts.phoneNumberId}/messages`,
       {
         messaging_product: "whatsapp",
+        messaging_account_id: this.opts.businessAccountId,
         to: this.to(input.to),
         type: "text",
         text: { body: input.body, preview_url: false },
