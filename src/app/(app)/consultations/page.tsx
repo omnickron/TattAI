@@ -55,6 +55,7 @@ export default async function ConsultationsPage({ searchParams }: PageProps<"/co
         lead: { select: { id: true, name: true, phoneE164: true } },
         tattooer: { include: { user: { select: { name: true } } } },
         tattooBookings: true,
+        followUpContacts: { orderBy: { recordedAt: "asc" } },
       },
     }),
     prisma.consultation.count({ where: where.open }),

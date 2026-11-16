@@ -84,19 +84,28 @@ function Question({ title, children }: { title: string; children: React.ReactNod
   );
 }
 
-/** Outcome of a consultation with the follow-up questions shown step by step. */
+/**
+ * Outcome of a consultation with the follow-up questions shown step by step. With
+ * `followUp` it asks for the result of a follow-up instead: customer reached? then tattoo
+ * agreed (same session fields) / no tattoo / follow up again on a later day.
+ */
 export function OutcomeForm({
   action,
   defaults = {},
   returnTo,
+  followUp: followUpMode = false,
 }: {
   action: (prev: ActionState, formData: FormData) => Promise<ActionState>;
   defaults?: OutcomeDefaults;
   /** Page to return to with a confirmation after saving */
   returnTo?: string;
+  followUp?: boolean;
 }) {
   const [state, formAction, pending] = useActionState(action, null);
   const [outcome, setOutcome] = useState<Outcome | null>(defaults.outcome ?? null);
+  const [reached, setReached] = useState<"yes" | "no" | null>(null);
+  // Consultation held (outcome form) or follow-up answered (follow-up form)
+  const held = followUpMode ? reached !== null : outcome === "HELD";
   const [tattoo, setTattoo] = useState<Tattoo | null>(defaults.tattoo ?? null);
   const [plan, setPlan] = useState<Plan | null>(defaults.sessionPlan ?? null);
   const [further, setFurther] = useState<"yes" | "no" | null>(
@@ -110,9 +119,7 @@ export function OutcomeForm({
   );
 
   const showSessions =
-    outcome === "HELD" &&
-    tattoo === "YES" &&
-    (plan === "SINGLE" || (plan === "MULTIPLE" && further));
+    held && tattoo === "YES" && (plan === "SINGLE" || (plan === "MULTIPLE" && further));
   const multipleRows = plan === "MULTIPLE" && further === "yes";
   const rows = multipleRows
     ? sessions.length < 2
@@ -135,36 +142,61 @@ export function OutcomeForm({
   return (
     <form action={formAction} className="space-y-4">
       {returnTo && <input type="hidden" name="returnTo" value={returnTo} />}
-      <Question title="Wie lief die Beratung?">
-        <Choice name="outcome" value="HELD" current={outcome} onChange={setOutcome}>
-          Hat stattgefunden
-        </Choice>
-        <Choice name="outcome" value="NO_SHOW" current={outcome} onChange={setOutcome}>
-          No-Show
-        </Choice>
-        <Choice name="outcome" value="CANCELLED" current={outcome} onChange={setOutcome}>
-          Abgesagt
-        </Choice>
-      </Question>
-
-      {outcome === "HELD" && (
-        <Question title="Wurde ein Tattoo-Termin vereinbart?">
-          <Choice name="tattoo" value="YES" current={tattoo} onChange={setTattoo}>
+      {followUpMode ? (
+        <Question title="Hast du den Kunden erreicht (oder hat er sich gemeldet)?">
+          <Choice name="reached" value="yes" current={reached} onChange={(v) => setReached(v)}>
             Ja
           </Choice>
-          <Choice name="tattoo" value="NO" current={tattoo} onChange={setTattoo}>
-            Nein
+          <Choice
+            name="reached"
+            value="no"
+            current={reached}
+            onChange={(v) => {
+              setReached(v);
+              if (tattoo === "YES") setTattoo(null);
+            }}
+          >
+            Nein, nicht erreicht
           </Choice>
-          <Choice name="tattoo" value="OPEN" current={tattoo} onChange={setTattoo}>
-            Follow-up (Kunde überlegt noch)
+        </Question>
+      ) : (
+        <Question title="Wie lief die Beratung?">
+          <Choice name="outcome" value="HELD" current={outcome} onChange={setOutcome}>
+            Hat stattgefunden
+          </Choice>
+          <Choice name="outcome" value="NO_SHOW" current={outcome} onChange={setOutcome}>
+            No-Show
+          </Choice>
+          <Choice name="outcome" value="CANCELLED" current={outcome} onChange={setOutcome}>
+            Abgesagt
           </Choice>
         </Question>
       )}
 
-      {outcome === "HELD" && tattoo === "OPEN" && (
+      {held && (
+        <Question
+          title={followUpMode ? "Was ist dabei herausgekommen?" : "Wurde ein Tattoo-Termin vereinbart?"}
+        >
+          {(!followUpMode || reached === "yes") && (
+            <Choice name="tattoo" value="YES" current={tattoo} onChange={setTattoo}>
+              {followUpMode ? "Tattoo-Termin vereinbart" : "Ja"}
+            </Choice>
+          )}
+          <Choice name="tattoo" value="NO" current={tattoo} onChange={setTattoo}>
+            {followUpMode ? "Kein Tattoo" : "Nein"}
+          </Choice>
+          <Choice name="tattoo" value="OPEN" current={tattoo} onChange={setTattoo}>
+            {followUpMode ? "Nochmal nachfassen" : "Follow-up (Kunde überlegt noch)"}
+          </Choice>
+        </Question>
+      )}
+
+      {held && tattoo === "OPEN" && (
         <div className="space-y-2 rounded-lg bg-muted/50 p-3">
           <p className="block text-sm font-medium">
-            Wann soll der Kunde wieder kontaktiert werden?
+            {followUpMode
+              ? "Wann willst du es nochmal versuchen?"
+              : "Wann soll der Kunde wieder kontaktiert werden?"}
           </p>
           <DatePicker
             name="followUpDate"
@@ -175,13 +207,14 @@ export function OutcomeForm({
           />
           <p className="text-xs text-ink-soft">
             An diesem Tag um 9 Uhr kommt eine Erinnerung aufs Handy, und der Kunde steht auf der
-            Übersicht unter „Heute nachfassen“, bis jemand „Erledigt“ tippt. Den Grund (z. B. Motiv
-            noch unsicher, Termin passt erst später) bitte unten als Notiz eintragen.
+            Übersicht unter „Heute nachfassen“, bis das Ergebnis des Follow-ups eingetragen ist. Den
+            Grund (z. B. Motiv noch unsicher, Termin passt erst später) bitte unten als Notiz
+            eintragen.
           </p>
         </div>
       )}
 
-      {outcome === "HELD" && tattoo === "YES" && (
+      {held && tattoo === "YES" && (
         <Question title="Wie viele Termine braucht das Tattoo?">
           <Choice name="sessionPlan" value="SINGLE" current={plan} onChange={setPlan}>
             Ein Termin
@@ -192,7 +225,7 @@ export function OutcomeForm({
         </Question>
       )}
 
-      {outcome === "HELD" && tattoo === "YES" && plan === "MULTIPLE" && (
+      {held && tattoo === "YES" && plan === "MULTIPLE" && (
         <Question title="Welche Termine sind schon vergeben?">
           <Choice name="furtherScheduled" value="no" current={further} onChange={setFurther}>
             Nur der erste Termin
@@ -315,18 +348,18 @@ export function OutcomeForm({
         </div>
       )}
 
-      {outcome && (
+      {(followUpMode ? reached : outcome) && (
         <Textarea
           name="note"
           defaultValue={defaults.note ?? ""}
           rows={2}
-          placeholder="Notiz (optional)"
+          placeholder={followUpMode ? "Was hat das Follow-up ergeben? (optional)" : "Notiz (optional)"}
           maxLength={2000}
         />
       )}
 
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" disabled={!outcome || pending}>
+        <Button type="submit" disabled={(followUpMode ? !reached || !tattoo : !outcome) || pending}>
           {pending ? "Speichert …" : "Ergebnis speichern"}
         </Button>
         {state && (

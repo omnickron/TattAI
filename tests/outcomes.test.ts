@@ -1,5 +1,9 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { loadDueFollowUps, markFollowUpDone, notifyDueFollowUps } from "@/lib/outcomes/follow-up";
+import {
+  loadDueFollowUps,
+  notifyDueFollowUps,
+  recordFollowUpResult,
+} from "@/lib/outcomes/follow-up";
 import { notifyMissingOutcomes } from "@/lib/outcomes/reminders";
 import { sessionRevenueCents } from "@/lib/outcomes/session-revenue";
 import { loadMonthRevenue } from "@/lib/billing/billing";
@@ -245,31 +249,106 @@ describe("follow-up", () => {
     expect(sent).toHaveLength(1);
     expect(sent[0]).toMatch(/^Heute nachfassen: /);
 
-    // Overdue ones stay listed until done
-    expect(await loadDueFollowUps(prisma, scope, new Date("2026-11-18T10:00:00Z"))).toHaveLength(1);
-    await markFollowUpDone(prisma, c.id, later);
-    expect(await loadDueFollowUps(prisma, scope, new Date("2026-11-18T10:00:00Z"))).toHaveLength(0);
+    // Overdue ones stay listed until the result is entered
+    const day18 = new Date("2026-11-18T10:00:00Z");
+    expect(await loadDueFollowUps(prisma, scope, day18)).toHaveLength(1);
 
-    // A new date brings it back
-    await recordOutcome(prisma, {
+    // A result is required: reached? and what came out of it
+    await expect(
+      recordFollowUpResult(prisma, {
+        consultationId: c.id,
+        userId,
+        now: day18,
+        result: { reached: null, result: "AGAIN", nextDate: "2026-11-23" },
+      }),
+    ).rejects.toThrow(/erreicht/);
+    await expect(
+      recordFollowUpResult(prisma, {
+        consultationId: c.id,
+        userId,
+        now: day18,
+        result: { reached: false, result: "TATTOO" },
+      }),
+    ).rejects.toThrow(/nur, wenn du den Kunden erreicht/);
+
+    // Not reached: try again on a later day → reminder and list again then
+    await recordFollowUpResult(prisma, {
       consultationId: c.id,
       userId,
-      now: later,
+      now: day18,
       timeZone: "Europe/Berlin",
-      outcome: { outcome: "HELD", tattoo: "OPEN", followUpDate: "2026-11-23" },
+      result: { reached: false, result: "AGAIN", nextDate: "2026-11-23", note: "Mailbox" },
     });
-    expect(await loadDueFollowUps(prisma, scope, new Date("2026-11-23T10:00:00Z"))).toHaveLength(1);
+    expect(await loadDueFollowUps(prisma, scope, day18)).toHaveLength(0);
+    const day23 = new Date("2026-11-23T10:00:00Z");
+    expect(await loadDueFollowUps(prisma, scope, day23)).toHaveLength(1);
+    expect(await notifyDueFollowUps(prisma, push, day23)).toBe(1);
 
-    // A new decision does not remove it – only the button does
+    // Reached, no tattoo: closed, lead "kein Tattoo", history kept
+    await recordFollowUpResult(prisma, {
+      consultationId: c.id,
+      userId,
+      now: day23,
+      result: { reached: true, result: "NO_TATTOO", note: "Macht es woanders" },
+    });
+    expect(await loadDueFollowUps(prisma, scope, day23)).toHaveLength(0);
+    expect(await leadStatus(c.id)).toBe("NO_TATTOO");
+    const contacts = await prisma.followUpContact.findMany({
+      where: { consultationId: c.id },
+      orderBy: { recordedAt: "asc" },
+    });
+    expect(contacts.map((x) => [x.reached, x.result, x.note])).toEqual([
+      [false, "AGAIN", "Mailbox"],
+      [true, "NO_TATTOO", "Macht es woanders"],
+    ]);
+    expect(contacts[0].dueAt.toISOString()).toBe("2026-11-16T08:00:00.000Z");
+    // Nothing open any more
+    await expect(
+      recordFollowUpResult(prisma, {
+        consultationId: c.id,
+        userId,
+        now: day23,
+        result: { reached: true, result: "NO_TATTOO" },
+      }),
+    ).rejects.toThrow(/kein Follow-up offen/);
+  });
+
+  it("books the tattoo sessions when the follow-up ends with a tattoo", async () => {
+    const c = await consultation();
     await recordOutcome(prisma, {
       consultationId: c.id,
       userId,
-      now: later,
-      outcome: { outcome: "HELD", tattoo: "NO" },
+      now: NOW,
+      timeZone: "Europe/Berlin",
+      outcome: { outcome: "HELD", tattoo: "OPEN", followUpDate: "2026-11-16", note: "Motiv" },
     });
-    expect(await loadDueFollowUps(prisma, scope, new Date("2026-11-23T10:00:00Z"))).toHaveLength(1);
-    await markFollowUpDone(prisma, c.id, later);
-    expect(await loadDueFollowUps(prisma, scope, new Date("2026-11-23T10:00:00Z"))).toHaveLength(0);
+    const day = new Date("2026-11-16T10:00:00Z");
+    await recordFollowUpResult(prisma, {
+      consultationId: c.id,
+      userId,
+      now: day,
+      timeZone: "Europe/Berlin",
+      result: {
+        reached: true,
+        result: "TATTOO",
+        sessionPlan: "SINGLE",
+        sessions: [{ date: "2026-12-05", amount: "450", deposit: "100" }],
+      },
+    });
+    const stored = await prisma.consultation.findUniqueOrThrow({
+      where: { id: c.id },
+      include: { tattooBookings: true },
+    });
+    expect(stored.tattooBooked).toBe(true);
+    expect(stored.followUpDoneAt).toEqual(day);
+    expect(stored.outcomeNote).toBe("Motiv");
+    expect(stored.tattooBookings.map((b) => [b.amountCents, b.depositCents])).toEqual([
+      [45000, 10000],
+    ]);
+    expect(await leadStatus(c.id)).toBe("TATTOO_BOOKED");
+    expect(await loadDueFollowUps(prisma, { isAdmin: true, tattooerId: null }, day)).toHaveLength(
+      0,
+    );
   });
 });
 
