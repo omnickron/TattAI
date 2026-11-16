@@ -7,7 +7,11 @@ import type { ActionState } from "@/lib/action-state";
 import { requireAdmin } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { isLocalDate, parseTimeOfDay } from "@/lib/time";
-import { loadMessagingSettings, pauseSending } from "@/lib/whatsapp/messaging";
+import {
+  loadMessagingSettings,
+  pauseSending,
+  replanQueuedIntroMessages,
+} from "@/lib/whatsapp/messaging";
 import { parseSendTimes } from "@/lib/whatsapp/throttle";
 
 const ok = (message: string): ActionState => {
@@ -280,6 +284,12 @@ export async function deleteAfterRule(id: string): Promise<ActionState> {
   return ok("Nachricht nach dem Termin entfernt.");
 }
 
+/** Note for the operator when already planned opening messages were re-planned. */
+const replanned = (count: number) =>
+  count
+    ? ` ${count === 1 ? "1 schon geplante Erstnachricht wird" : `${count} schon geplante Erstnachrichten werden`} mit den neuen Einstellungen neu eingeplant.`
+    : "";
+
 /** Adds a further opening message after the first contact (always sent, bot waits for it). */
 export async function addIntroStep(_prev: ActionState, formData: FormData): Promise<ActionState> {
   await requireAdmin();
@@ -300,7 +310,7 @@ export async function addIntroStep(_prev: ActionState, formData: FormData): Prom
       atSendTime: formData.get("atSendTime") === "on",
     },
   });
-  return ok("Erstnachricht hinzugefügt.");
+  return ok(`Erstnachricht hinzugefügt.${replanned(await replanQueuedIntroMessages(prisma))}`);
 }
 
 /** Removes an opening message; the following ones move up. */
@@ -322,7 +332,7 @@ export async function deleteIntroStep(id: string): Promise<ActionState> {
       prisma.introStep.update({ where: { id: r.id }, data: { position: r.position - 1 } }),
     ),
   ]);
-  return ok("Erstnachricht entfernt.");
+  return ok(`Erstnachricht entfernt.${replanned(await replanQueuedIntroMessages(prisma))}`);
 }
 
 /** Switches an opening message between "at the next send time" and "right after the delay". */
@@ -331,9 +341,10 @@ export async function toggleIntroStepSendTime(id: string): Promise<ActionState> 
   const step = await prisma.introStep.findUnique({ where: { id } });
   if (!step) return { ok: false, message: "Nicht gefunden." };
   await prisma.introStep.update({ where: { id }, data: { atSendTime: !step.atSendTime } });
+  const count = await replanQueuedIntroMessages(prisma);
   return ok(
-    step.atSendTime
+    (step.atSendTime
       ? "Geht jetzt direkt nach der Wartezeit raus."
-      : "Geht jetzt zur nächsten Sendezeit raus.",
+      : "Geht jetzt zur nächsten Sendezeit raus.") + replanned(count),
   );
 }

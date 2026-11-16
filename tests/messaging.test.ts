@@ -7,6 +7,7 @@ import {
 import {
   dispatchMessages,
   planMessages,
+  replanQueuedIntroMessages,
   runMessagingWorker,
   waitingForIntroMessages,
   type MessagingDeps,
@@ -412,6 +413,33 @@ describe("immediate first contact and further opening messages", () => {
     expect(wa.sent.map((m) => m.name)).toEqual(["erstkontakt", "zweite"]);
     expect(await waitingForIntroMessages(prisma, l.id, clock)).toBe(false);
     expect(second).toBeTruthy();
+  });
+
+  it("re-plans an already planned opening message after the settings changed", async () => {
+    await setup(); // second message 60 min after the first contact, at the next send time
+    clock = at(MON, "14:12");
+    const l = await lead();
+    await planMessages(deps);
+    await dispatchMessages(deps); // first contact
+    await planMessages(deps);
+    const planned = await prisma.outboundMessage.findFirstOrThrow({
+      where: { leadId: l.id, kind: "INTRO_MESSAGE" },
+    });
+    expect(planned.notBefore).toEqual(at(MON, "15:12"));
+
+    // The admin switches to "1 minute, right away": the planned message follows
+    await prisma.introStep.updateMany({ data: { atSendTime: false, minDelayMinutes: 1 } });
+    expect(await replanQueuedIntroMessages(prisma)).toBe(1);
+    await planMessages(deps);
+    const replanned = await prisma.outboundMessage.findFirstOrThrow({
+      where: { leadId: l.id, kind: "INTRO_MESSAGE" },
+    });
+    expect(replanned.notBefore).toEqual(at(MON, "14:13"));
+    clock = at(MON, "14:14");
+    expect(await dispatchMessages(deps)).toMatchObject({ sent: 1 });
+    expect(wa.sent.map((m) => m.name)).toEqual(["erstkontakt", "zweite"]);
+    // Sent ones stay untouched
+    expect(await replanQueuedIntroMessages(prisma)).toBe(0);
   });
 
   it("does not hold the bot without opening messages or after a failed one", async () => {

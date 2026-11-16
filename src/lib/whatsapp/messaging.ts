@@ -83,6 +83,17 @@ export function introProgress(
 const AFTER_MAX_LATE_MS = 7 * 24 * HOUR;
 const OPT_OUT_WORDS = new Set(["stop", "stopp", "abmelden", "keine nachrichten", "unsubscribe"]);
 
+/**
+ * After the opening messages were changed: drops the ones planned but not yet sent, so the
+ * worker plans them again with the new steps, delays and send-time setting.
+ */
+export async function replanQueuedIntroMessages(prisma: Pick<PrismaClient, "outboundMessage">) {
+  const res = await prisma.outboundMessage.deleteMany({
+    where: { kind: "INTRO_MESSAGE", status: "QUEUED" },
+  });
+  return res.count;
+}
+
 export async function loadMessagingSettings(prisma: PrismaClient): Promise<MessagingSettings> {
   return prisma.messagingSettings.upsert({ where: { id: 1 }, update: {}, create: { id: 1 } });
 }
