@@ -448,7 +448,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
 
       {/* 4. Latest WhatsApp contacts */}
       <Card>
-        <SectionTitle action={<MoreLink href="/leads">Alle Leads</MoreLink>}>
+        <SectionTitle action={<MoreLink href="/leads">Alle Kontakte</MoreLink>}>
           Letzte WhatsApp-Kontakte
         </SectionTitle>
         {data.contacts.length === 0 ? (

@@ -16,7 +16,7 @@ import { formatDateTime, formatPhone } from "@/lib/format";
 import { LEAD_STATUS_LABELS, LEAD_STATUS_ORDER, PLATFORM_LABELS } from "@/lib/labels";
 import { listLeads, parseLeadFilters, type LeadFilters } from "@/lib/leads/queries";
 
-export const metadata: Metadata = { title: "Leads" };
+export const metadata: Metadata = { title: "Kontakte" };
 
 function pageHref(filters: LeadFilters, page: number) {
   const params = new URLSearchParams();
@@ -39,13 +39,13 @@ export default async function LeadsPage({ searchParams }: PageProps<"/leads">) {
   return (
     <>
       <PageHeader
-        title="Leads"
+        title="Kontakte"
         description={
           isAdmin
-            ? `${total} ${total === 1 ? "Lead" : "Leads"}${hasFilters ? " (gefiltert)" : ""}`
+            ? `${total} ${total === 1 ? "Kontakt" : "Kontakte"}${hasFilters ? " (gefiltert)" : ""}`
             : filters.view === "customers"
               ? "Deine Kunden mit gebuchtem Tattoo"
-              : "Leads mit Beratungsterminen bei dir"
+              : "Kontakte mit Beratungsterminen bei dir"
         }
       />
 
@@ -56,7 +56,7 @@ export default async function LeadsPage({ searchParams }: PageProps<"/leads">) {
           className="mb-4 inline-grid grid-cols-2 gap-1 rounded-lg bg-muted p-1 text-sm"
         >
           {[
-            { key: undefined, label: "Alle Leads" },
+            { key: undefined, label: "Alle Kontakte" },
             { key: "customers" as const, label: "Kunden" },
           ].map((v) => {
             const active = filters.view === v.key;
@@ -118,12 +118,12 @@ export default async function LeadsPage({ searchParams }: PageProps<"/leads">) {
       {leads.length === 0 ? (
         <EmptyState>
           {hasFilters
-            ? "Keine Leads für diese Filter gefunden."
+            ? "Keine Kontakte für diese Filter gefunden."
             : filters.view === "customers"
               ? "Noch keine Kunden mit gebuchtem Tattoo."
               : isAdmin
-                ? "Noch keine Leads eingegangen."
-                : "Dir sind noch keine Leads zugeordnet. Sie erscheinen hier, sobald du Beratungstermine hast."}
+                ? "Noch keine Kontakte eingegangen."
+                : "Dir sind noch keine Kontakte zugeordnet. Sie erscheinen hier, sobald du Beratungstermine hast."}
         </EmptyState>
       ) : (
         <div className="overflow-hidden rounded-xl border border-line bg-surface">

@@ -42,7 +42,7 @@ export default async function LeadPage({ params, searchParams }: PageProps<"/lea
   return (
     <>
       <Link href="/leads" className="text-sm text-ink-soft hover:text-ink">
-        ← Alle Leads
+        ← Alle Kontakte
       </Link>
       <div className="mb-5 mt-2 flex flex-wrap items-center gap-3">
         <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">{lead.name}</h1>
