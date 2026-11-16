@@ -76,6 +76,7 @@ export const SETTINGS: SettingDef[] = [
     group: "whatsapp",
     label: "WhatsApp-Business-Konto-ID",
     secret: false,
+    hint: "ID des Messaging-Kontos (Business-Einstellungen → Messaging-Konten), nicht die des WhatsApp-Kontos der Nummer",
   },
   {
     key: "WHATSAPP_APP_ID",
