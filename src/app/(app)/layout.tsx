@@ -76,6 +76,11 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
               { href: "/admin/dashboard", label: "Auswertung", icon: "report" as const },
               { href: "/admin/billing", label: "Abrechnung", icon: "billing" as const },
               { href: "/admin/tattooers", label: "Tätowierer", icon: "tattooers" as const },
+              {
+                href: "/admin/availability",
+                label: "Verfügbarkeiten",
+                icon: "availability" as const,
+              },
               { href: "/admin/fairness", label: "Fairness", icon: "fairness" as const },
               { href: "/admin/whatsapp", label: "WhatsApp", icon: "whatsapp" as const },
               { href: "/admin/bot", label: "Bot-Wissen", icon: "bot" as const },
