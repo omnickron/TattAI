@@ -54,13 +54,23 @@ export function sentenceCount(text: string): number {
 /** Mentions a price, an amount or a price range. */
 export const mentionsPrice = (text: string) => PRICE_RES.some((re) => re.test(text));
 
+// One offered appointment per line, e.g. "Mo., 18.11. – 14:00 Uhr" (optionally "heute, …")
+const SLOT_LINE_RE =
+  /^\s*[-•·]?\s*(?:(?:heute|morgen),?\s*)?(?:Mo|Di|Mi|Do|Fr|Sa|So)\.?,?\s*\d{1,2}\.\d{1,2}\.?[^\n]*?\d{1,2}[:.]\d{2}(?:\s*Uhr)?\s*$/gim;
+
+/** The reply without its list of appointments (the list doesn't count as sentences). */
+export const withoutSlotList = (text: string) => text.replace(SLOT_LINE_RE, "").trim();
+
 /** Problems with a reply; empty = may be sent. */
 export function checkReply(text: string, ctx: ReplyContext): string[] {
   const problems: string[] = [];
   const t = text.trim();
-  if (t.length > MAX_REPLY_CHARS)
-    problems.push(`Zu lang (${t.length} Zeichen, höchstens ${MAX_REPLY_CHARS}). Kürzer schreiben.`);
-  const sentences = sentenceCount(t);
+  const prose = withoutSlotList(t);
+  if (prose.length > MAX_REPLY_CHARS)
+    problems.push(
+      `Zu lang (${prose.length} Zeichen, höchstens ${MAX_REPLY_CHARS}). Kürzer schreiben.`,
+    );
+  const sentences = sentenceCount(prose);
   if (sentences > MAX_REPLY_SENTENCES)
     problems.push(
       `${sentences} Sätze – höchstens ${MAX_REPLY_SENTENCES} kurze Sätze. Kürzer schreiben, nichts wiederholen.`,

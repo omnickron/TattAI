@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { spreadSlots } from "./brain";
+import { slotLabel, spreadSlots } from "./brain";
 import { checkReply, forbiddenWordList, sentenceCount } from "./filters";
 import { buildSystemPrompt } from "./prompt";
 import { emptyKnowledge } from "./knowledge";
@@ -37,6 +37,22 @@ describe("reply filters", () => {
     expect(checkReply("x".repeat(700), ctx).join(" ")).toMatch(/Zu lang/);
     expect(checkReply("Ich bin ein echter Mensch", ctx).join(" ")).toMatch(/Mensch/);
     expect(checkReply("Ich bin kein Bot", ctx).join(" ")).toMatch(/Mensch/);
+  });
+
+  it("lets a list of appointments through, one per line, without counting it as sentences", () => {
+    const list = [
+      "Ich hätte diese Zeiten frei:",
+      "Mo., 18.11. – 14:00 Uhr",
+      "Di., 19.11. – 11:30 Uhr",
+      "heute, Do., 21.11. – 17:00 Uhr",
+      "Fr., 22.11. – 09:15 Uhr",
+      "Passt dir einer davon?",
+    ].join("\n");
+    expect(checkReply(list, ctx)).toEqual([]);
+    // The format the tool hands to the bot
+    expect(slotLabel(zonedTimeToUtc("2026-11-18", 14 * 60), "Europe/Berlin")).toBe(
+      "Mi., 18.11. – 14:00 Uhr",
+    );
   });
 
   it("allows 'gebucht' only with a booking", () => {
