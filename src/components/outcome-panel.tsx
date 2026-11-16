@@ -1,7 +1,7 @@
 import { OutcomeForm } from "@/components/outcome-form";
 import { TattooSessions, type TattooSession } from "@/components/tattoo-sessions";
 import { Badge } from "@/components/ui";
-import { recordOutcomeAction } from "@/app/(app)/consultations/actions";
+import { recordFollowUpAction, recordOutcomeAction } from "@/app/(app)/consultations/actions";
 import { APP_TIMEZONE } from "@/lib/format";
 import { centsToInput } from "@/lib/outcomes/money";
 import { formatTimeOfDay, localDateOf, localMinuteOf } from "@/lib/time";
@@ -18,7 +18,22 @@ export type OutcomeConsultation = {
   followUpAt?: Date | null;
   followUpDoneAt?: Date | null;
   tattooBookings: TattooSession[];
+  /** Results of earlier follow-ups (oldest first) */
+  followUpContacts?: Array<{
+    id: string;
+    dueAt: Date;
+    reached: boolean;
+    result: "TATTOO" | "NO_TATTOO" | "AGAIN";
+    note: string | null;
+    nextAt: Date | null;
+  }>;
 };
+
+const FOLLOW_UP_RESULT = {
+  TATTOO: "Tattoo-Termin vereinbart",
+  NO_TATTOO: "kein Tattoo",
+  AGAIN: "nochmal nachfassen",
+} as const;
 
 const localDate = (d: Date) => localDateOf(d, APP_TIMEZONE);
 const followUpLabel = new Intl.DateTimeFormat("de-DE", {
@@ -107,6 +122,41 @@ export function OutcomePanel({
           <p className="text-sm font-medium">{outcomeSummary(c)}</p>
           {c.outcomeNote && (
             <p className="whitespace-pre-wrap text-sm text-ink-soft">{c.outcomeNote}</p>
+          )}
+
+          {(c.followUpContacts?.length ?? 0) > 0 && (
+            <ul className="space-y-1 text-sm">
+              {c.followUpContacts!.map((f) => (
+                <li key={f.id}>
+                  <span className="font-medium">Follow-up {followUpLabel.format(f.dueAt)}:</span>{" "}
+                  {f.reached ? "erreicht" : "nicht erreicht"} · {FOLLOW_UP_RESULT[f.result]}
+                  {f.result === "AGAIN" && f.nextAt && ` am ${followUpLabel.format(f.nextAt)}`}
+                  {f.note && (
+                    <span className="block whitespace-pre-wrap text-ink-soft">{f.note}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {c.status === "HELD" && c.followUpAt && !c.followUpDoneAt && (
+            <div className="space-y-2 rounded-lg border border-sky-300 bg-sky-50/60 p-3 dark:border-sky-900 dark:bg-sky-950/30">
+              <p className="text-sm font-medium">
+                Follow-up am {followUpLabel.format(c.followUpAt)} offen
+              </p>
+              <details>
+                <summary className="cursor-pointer text-xs font-medium text-ink-soft hover:text-ink">
+                  Ergebnis des Follow-ups eintragen
+                </summary>
+                <div className="mt-3">
+                  <OutcomeForm
+                    action={recordFollowUpAction.bind(null, c.id)}
+                    returnTo={returnTo}
+                    followUp
+                  />
+                </div>
+              </details>
+            </div>
           )}
 
           {c.status === "HELD" &&

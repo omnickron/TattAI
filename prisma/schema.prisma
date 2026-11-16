@@ -332,6 +332,7 @@ model Consultation {
   tattooBookings   TattooBooking[]
   outboundMessages OutboundMessage[]
   attachments      LeadAttachment[]
+  followUpContacts FollowUpContact[]
 
   @@index([tattooerId, startsAt])
   @@index([leadId])
@@ -966,4 +967,29 @@ model WorkerHeartbeat {
   crashedAt   DateTime?
   crashError  String?
   updatedAt   DateTime  @updatedAt
+}
+
+enum FollowUpResult {
+  TATTOO // tattoo appointment agreed
+  NO_TATTOO // customer decided against it / gave up
+  AGAIN // contact again on a later day
+}
+
+// Result of one follow-up of a consultation (the tattooer has to enter it, no simple "done")
+model FollowUpContact {
+  id             String         @id @default(cuid())
+  consultationId String
+  consultation   Consultation   @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  // Day the follow-up was due
+  dueAt          DateTime
+  // Customer reached / got in touch
+  reached        Boolean
+  result         FollowUpResult
+  note           String?
+  // For AGAIN: the next follow-up
+  nextAt         DateTime?
+  recordedById   String?
+  recordedAt     DateTime       @default(now())
+
+  @@index([consultationId])
 }

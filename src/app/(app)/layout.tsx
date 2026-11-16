@@ -54,7 +54,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     {
       items: [
         { href: "/", label: "Übersicht", icon: "home", badge: handovers + followUps },
-        { href: "/leads", label: "Leads", icon: "leads" },
+        { href: "/leads", label: "Kontakte", icon: "leads" },
         { href: "/calendar", label: "Kalender", icon: "calendar" },
         {
           href: "/consultations",
@@ -78,7 +78,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
               { href: "/admin/tattooers", label: "Tätowierer", icon: "tattooers" as const },
               { href: "/admin/fairness", label: "Fairness", icon: "fairness" as const },
               { href: "/admin/whatsapp", label: "WhatsApp", icon: "whatsapp" as const },
-              { href: "/admin/bot", label: "Bot", icon: "bot" as const },
+              { href: "/admin/bot", label: "Bot-Wissen", icon: "bot" as const },
               { href: "/admin/settings", label: "Einstellungen", icon: "settings" as const },
             ],
           },

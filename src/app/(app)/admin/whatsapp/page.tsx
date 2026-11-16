@@ -73,7 +73,7 @@ export default async function WhatsAppPage() {
     steps,
     introSteps,
     reminders,
-    sentToday,
+    sentTodayByKind,
     queuedByKind,
     queue,
     failures,
@@ -87,8 +87,10 @@ export default async function WhatsAppPage() {
       orderBy: { hoursBefore: "desc" },
       include: { template: true },
     }),
-    prisma.outboundMessage.count({
+    prisma.outboundMessage.groupBy({
+      by: ["kind"],
       where: { status: "SENT", sentAt: { gte: startOfLocalDay(today, APP_TIMEZONE) } },
+      _count: { _all: true },
     }),
     prisma.outboundMessage.groupBy({
       by: ["kind"],
@@ -123,6 +125,9 @@ export default async function WhatsAppPage() {
   const next = nextSendTime(now, cfg);
   const limit = dailyLimit(today, cfg);
   const queued = Object.fromEntries(queuedByKind.map((q) => [q.kind, q._count._all]));
+  // Automatic template messages only (bot replies and manual chat messages don't count)
+  const sent = Object.fromEntries(sentTodayByKind.map((q) => [q.kind, q._count._all]));
+  const sentToday = Object.values(sent).reduce((sum, n) => sum + (n ?? 0), 0);
   const workerStale =
     !settings.lastWorkerRunAt || now.getTime() - settings.lastWorkerRunAt.getTime() > 5 * 60_000;
   const botCount = Object.fromEntries(botStats.map((b) => [b.status, b._count._all]));
@@ -180,9 +185,9 @@ export default async function WhatsAppPage() {
           </CardTitle>
           <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
             <Stat
-              label="Heute gesendet"
+              label="Automatische Nachrichten heute"
               value={`${sentToday} / ${limit}`}
-              hint={settings.warmupStartDate ? "Aufwärmphase aktiv" : undefined}
+              hint={`${sent.FIRST_CONTACT ?? 0} Erstkontakt · ${sent.INTRO_MESSAGE ?? 0} weitere Erstn. · ${sent.FOLLOW_UP ?? 0} Nachf. · ${(sent.REMINDER ?? 0) + (sent.AFTER_CONSULTATION ?? 0)} Erinn./nach Termin${settings.warmupStartDate ? " · Aufwärmphase aktiv" : ""}`}
             />
             <Stat
               label="Sendezeit"
@@ -210,6 +215,10 @@ export default async function WhatsAppPage() {
               hint={`${(queued.FIRST_CONTACT ?? 0) + (queued.INTRO_MESSAGE ?? 0)} Erstn. · ${queued.FOLLOW_UP ?? 0} Nachf. · ${queued.REMINDER ?? 0} Erinn.`}
             />
           </div>
+          <p className="mb-3 text-xs text-ink-soft">
+            Gezählt werden die Vorlagen-Nachrichten, die NEEDL von sich aus verschickt. Nur für
+            sie gilt das Tageslimit; Antworten des Bots und Nachrichten aus dem Chat zählen nicht.
+          </p>
           {workerStale && (
             <p className="mb-3 text-sm text-amber-700 dark:text-amber-400">
               Der Hintergrund-Dienst lief zuletzt{" "}

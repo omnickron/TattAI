@@ -225,14 +225,12 @@ function dayWord(d: Date, now: Date, tz: string) {
   return "";
 }
 
-const slotLabel = (d: Date, tz: string) =>
-  fmt(d, tz, {
-    weekday: "short",
-    day: "2-digit",
-    month: "2-digit",
+/** "Mo., 18.11. – 14:00 Uhr": one appointment per line in the chat. */
+export const slotLabel = (d: Date, tz: string) =>
+  `${fmt(d, tz, { weekday: "short", day: "2-digit", month: "2-digit" })} – ${fmt(d, tz, {
     hour: "2-digit",
     minute: "2-digit",
-  });
+  })} Uhr`;
 
 /** Customer text must not be able to close the data tags. */
 const asData = (text: string) => text.replace(/[<>]/g, (c) => (c === "<" ? "‹" : "›"));
@@ -291,7 +289,7 @@ function buildContext(chat: Chat, now: Date, tz: string): string {
     `Tattoo-Idee bisher: ${chat.tattooSummary ? JSON.stringify(chat.tattooSummary) : "(noch nichts gespeichert)"}`,
     `Gebuchter Beratungstermin: ${
       c
-        ? `${slotLabel(c.startsAt, tz)} Uhr, ${c.mode === "PHONE" ? "telefonisch" : "vor Ort"}, bei ${c.tattooer.user.name.split(/\s+/)[0]}`
+        ? `${slotLabel(c.startsAt, tz)}, ${c.mode === "PHONE" ? "telefonisch" : "vor Ort"}, bei ${c.tattooer.user.name.split(/\s+/)[0]}`
         : "keiner"
     }`,
     `Bilder vom Kunden: ${chat.attachments.length}`,
@@ -403,7 +401,7 @@ export async function runBotTurn(deps: BrainDeps, leadId: string): Promise<TurnR
             content: picked
               .map(
                 (d) =>
-                  `id ${d.toISOString()} = ${dayWord(d, now, tz)}${slotLabel(d, tz)} Uhr (Beratung ${minutes.get(d.getTime()) ?? "?"} Min.)`,
+                  `id ${d.toISOString()} = ${dayWord(d, now, tz)}${slotLabel(d, tz)} (Beratung ${minutes.get(d.getTime()) ?? "?"} Min.)`,
               )
               .join("\n"),
           };
@@ -435,7 +433,7 @@ export async function runBotTurn(deps: BrainDeps, leadId: string): Promise<TurnR
           bookedThisTurn = hasUpcoming = true;
           consultationId = c.id;
           return {
-            content: `Gebucht: ${slotLabel(c.startsAt, tz)} Uhr, ${c.mode === "PHONE" ? "telefonisch" : "vor Ort"}, bei ${c.tattooerFirstName}.`,
+            content: `Gebucht: ${slotLabel(c.startsAt, tz)}, ${c.mode === "PHONE" ? "telefonisch" : "vor Ort"}, bei ${c.tattooerFirstName}.`,
           };
         }
         case "termin_verschieben": {
@@ -447,7 +445,7 @@ export async function runBotTurn(deps: BrainDeps, leadId: string): Promise<TurnR
           const c = await botReschedule(deps, consultationId, { startsAt: i.start });
           consultationId = c.id;
           bookedThisTurn = true;
-          return { content: `Verschoben auf ${slotLabel(c.startsAt, tz)} Uhr.` };
+          return { content: `Verschoben auf ${slotLabel(c.startsAt, tz)}.` };
         }
         case "termin_absagen": {
           if (!consultationId)

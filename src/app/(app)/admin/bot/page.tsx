@@ -25,7 +25,7 @@ import { saveKnowledgeSection } from "./actions";
 import { BotStatusLine } from "./status-line";
 import { QAEditor } from "./qa-editor";
 
-export const metadata: Metadata = { title: "Bot" };
+export const metadata: Metadata = { title: "Bot-Wissen" };
 
 const LIST_TEXT = {
   faq: {
@@ -54,7 +54,7 @@ export default async function BotPage() {
   return (
     <>
       <PageHeader
-        title="Bot"
+        title="Bot-Wissen"
         description="Das Wissen, aus dem der WhatsApp-Bot antwortet. Er sagt nur, was hier steht – was fehlt, erfindet er nicht."
       />
 

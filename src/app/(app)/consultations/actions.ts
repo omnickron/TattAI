@@ -8,6 +8,7 @@ import { prisma } from "@/lib/db";
 import { APP_TIMEZONE } from "@/lib/format";
 import { schedulingDeps } from "@/lib/scheduling/deps";
 import { retrySessionSync, syncConsultationSessions } from "@/lib/scheduling/session-calendar";
+import { recordFollowUpResult } from "@/lib/outcomes/follow-up";
 import {
   addSession,
   OutcomeError,
@@ -42,14 +43,8 @@ function fail(err: unknown): ActionState {
   return { ok: false, message: "Unerwarteter Fehler beim Speichern." };
 }
 
-export async function recordOutcomeAction(
-  consultationId: string,
-  _prev: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  const access = await requireConsultationAccess(consultationId);
-  if (!access) return { ok: false, message: "Kein Zugriff auf diesen Termin." };
-
+/** Tattoo session rows of the outcome form. */
+function sessionsFrom(formData: FormData) {
   const sessions: NonNullable<OutcomeInput["sessions"]> = [];
   for (let i = 0; i < 30; i++) {
     const date = formData.get(`session_date_${i}`);
@@ -62,6 +57,71 @@ export async function recordOutcomeAction(
       end: String(formData.get(`session_end_${i}`) ?? ""),
     });
   }
+  return sessions;
+}
+
+/** Saves the redirect target of a form that disappears after saving. */
+function savedRedirect(formData: FormData, consultationId: string) {
+  const returnTo = String(formData.get("returnTo") ?? "");
+  if (returnTo.startsWith("/") && !returnTo.startsWith("//")) {
+    const url = new URL(returnTo, "http://local");
+    url.searchParams.set("saved", consultationId);
+    redirect(url.pathname + url.search);
+  }
+}
+
+/** Result of a follow-up (form "Hast du den Kunden erreicht?"). */
+export async function recordFollowUpAction(
+  consultationId: string,
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const access = await requireConsultationAccess(consultationId);
+  if (!access) return { ok: false, message: "Kein Zugriff auf diesen Termin." };
+  const reached = formData.get("reached");
+  const tattoo = formData.get("tattoo");
+  const further = formData.get("furtherScheduled");
+  try {
+    await recordFollowUpResult(prisma, {
+      consultationId,
+      userId: access.user.id,
+      timeZone: APP_TIMEZONE,
+      result: {
+        reached: reached === "yes" ? true : reached === "no" ? false : null,
+        result:
+          tattoo === "YES"
+            ? "TATTOO"
+            : tattoo === "NO"
+              ? "NO_TATTOO"
+              : tattoo === "OPEN"
+                ? "AGAIN"
+                : null,
+        note: String(formData.get("note") ?? ""),
+        nextDate: String(formData.get("followUpDate") ?? "") || undefined,
+        sessionPlan: (formData.get("sessionPlan") as OutcomeInput["sessionPlan"]) ?? undefined,
+        furtherScheduled: further === null ? undefined : further === "yes",
+        sessions: sessionsFrom(formData),
+      },
+    });
+  } catch (err) {
+    return fail(err);
+  }
+  await syncConsultationSessions(schedulingDeps(), access.consultation.id);
+  revalidate(access.consultation.leadId);
+  revalidatePath("/");
+  savedRedirect(formData, consultationId);
+  return { ok: true, message: "Follow-up gespeichert." };
+}
+
+export async function recordOutcomeAction(
+  consultationId: string,
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const access = await requireConsultationAccess(consultationId);
+  if (!access) return { ok: false, message: "Kein Zugriff auf diesen Termin." };
+
+  const sessions = sessionsFrom(formData);
   const further = formData.get("furtherScheduled");
   const input: OutcomeInput = {
     outcome: String(formData.get("outcome") ?? "") as OutcomeInput["outcome"],
@@ -86,12 +146,7 @@ export async function recordOutcomeAction(
   await syncConsultationSessions(schedulingDeps(), access.consultation.id);
   revalidate(access.consultation.leadId);
   // The form disappears after saving (entry leaves the "open" list), so confirm via the URL.
-  const returnTo = String(formData.get("returnTo") ?? "");
-  if (returnTo.startsWith("/") && !returnTo.startsWith("//")) {
-    const url = new URL(returnTo, "http://local");
-    url.searchParams.set("saved", consultationId);
-    redirect(url.pathname + url.search);
-  }
+  savedRedirect(formData, consultationId);
   return { ok: true, message: "Ergebnis gespeichert." };
 }
 

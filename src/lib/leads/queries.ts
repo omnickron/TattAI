@@ -123,6 +123,7 @@ export async function getLeadForUser(user: CurrentUser, id: string) {
         include: {
           tattooer: { include: { user: { select: { name: true } } } },
           tattooBookings: { orderBy: { sessionNumber: "asc" } },
+          followUpContacts: { orderBy: { recordedAt: "asc" } },
           attachments: {
             where: { status: { in: ["STORED", "PENDING"] } },
             orderBy: { createdAt: "asc" },
