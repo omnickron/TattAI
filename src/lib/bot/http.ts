@@ -1,3 +1,4 @@
+import { createPushSender } from "../push";
 import "server-only";
 import { prisma } from "../db";
 import { APP_TIMEZONE } from "../format";
@@ -38,6 +39,7 @@ export function botRoute<P>(
         whatsapp: createWhatsAppClient(),
         timeZone: APP_TIMEZONE,
         appUrl: process.env.APP_URL,
+        push: createPushSender(),
       };
       const data = await handler({ deps, request, params: await context.params, body });
       return json(200, { data });

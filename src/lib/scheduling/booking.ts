@@ -2,6 +2,8 @@
  * Booking service: available slots across tattooers, fair assignment and
  * double-booking-safe booking (DB first, then calendar, rollback on failure).
  */
+import { notifyAppointment } from "./notify";
+import type { PushSender } from "../push";
 import type { ConsultationMode, PrismaClient } from "@/generated/prisma/client";
 import {
   APP_CALENDAR_NAME,
@@ -40,6 +42,8 @@ const DAY = 24 * 60 * MIN;
 export interface SchedulingDeps {
   prisma: PrismaClient;
   calendar: CalendarClient;
+  /** Push to tattooer/admins about booked, moved and cancelled consultations (optional) */
+  push?: PushSender;
   now?: () => Date;
   random?: () => number;
   timeZone?: string;
@@ -425,6 +429,8 @@ export interface BookInput {
   /** Admin override: book with this tattooer instead of the fair choice. */
   tattooerId?: string;
   createdById?: string | null;
+  /** false: no push (e.g. part of a reschedule that sends its own) */
+  notify?: boolean;
 }
 
 /**
@@ -544,11 +550,14 @@ export async function bookConsultation(deps: SchedulingDeps, input: BookInput) {
 
   try {
     const { calendarId, eventId } = await writeEvent(deps, booked.id, booked.tattooerId);
-    return await prisma.consultation.update({
+    const result = await prisma.consultation.update({
       where: { id: booked.id },
       data: { calendarId, calendarEventId: eventId },
       include: { tattooer: { include: { user: { select: { name: true } } } } },
     });
+    if (input.notify !== false)
+      await notifyAppointment(deps, "BOOKED", result.id, { byUserId: input.createdById });
+    return result;
   } catch (err) {
     console.error(
       `[booking] calendar event failed, rolling back ${booked.id}:`,
@@ -569,7 +578,11 @@ export async function bookConsultation(deps: SchedulingDeps, input: BookInput) {
 }
 
 /** Cancels a consultation and removes the calendar event (best effort). */
-export async function cancelConsultation(deps: SchedulingDeps, consultationId: string) {
+export async function cancelConsultation(
+  deps: SchedulingDeps,
+  consultationId: string,
+  opts: { byUserId?: string | null } = {},
+) {
   const { prisma } = deps;
   const c = await prisma.consultation.findUnique({ where: { id: consultationId } });
   if (!c) throw new BookingError("NOT_FOUND", "Termin nicht gefunden.");
@@ -593,6 +606,7 @@ export async function cancelConsultation(deps: SchedulingDeps, consultationId: s
     }
   });
   const removed = await removeEvent(deps, c.tattooerId, c.calendarId, c.calendarEventId);
+  await notifyAppointment(deps, "CANCELLED", c.id, { byUserId: opts.byUserId });
   return { calendarEventRemoved: removed };
 }
 
@@ -601,6 +615,7 @@ export async function reassignConsultation(
   deps: SchedulingDeps,
   consultationId: string,
   newTattooerId: string,
+  opts: { byUserId?: string | null } = {},
 ) {
   const { prisma } = deps;
   const now = nowOf(deps);
@@ -677,6 +692,10 @@ export async function reassignConsultation(
     );
   }
   await removeEvent(deps, previous.tattooerId, previous.calendarId, previous.calendarEventId);
+  await notifyAppointment(deps, "REASSIGNED", c.id, {
+    previousTattooerId: previous.tattooerId,
+    byUserId: opts.byUserId,
+  });
   return prisma.consultation.findUniqueOrThrow({ where: { id: c.id } });
 }
 
@@ -794,6 +813,7 @@ export async function rescheduleConsultation(
           "Der Kalendereintrag konnte nicht verschoben werden. Nichts wurde geändert.",
         );
       }
+      await notifyAppointment(deps, "MOVED", c.id);
       return prisma.consultation.findUniqueOrThrow({ where: { id: c.id } });
     }
   }
@@ -809,8 +829,10 @@ export async function rescheduleConsultation(
       startsAt: newStart,
       mode: c.mode,
       createdById: c.createdById,
+      notify: false,
     });
     await removeEvent(deps, c.tattooerId, c.calendarId, c.calendarEventId);
+    await notifyAppointment(deps, "MOVED", booked.id, { previousTattooerId: c.tattooerId });
     return booked;
   } catch (err) {
     await prisma.consultation.update({
@@ -834,6 +856,7 @@ export async function moveConsultation(
   deps: SchedulingDeps,
   consultationId: string,
   newStart: Date,
+  opts: { byUserId?: string | null } = {},
 ) {
   const { prisma } = deps;
   const now = nowOf(deps);
@@ -917,6 +940,7 @@ export async function moveConsultation(
       "Der Kalendereintrag konnte nicht verschoben werden. Nichts wurde geändert.",
     );
   }
+  await notifyAppointment(deps, "MOVED", c.id, { byUserId: opts.byUserId });
   return prisma.consultation.findUniqueOrThrow({ where: { id: c.id } });
 }
 
@@ -1110,6 +1134,7 @@ export async function createManualConsultation(
       );
     }
   }
+  await notifyAppointment(deps, "BOOKED", created.id, { byUserId: input.createdById });
   return created;
 }
 

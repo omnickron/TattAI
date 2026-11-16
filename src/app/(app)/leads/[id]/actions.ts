@@ -175,7 +175,9 @@ export async function cancelConsultationAction(consultationId: string): Promise<
   const access = await requireConsultationAccess(consultationId);
   if (!access) return { ok: false, message: "Kein Zugriff auf diesen Termin." };
   try {
-    const { calendarEventRemoved } = await cancelConsultation(schedulingDeps(), consultationId);
+    const { calendarEventRemoved } = await cancelConsultation(schedulingDeps(), consultationId, {
+      byUserId: access.user.id,
+    });
     revalidatePath(`/leads/${access.consultation.leadId}`);
     return {
       ok: true,
@@ -193,11 +195,13 @@ export async function reassignConsultationAction(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const tattooerId = String(formData.get("tattooerId") ?? "");
   if (!tattooerId) return { ok: false, message: "Bitte eine Person auswählen." };
   try {
-    const c = await reassignConsultation(schedulingDeps(), consultationId, tattooerId);
+    const c = await reassignConsultation(schedulingDeps(), consultationId, tattooerId, {
+      byUserId: admin.id,
+    });
     revalidatePath(`/leads/${c.leadId}`);
     return { ok: true, message: "Termin umverteilt." };
   } catch (err) {
@@ -296,6 +300,7 @@ export async function moveConsultationAction(
       schedulingDeps(),
       consultationId,
       zonedTimeToUtc(date, minutes, APP_TIMEZONE),
+      { byUserId: access.user.id },
     );
   } catch (err) {
     return bookingMessage(err);
