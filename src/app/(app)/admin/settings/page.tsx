@@ -1,28 +1,24 @@
 import type { Metadata } from "next";
 import { ActionForm } from "@/components/action-form";
-import {
-  Badge,
-  Button,
-  Card,
-  CardTitle,
-  Field,
-  Input,
-  PageHeader,
-} from "@/components/ui";
+import { Badge, Button, Card, CardTitle, Field, Input, PageHeader } from "@/components/ui";
 import { requireAdmin } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { formatDateTime } from "@/lib/format";
 import { loadConsultationOptions } from "@/lib/consultation-options";
 import { LEAD_RETENTION_MONTHS } from "@/lib/leads/retention";
-import { updateConsultationSettings, updateStudioSettings } from "./actions";
+import { updateConsultationSettings, updatePushScope, updateStudioSettings } from "./actions";
 import { TeamupCard } from "./teamup-card";
 import { setting } from "@/lib/integrations/store";
 
 export const metadata: Metadata = { title: "Einstellungen" };
 
 export default async function SettingsPage() {
-  await requireAdmin();
-  const [settings, failedEvents] = await Promise.all([
+  const admin = await requireAdmin();
+  const [me, settings, failedEvents] = await Promise.all([
+    prisma.user.findUniqueOrThrow({
+      where: { id: admin.id },
+      select: { pushAllAppointments: true },
+    }),
     prisma.appSettings.findUnique({ where: { id: 1 } }),
     prisma.webhookEvent.findMany({
       where: { status: { in: ["FAILED", "DEAD"] } },
@@ -37,6 +33,42 @@ export default async function SettingsPage() {
     <>
       <PageHeader title="Einstellungen" />
       <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardTitle>Deine Push-Benachrichtigungen</CardTitle>
+          <p className="mb-3 text-sm text-ink-soft">
+            Push-Nachricht, wenn eine Beratung gebucht, verschoben, abgesagt oder neu zugeteilt
+            wird. Gilt nur für dich; Tätowierer bekommen immer die zu ihren eigenen Beratungen.
+            Änderungen, die du selbst machst, melden wir dir nicht.
+          </p>
+          <ActionForm action={updatePushScope}>
+            <fieldset className="space-y-2 text-sm">
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="pushScope"
+                  value="all"
+                  defaultChecked={me.pushAllAppointments}
+                />
+                Alle Beratungen im Studio
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="pushScope"
+                  value="own"
+                  defaultChecked={!me.pushAllAppointments}
+                />
+                Nur meine eigenen Beratungen
+              </label>
+            </fieldset>
+            <p className="text-xs text-ink-soft">
+              Push-Nachrichten kommen nur auf Geräten an, auf denen du sie über die Glocke im Menü
+              erlaubt hast (iPhone: NEEDL über „Zum Home-Bildschirm“ installieren).
+            </p>
+            <Button type="submit">Speichern</Button>
+          </ActionForm>
+        </Card>
+
         <Card>
           <CardTitle
             action={

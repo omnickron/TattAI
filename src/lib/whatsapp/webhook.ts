@@ -2,6 +2,7 @@
  * Processing of WhatsApp Cloud API webhooks: inbound messages, delivery
  * statuses, template reviews and quality/account signals. Idempotent.
  */
+import { statusAfterOptOut } from "../leads/opt-out";
 import { createHash } from "node:crypto";
 import { Prisma, type PrismaClient } from "@/generated/prisma/client";
 import { botActiveFor, enqueueBotEvent, isBotGloballyEnabled } from "../bot/state";
@@ -114,9 +115,11 @@ async function handleInbound(prisma: PrismaClient, m: WaMessage, now: Date) {
     data: {
       lastInboundAt: sentAt,
       ...(optOut ? { whatsappOptOut: true } : {}),
-      ...(["NEW", "CONTACTED", "NO_RESPONSE"].includes(lead.status)
-        ? { status: "IN_CHAT", statusChangedAt: now }
-        : {}),
+      ...(optOut && statusAfterOptOut(lead.status)
+        ? { status: "OPTED_OUT", statusChangedAt: now }
+        : !optOut && ["NEW", "CONTACTED", "NO_RESPONSE"].includes(lead.status)
+          ? { status: "IN_CHAT", statusChangedAt: now }
+          : {}),
     },
   });
   // A reply stops the follow-up sequence; an opt-out stops everything.

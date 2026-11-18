@@ -20,14 +20,16 @@ enum Role {
 }
 
 model User {
-  id          String    @id @default(cuid())
-  email       String    @unique
-  name        String
-  role        Role
-  active      Boolean   @default(true)
-  lastLoginAt DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id                  String    @id @default(cuid())
+  email               String    @unique
+  name                String
+  role                Role
+  active              Boolean   @default(true)
+  lastLoginAt         DateTime?
+  // Admins: push for every booked/moved/cancelled consultation (false = only their own)
+  pushAllAppointments Boolean   @default(true)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   tattooerProfile   TattooerProfile?
   leadNotes         LeadNote[]
@@ -140,6 +142,7 @@ enum LeadStatus {
   CANCELLED // abgesagt
   NO_RESPONSE // keine_antwort
   INVALID // ungueltig
+  OPTED_OUT // gestoppt: customer opted out of WhatsApp (STOP) before a consultation
 }
 
 model Lead {
@@ -954,19 +957,19 @@ model IntegrationSettingLog {
 
 // Sign of life of the background worker (one row), shown to the operator
 model WorkerHeartbeat {
-  id          Int       @id @default(1)
+  id         Int       @id @default(1)
   // Last start of the worker process and how often it started so far
-  startedAt   DateTime?
-  startCount  Int       @default(0)
+  startedAt  DateTime?
+  startCount Int       @default(0)
   // End of the last complete run (every 30 s); stale = worker down or stuck
-  lastTickAt  DateTime?
-  tickMs      Int?
+  lastTickAt DateTime?
+  tickMs     Int?
   // Jobs that failed in the last run: [{ job, message }]
-  failures    Json?
+  failures   Json?
   // Last crash of the process (best effort, written while exiting)
-  crashedAt   DateTime?
-  crashError  String?
-  updatedAt   DateTime  @updatedAt
+  crashedAt  DateTime?
+  crashError String?
+  updatedAt  DateTime  @updatedAt
 }
 
 enum FollowUpResult {

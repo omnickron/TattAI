@@ -3,6 +3,7 @@
  * is refused while the bot is switched off for the chat (human takeover,
  * manual switch, master switch or opt-out).
  */
+import type { PushSender } from "../push";
 import { z } from "zod";
 import type { ConsultationMode, Prisma, PrismaClient } from "@/generated/prisma/client";
 import type { CalendarClient } from "../google/calendar";
@@ -28,6 +29,8 @@ export interface BotDeps {
   random?: () => number;
   timeZone?: string;
   appUrl?: string;
+  /** Push to tattooer/admins about bookings (see scheduling/notify) */
+  push?: PushSender;
 }
 
 export class BotApiError extends Error {

@@ -155,3 +155,26 @@ export async function updateConsultationSettings(
   revalidatePath("/admin/settings");
   return { ok: true, message: "Gespeichert. Gilt für neue Buchungen und den Bot." };
 }
+
+/** Admin's own choice: push for every consultation or only for their own. */
+export async function updatePushScope(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const user = await requireAdmin();
+  const scope = String(formData.get("pushScope") ?? "");
+  if (scope !== "all" && scope !== "own")
+    return { ok: false, message: "Bitte eine Option wählen." };
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { pushAllAppointments: scope === "all" },
+  });
+  revalidatePath("/admin/settings");
+  return {
+    ok: true,
+    message:
+      scope === "all"
+        ? "Du bekommst ab jetzt Push-Nachrichten zu allen Beratungen."
+        : "Du bekommst ab jetzt nur Push-Nachrichten zu deinen eigenen Beratungen.",
+  };
+}

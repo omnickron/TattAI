@@ -8,6 +8,7 @@ import { leadScope, requireAdmin, requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { APP_TIMEZONE } from "@/lib/format";
 import { LEAD_STATUS_ORDER } from "@/lib/labels";
+import { statusAfterOptOut } from "@/lib/leads/opt-out";
 import { normalizePhone } from "@/lib/phone";
 import {
   BookingError,
@@ -48,8 +49,17 @@ export async function updateLead(
 
   const { name, phone, email, status } = parsed.data;
   const whatsappOptOut = formData.get("whatsappOptOut") === "on";
-  const current = await prisma.lead.findUnique({ where: { id: leadId }, select: { status: true } });
+  const current = await prisma.lead.findUnique({
+    where: { id: leadId },
+    select: { status: true, whatsappOptOut: true },
+  });
   if (!current) return { ok: false, message: "Lead nicht gefunden." };
+  // Newly opted out without choosing another status: "Gestoppt" (early phases only)
+  const optOutStatus =
+    whatsappOptOut && !current.whatsappOptOut && status === current.status
+      ? statusAfterOptOut(current.status)
+      : null;
+  const nextStatus = (optOutStatus ?? status) as (typeof LEAD_STATUS_ORDER)[number];
 
   const normalized = normalizePhone(phone, defaultPhoneCountry());
   await prisma.lead.update({
@@ -61,13 +71,14 @@ export async function updateLead(
       phoneValid: normalized.valid,
       email: email ? email.toLowerCase() : null,
       whatsappOptOut,
-      status: status as (typeof LEAD_STATUS_ORDER)[number],
-      ...(current.status !== status ? { statusChangedAt: new Date() } : {}),
+      status: nextStatus,
+      ...(current.status !== nextStatus ? { statusChangedAt: new Date() } : {}),
     },
   });
   if (whatsappOptOut)
     await cancelQueued(prisma, leadId, [
       "FIRST_CONTACT",
+      "INTRO_MESSAGE",
       "FOLLOW_UP",
       "REMINDER",
       "AFTER_CONSULTATION",
@@ -175,7 +186,9 @@ export async function cancelConsultationAction(consultationId: string): Promise<
   const access = await requireConsultationAccess(consultationId);
   if (!access) return { ok: false, message: "Kein Zugriff auf diesen Termin." };
   try {
-    const { calendarEventRemoved } = await cancelConsultation(schedulingDeps(), consultationId);
+    const { calendarEventRemoved } = await cancelConsultation(schedulingDeps(), consultationId, {
+      byUserId: access.user.id,
+    });
     revalidatePath(`/leads/${access.consultation.leadId}`);
     return {
       ok: true,
@@ -193,11 +206,13 @@ export async function reassignConsultationAction(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const tattooerId = String(formData.get("tattooerId") ?? "");
   if (!tattooerId) return { ok: false, message: "Bitte eine Person auswählen." };
   try {
-    const c = await reassignConsultation(schedulingDeps(), consultationId, tattooerId);
+    const c = await reassignConsultation(schedulingDeps(), consultationId, tattooerId, {
+      byUserId: admin.id,
+    });
     revalidatePath(`/leads/${c.leadId}`);
     return { ok: true, message: "Termin umverteilt." };
   } catch (err) {
@@ -296,6 +311,7 @@ export async function moveConsultationAction(
       schedulingDeps(),
       consultationId,
       zonedTimeToUtc(date, minutes, APP_TIMEZONE),
+      { byUserId: access.user.id },
     );
   } catch (err) {
     return bookingMessage(err);
