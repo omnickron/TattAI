@@ -142,6 +142,7 @@ enum LeadStatus {
   CANCELLED // abgesagt
   NO_RESPONSE // keine_antwort
   INVALID // ungueltig
+  OPTED_OUT // gestoppt: customer opted out of WhatsApp (STOP) before a consultation
 }
 
 model Lead {

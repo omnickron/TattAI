@@ -1090,6 +1090,7 @@ export async function createManualConsultation(
           "CONTACTED",
           "IN_CHAT",
           "NO_RESPONSE",
+          "OPTED_OUT",
           "CANCELLED",
           "NO_SHOW",
           "CONSULTATION_DONE",

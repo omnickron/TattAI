@@ -11,6 +11,7 @@ export const LEAD_STATUS_ORDER: LeadStatus[] = [
   "NO_SHOW",
   "CANCELLED",
   "NO_RESPONSE",
+  "OPTED_OUT",
   "INVALID",
 ];
 
@@ -25,6 +26,7 @@ export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
   NO_SHOW: "No-Show",
   CANCELLED: "Abgesagt",
   NO_RESPONSE: "Keine Antwort",
+  OPTED_OUT: "Gestoppt",
   INVALID: "Ungültig",
 };
 
@@ -42,6 +44,7 @@ export const LEAD_STATUS_TONE: Record<
   NO_SHOW: "red",
   CANCELLED: "gray",
   NO_RESPONSE: "gray",
+  OPTED_OUT: "red",
   INVALID: "red",
 };
 

@@ -648,9 +648,23 @@ describe("WhatsApp webhook", () => {
       inbound("wamid.in2", l.phoneE164!.slice(1), "STOP"),
       clock,
     );
-    expect((await prisma.lead.findUniqueOrThrow({ where: { id: l.id } })).whatsappOptOut).toBe(
-      true,
+    const stopped = await prisma.lead.findUniqueOrThrow({ where: { id: l.id } });
+    expect(stopped.whatsappOptOut).toBe(true);
+    expect(stopped.status).toBe("OPTED_OUT");
+    // A later message does not turn "Gestoppt" back into "Im Chat"
+    await processWhatsAppWebhook(
+      prisma,
+      inbound("wamid.in2b", l.phoneE164!.slice(1), "Doch noch eine Frage"),
+      clock,
     );
+    expect((await prisma.lead.findUniqueOrThrow({ where: { id: l.id } })).status).toBe(
+      "OPTED_OUT",
+    );
+    // With a booked consultation the status stays (reports), only the flag is set
+    const booked = await lead({ status: "CONSULTATION_BOOKED", phoneE164: "+4915122222222" });
+    await processWhatsAppWebhook(prisma, inbound("wamid.in4", "4915122222222", "stopp"), clock);
+    const kept = await prisma.lead.findUniqueOrThrow({ where: { id: booked.id } });
+    expect([kept.status, kept.whatsappOptOut]).toEqual(["CONSULTATION_BOOKED", true]);
     expect(
       await processWhatsAppWebhook(prisma, inbound("wamid.in3", "4915199999999", "Hi"), clock),
     ).toEqual(["unknown"]);

@@ -8,6 +8,7 @@ import { leadScope, requireAdmin, requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { APP_TIMEZONE } from "@/lib/format";
 import { LEAD_STATUS_ORDER } from "@/lib/labels";
+import { statusAfterOptOut } from "@/lib/leads/opt-out";
 import { normalizePhone } from "@/lib/phone";
 import {
   BookingError,
@@ -48,8 +49,17 @@ export async function updateLead(
 
   const { name, phone, email, status } = parsed.data;
   const whatsappOptOut = formData.get("whatsappOptOut") === "on";
-  const current = await prisma.lead.findUnique({ where: { id: leadId }, select: { status: true } });
+  const current = await prisma.lead.findUnique({
+    where: { id: leadId },
+    select: { status: true, whatsappOptOut: true },
+  });
   if (!current) return { ok: false, message: "Lead nicht gefunden." };
+  // Newly opted out without choosing another status: "Gestoppt" (early phases only)
+  const optOutStatus =
+    whatsappOptOut && !current.whatsappOptOut && status === current.status
+      ? statusAfterOptOut(current.status)
+      : null;
+  const nextStatus = (optOutStatus ?? status) as (typeof LEAD_STATUS_ORDER)[number];
 
   const normalized = normalizePhone(phone, defaultPhoneCountry());
   await prisma.lead.update({
@@ -61,13 +71,14 @@ export async function updateLead(
       phoneValid: normalized.valid,
       email: email ? email.toLowerCase() : null,
       whatsappOptOut,
-      status: status as (typeof LEAD_STATUS_ORDER)[number],
-      ...(current.status !== status ? { statusChangedAt: new Date() } : {}),
+      status: nextStatus,
+      ...(current.status !== nextStatus ? { statusChangedAt: new Date() } : {}),
     },
   });
   if (whatsappOptOut)
     await cancelQueued(prisma, leadId, [
       "FIRST_CONTACT",
+      "INTRO_MESSAGE",
       "FOLLOW_UP",
       "REMINDER",
       "AFTER_CONSULTATION",
