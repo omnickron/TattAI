@@ -244,6 +244,25 @@ describe("first contact", () => {
     expect(await prisma.outboundMessage.count({ where: { status: "QUEUED" } })).toBe(2);
   });
 
+  it("lets only the template wait that Meta does not know (132001), without pausing", async () => {
+    await lead();
+    await planMessages(deps);
+    clock = at(MON, "10:00");
+    wa.failWith = new WhatsAppApiError(
+      "Template name does not exist in the translation",
+      132001,
+      404,
+    );
+    await dispatchMessages(deps);
+    expect(
+      (await prisma.messagingSettings.findUniqueOrThrow({ where: { id: 1 } })).pausedAt,
+    ).toBeNull();
+    const t = await prisma.whatsAppTemplate.findUniqueOrThrow({ where: { id: templates.first } });
+    expect([t.approvedName, t.status]).toEqual([null, "DRAFT"]);
+    // The message waits for a version Meta approves
+    expect(await prisma.outboundMessage.count({ where: { status: "QUEUED" } })).toBe(1);
+  });
+
   it("marks undeliverable messages as failed and continues", async () => {
     await lead();
     await planMessages(deps);
@@ -657,9 +676,7 @@ describe("WhatsApp webhook", () => {
       inbound("wamid.in2b", l.phoneE164!.slice(1), "Doch noch eine Frage"),
       clock,
     );
-    expect((await prisma.lead.findUniqueOrThrow({ where: { id: l.id } })).status).toBe(
-      "OPTED_OUT",
-    );
+    expect((await prisma.lead.findUniqueOrThrow({ where: { id: l.id } })).status).toBe("OPTED_OUT");
     // With a booked consultation the status stays (reports), only the flag is set
     const booked = await lead({ status: "CONSULTATION_BOOKED", phoneE164: "+4915122222222" });
     await processWhatsAppWebhook(prisma, inbound("wamid.in4", "4915122222222", "stopp"), clock);

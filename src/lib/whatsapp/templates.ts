@@ -52,3 +52,85 @@ export async function submitTemplateForReview(
     },
   });
 }
+
+/** Version number of a submitted name: "name" = 1, "name_v3" = 3, other names = null. */
+export function templateVersion(baseName: string, name: string): number | null {
+  if (name === baseName) return 1;
+  const m = new RegExp(`^${baseName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}_v(\\d+)$`).exec(name);
+  return m ? Number(m[1]) : null;
+}
+
+const META_STATUS: Record<string, "APPROVED" | "PENDING" | "REJECTED" | "PAUSED"> = {
+  APPROVED: "APPROVED",
+  PENDING: "PENDING",
+  IN_APPEAL: "PENDING",
+  REJECTED: "REJECTED",
+  PAUSED: "PAUSED",
+  DISABLED: "PAUSED",
+  FLAGGED: "PAUSED",
+  LIMIT_EXCEEDED: "PAUSED",
+};
+
+/**
+ * Reads the real review status of all templates at Meta and corrects NEEDL: the newest
+ * approved version is the one that gets sent; approvals that exist only in NEEDL (e.g. from
+ * the test mode) are dropped, so nothing is sent under a name Meta does not know.
+ */
+export async function syncTemplatesFromMeta(prisma: PrismaClient, whatsapp: WhatsAppClient) {
+  if (whatsapp.mock || !whatsapp.listTemplates) return { checked: 0, changed: 0 };
+  const meta = await whatsapp.listTemplates();
+  const templates = await prisma.whatsAppTemplate.findMany();
+  let changed = 0;
+  for (const t of templates) {
+    const versions = meta
+      .filter((m) => m.language === t.language)
+      .map((m) => ({ ...m, version: templateVersion(t.name, m.name) }))
+      .filter((m): m is typeof m & { version: number } => m.version !== null)
+      .sort((a, b) => b.version - a.version);
+    const latest = versions[0];
+    const approved = versions.find((m) => m.status === "APPROVED");
+    const latestStatus = latest ? (META_STATUS[latest.status] ?? "PENDING") : null;
+
+    const approvedText = !approved
+      ? null
+      : approved.name === t.submittedName
+        ? (t.submittedText ?? t.bodyText)
+        : (t.approvedText ?? t.submittedText ?? t.bodyText);
+    const data = {
+      approvedName: approved?.name ?? null,
+      approvedText,
+      approvedAt: approved ? (t.approvedName === approved.name ? t.approvedAt : new Date()) : null,
+      status: !latest
+        ? approved
+          ? ("APPROVED" as const)
+          : ("DRAFT" as const)
+        : latestStatus === "REJECTED" && approved
+          ? ("APPROVED" as const)
+          : latestStatus!,
+      rejectedReason:
+        latestStatus === "REJECTED" || latestStatus === "PAUSED"
+          ? (latest!.rejectedReason ?? t.rejectedReason ?? latest!.status.toLowerCase())
+          : null,
+      // Unknown at Meta (e.g. only "approved" in the test mode): the next submission starts
+      // again with the base name
+      ...(latest
+        ? {
+            metaTemplateId: latest.id,
+            submittedName: latest.name,
+            submissionCount: Math.max(t.submissionCount, latest.version),
+          }
+        : { metaTemplateId: null, submittedName: null, submittedText: null, submissionCount: 0 }),
+    };
+    const differs =
+      data.approvedName !== t.approvedName ||
+      data.status !== t.status ||
+      data.rejectedReason !== t.rejectedReason ||
+      (latest
+        ? latest.id !== t.metaTemplateId || latest.name !== t.submittedName
+        : t.submissionCount !== 0);
+    if (!differs) continue;
+    await prisma.whatsAppTemplate.update({ where: { id: t.id }, data });
+    changed++;
+  }
+  return { checked: templates.length, changed };
+}

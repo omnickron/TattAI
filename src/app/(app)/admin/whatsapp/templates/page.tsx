@@ -13,7 +13,14 @@ import {
   TEMPLATE_VARIABLES,
 } from "@/lib/whatsapp/template-text";
 import { NewTemplateFields, TemplateTextField } from "@/components/template-text-field";
-import { createTemplate, deleteTemplate, submitTemplate, updateTemplateText } from "./actions";
+import {
+  createTemplate,
+  deleteTemplate,
+  submitTemplate,
+  syncTemplates,
+  updateTemplateText,
+} from "./actions";
+import { ActionButton } from "../../billing/buttons";
 import { WhatsAppTabs } from "../tabs";
 
 export const metadata: Metadata = { title: "WhatsApp-Texte" };
@@ -42,6 +49,12 @@ export default async function TemplatesPage({
         description="Automatische Nachrichten dürfen nur mit Texten verschickt werden, die Meta vorab genehmigt hat. Geänderte Texte werden als neue Version eingereicht; bis zur Genehmigung wird die bisherige Fassung verwendet."
       />
       <WhatsAppTabs active="texts" />
+      {!isWhatsAppMock() && (
+        <div className="mb-4 flex flex-wrap items-center gap-3 text-sm text-ink-soft">
+          <ActionButton action={syncTemplates}>Status bei Meta abrufen</ActionButton>
+          <span>NEEDL gleicht den Prüfstatus auch automatisch alle 30 Minuten mit Meta ab.</span>
+        </div>
+      )}
       {isWhatsAppMock() && (
         <p className="mb-4 rounded-lg border border-amber-600/30 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200">
           WhatsApp läuft im Testmodus (Betreiber → Zugänge): Templates werden nicht wirklich bei
