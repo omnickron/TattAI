@@ -2,7 +2,8 @@ import { Badge, Card, CardTitle, cn } from "@/components/ui";
 import { formatDateTime } from "@/lib/format";
 import { MESSAGE_STATUS_LABELS, OUTBOUND_KIND_LABELS } from "@/lib/whatsapp/labels";
 import { replyWindow } from "@/lib/whatsapp/replies";
-import { sendReplyAction } from "./actions";
+import { retryOutboundAction, sendReplyAction } from "./actions";
+import { ActionButton } from "../../admin/billing/buttons";
 import { ReplyForm } from "./reply-form";
 import { BotToggle } from "./bot-toggle";
 import { setBotEnabledAction } from "./actions";
@@ -176,6 +177,11 @@ export function ChatSection({
                     ? p.lastError
                     : `frühestens ${formatDateTime(p.notBefore)}, zur nächsten Sendezeit`}
                 </span>
+                {p.status === "FAILED" && (
+                  <ActionButton action={retryOutboundAction.bind(null, p.id)}>
+                    Erneut senden
+                  </ActionButton>
+                )}
               </li>
             ))}
           </ul>

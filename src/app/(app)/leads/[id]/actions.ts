@@ -27,7 +27,7 @@ import { defaultPhoneCountry } from "@/lib/settings";
 import { isLocalDate, isQuarterHour, parseTimeOfDay, zonedTimeToUtc } from "@/lib/time";
 import { setBotEnabled } from "@/lib/bot/state";
 import { createWhatsAppClient } from "@/lib/whatsapp/client";
-import { cancelQueued } from "@/lib/whatsapp/messaging";
+import { cancelQueued, retryFailedOutbound } from "@/lib/whatsapp/messaging";
 import { deleteLeadFiles } from "@/lib/whatsapp/media";
 import { ReplyError, sendManualReply } from "@/lib/whatsapp/replies";
 
@@ -51,7 +51,7 @@ export async function updateLead(
   const whatsappOptOut = formData.get("whatsappOptOut") === "on";
   const current = await prisma.lead.findUnique({
     where: { id: leadId },
-    select: { status: true, whatsappOptOut: true },
+    select: { status: true, whatsappOptOut: true, phoneE164: true },
   });
   if (!current) return { ok: false, message: "Lead nicht gefunden." };
   // Newly opted out without choosing another status: "Gestoppt" (early phases only)
@@ -83,14 +83,39 @@ export async function updateLead(
       "REMINDER",
       "AFTER_CONSULTATION",
     ]);
+  // Corrected number: messages that failed with the old one are sent again
+  const retried =
+    normalized.valid && !whatsappOptOut && normalized.e164 !== current.phoneE164
+      ? await retryFailedOutbound(prisma, { leadId })
+      : 0;
   revalidatePath(`/leads/${leadId}`);
   return {
     ok: true,
     message:
       normalized.valid || !phone
-        ? "Gespeichert."
+        ? `Gespeichert.${retried ? ` ${retried === 1 ? "1 fehlgeschlagene Nachricht wird" : `${retried} fehlgeschlagene Nachrichten werden`} mit der neuen Nummer erneut gesendet.` : ""}`
         : "Gespeichert. Hinweis: Telefonnummer ist ungültig.",
   };
+}
+
+/** Sends a failed automatic message again (admin or the lead's tattooer). */
+export async function retryOutboundAction(outboundId: string): Promise<ActionState> {
+  const user = await requireUser();
+  const o = await prisma.outboundMessage.findFirst({
+    where: { id: outboundId, lead: leadScope(user) },
+    select: { leadId: true, lead: { select: { phoneValid: true, whatsappOptOut: true } } },
+  });
+  if (!o) return { ok: false, message: "Nachricht nicht gefunden." };
+  if (o.lead.whatsappOptOut)
+    return { ok: false, message: "Der Kunde hat WhatsApp-Nachrichten abbestellt (Opt-out)." };
+  if (!o.lead.phoneValid)
+    return { ok: false, message: "Die Telefonnummer ist ungültig – bitte erst korrigieren." };
+  const count = await retryFailedOutbound(prisma, { outboundId });
+  revalidatePath(`/leads/${o.leadId}`);
+  revalidatePath("/admin/whatsapp");
+  return count
+    ? { ok: true, message: "Wird erneut gesendet (zur nächsten möglichen Zeit)." }
+    : { ok: false, message: "Die Nachricht ist nicht mehr fehlgeschlagen." };
 }
 
 const noteSchema = z.object({ body: z.string().trim().min(1, "Notiz ist leer.").max(5000) });

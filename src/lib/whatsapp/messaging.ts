@@ -811,6 +811,52 @@ export function isOptOut(text: string | null | undefined): boolean {
   );
 }
 
+/**
+ * Puts failed automatic messages back into the queue (e.g. after the phone number was
+ * corrected). The old failed chat entry stays in the history. A first contact that failed
+ * after it had been handed to Meta sets the lead back to "neu", so it is sent again.
+ * The usual checks apply when sending (consent, opt-out, status, approved template).
+ */
+export async function retryFailedOutbound(
+  prisma: PrismaClient,
+  where: { leadId?: string; outboundId?: string },
+  now = new Date(),
+) {
+  const failed = await prisma.outboundMessage.findMany({
+    where: {
+      status: "FAILED",
+      ...(where.leadId ? { leadId: where.leadId } : {}),
+      ...(where.outboundId ? { id: where.outboundId } : {}),
+    },
+    select: { id: true, kind: true, leadId: true },
+  });
+  for (const o of failed) {
+    await prisma.$transaction([
+      prisma.message.updateMany({ where: { outboundId: o.id }, data: { outboundId: null } }),
+      prisma.outboundMessage.update({
+        where: { id: o.id },
+        data: {
+          status: "QUEUED",
+          attempts: 0,
+          lastError: null,
+          notBefore: now,
+          waMessageId: null,
+          sentAt: null,
+        },
+      }),
+      ...(o.kind === "FIRST_CONTACT"
+        ? [
+            prisma.lead.updateMany({
+              where: { id: o.leadId, status: "CONTACTED" },
+              data: { status: "NEW", statusChangedAt: now },
+            }),
+          ]
+        : []),
+    ]);
+  }
+  return failed.length;
+}
+
 /** Cancels queued automatic messages of a lead (after a reply or opt-out). */
 export async function cancelQueued(prisma: PrismaClient, leadId: string, kinds: OutboundKind[]) {
   return prisma.outboundMessage.updateMany({
