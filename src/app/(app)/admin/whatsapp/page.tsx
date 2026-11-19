@@ -1,3 +1,5 @@
+import { retryOutboundAction } from "../../leads/[id]/actions";
+import { ActionButton } from "../billing/buttons";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ActionForm } from "@/components/action-form";
@@ -216,8 +218,8 @@ export default async function WhatsAppPage() {
             />
           </div>
           <p className="mb-3 text-xs text-ink-soft">
-            Gezählt werden die Vorlagen-Nachrichten, die NEEDL von sich aus verschickt. Nur für
-            sie gilt das Tageslimit; Antworten des Bots und Nachrichten aus dem Chat zählen nicht.
+            Gezählt werden die Vorlagen-Nachrichten, die NEEDL von sich aus verschickt. Nur für sie
+            gilt das Tageslimit; Antworten des Bots und Nachrichten aus dem Chat zählen nicht.
           </p>
           {workerStale && (
             <p className="mb-3 text-sm text-amber-700 dark:text-amber-400">
@@ -294,7 +296,10 @@ export default async function WhatsAppPage() {
                     <Badge tone={OUTBOUND_STATUS_LABELS.FAILED.tone}>
                       {OUTBOUND_KIND_LABELS[f.kind]}
                     </Badge>{" "}
-                    <span className="text-ink-soft">{f.lastError}</span>
+                    <span className="text-ink-soft">{f.lastError}</span>{" "}
+                    <ActionButton action={retryOutboundAction.bind(null, f.id)}>
+                      Erneut senden
+                    </ActionButton>
                   </li>
                 ))}
               </ul>

@@ -8,6 +8,7 @@ import {
   dispatchMessages,
   planMessages,
   replanQueuedIntroMessages,
+  retryFailedOutbound,
   runMessagingWorker,
   waitingForIntroMessages,
   type MessagingDeps,
@@ -261,6 +262,57 @@ describe("first contact", () => {
     expect([t.approvedName, t.status]).toEqual([null, "DRAFT"]);
     // The message waits for a version Meta approves
     expect(await prisma.outboundMessage.count({ where: { status: "QUEUED" } })).toBe(1);
+  });
+
+  it("sends a failed first contact again after the number was corrected", async () => {
+    const l = await lead();
+    await planMessages(deps);
+    clock = at(MON, "10:00");
+    expect((await dispatchMessages(deps)).sent).toBe(1);
+    // Meta reports the delivery as failed afterwards (e.g. wrong number)
+    const first = await prisma.outboundMessage.findFirstOrThrow({ where: { leadId: l.id } });
+    await processWhatsAppWebhook(
+      prisma,
+      {
+        object: "whatsapp_business_account",
+        entry: [
+          {
+            changes: [
+              {
+                field: "messages",
+                value: {
+                  statuses: [
+                    {
+                      id: first.waMessageId!,
+                      status: "failed",
+                      errors: [{ code: 131026, title: "Message undeliverable" }],
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      },
+      clock,
+    );
+    expect(
+      (await prisma.outboundMessage.findUniqueOrThrow({ where: { id: first.id } })).status,
+    ).toBe("FAILED");
+
+    clock = at(MON, "11:00");
+    expect(await retryFailedOutbound(prisma, { leadId: l.id }, clock)).toBe(1);
+    expect((await prisma.lead.findUniqueOrThrow({ where: { id: l.id } })).status).toBe("NEW");
+    clock = at(MON, "17:00"); // next send time
+    expect((await dispatchMessages(deps)).sent).toBe(1);
+    expect(wa.sent).toHaveLength(2);
+    // Both attempts stay in the chat history; the first one still shows "failed"
+    const chat = await prisma.message.findMany({
+      where: { leadId: l.id },
+      orderBy: { sentAt: "asc" },
+    });
+    expect(chat.map((m) => m.status)).toEqual(["failed", "sent"]);
+    expect(await retryFailedOutbound(prisma, { leadId: l.id }, clock)).toBe(0);
   });
 
   it("marks undeliverable messages as failed and continues", async () => {
