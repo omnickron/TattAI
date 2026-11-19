@@ -75,7 +75,11 @@ export default async function TemplatesPage({
         <div className="space-y-4">
           {templates.map((t) => {
             const status = TEMPLATE_STATUS_LABELS[t.status];
-            const changed = t.approvedText !== null && t.approvedText !== t.bodyText;
+            // Editor text differs from what Meta has (in review: the submitted text)
+            const changed =
+              t.status === "PENDING"
+                ? t.submittedText !== null && t.submittedText !== t.bodyText
+                : t.approvedText !== null && t.approvedText !== t.bodyText;
             const canSubmit =
               t.status !== "PENDING" && (t.approvedText !== t.bodyText || t.status !== "APPROVED");
             return (
@@ -92,9 +96,7 @@ export default async function TemplatesPage({
                   {t.metaTemplateId?.startsWith("mock-") && (
                     <Badge tone="amber">nur Test-Genehmigung</Badge>
                   )}
-                  {changed && t.status !== "PENDING" && (
-                    <Badge tone="amber">Änderung nicht eingereicht</Badge>
-                  )}
+                  {changed && <Badge tone="amber">Änderung nicht eingereicht</Badge>}
                 </div>
                 {t.rejectedReason && (
                   <p className="mb-2 text-sm text-red-600">Meta: {t.rejectedReason}</p>
@@ -116,7 +118,6 @@ export default async function TemplatesPage({
                     defaultValue={t.bodyText}
                     variables={variablesFor(t.purpose)}
                     examples={examples}
-                    disabled={t.status === "PENDING"}
                   />
                   <div className="flex flex-wrap items-end gap-2">
                     <Select
@@ -124,12 +125,11 @@ export default async function TemplatesPage({
                       defaultValue={t.category}
                       aria-label="Kategorie"
                       className="w-44"
-                      disabled={t.status === "PENDING"}
                     >
                       <option value="UTILITY">Service (Utility)</option>
                       <option value="MARKETING">Marketing</option>
                     </Select>
-                    <Button type="submit" variant="secondary" disabled={t.status === "PENDING"}>
+                    <Button type="submit" variant="secondary">
                       Speichern
                     </Button>
                   </div>
@@ -164,7 +164,8 @@ export default async function TemplatesPage({
                 )}
                 {t.status === "PENDING" && (
                   <p className="mt-2 text-xs text-ink-soft">
-                    Eingereicht als {t.submittedName} am {formatDateTime(t.submittedAt)}.
+                    Eingereicht als {t.submittedName} am {formatDateTime(t.submittedAt)}. Den Text
+                    kannst du schon bearbeiten; einreichen geht wieder, sobald Meta entschieden hat.
                   </p>
                 )}
               </Card>

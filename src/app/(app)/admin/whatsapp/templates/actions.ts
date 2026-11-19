@@ -65,11 +65,6 @@ export async function updateTemplateText(
   await requireAdmin();
   const t = await prisma.whatsAppTemplate.findUnique({ where: { id } });
   if (!t) return { ok: false, message: "Template nicht gefunden." };
-  if (t.status === "PENDING")
-    return {
-      ok: false,
-      message: "Während der Prüfung bei Meta kann der Text nicht geändert werden.",
-    };
   const bodyText = String(formData.get("bodyText") ?? "").trim();
   const category = formData.get("category") === "MARKETING" ? "MARKETING" : "UTILITY";
   const compiled = compileTemplate(bodyText, ALLOWED_VARIABLES[t.purpose]);
@@ -78,9 +73,12 @@ export async function updateTemplateText(
   revalidatePath(PATH);
   return {
     ok: true,
-    message: t.approvedText
-      ? "Gespeichert. Bis die neue Fassung genehmigt ist, wird die bisherige verschickt – bitte einreichen."
-      : "Gespeichert.",
+    message:
+      t.status === "PENDING"
+        ? "Gespeichert. Meta prüft noch die eingereichte Fassung – die Änderung kannst du danach einreichen."
+        : t.approvedText
+          ? "Gespeichert. Bis die neue Fassung genehmigt ist, wird die bisherige verschickt – bitte einreichen."
+          : "Gespeichert.",
   };
 }
 
