@@ -29,6 +29,17 @@ export interface WhatsAppClient {
   updateTemplate(metaId: string, t: TemplateSubmission): Promise<{ status: MetaTemplateStatus }>;
   /** Deletes a template at Meta by name (all languages). */
   deleteTemplate?(name: string): Promise<void>;
+  /** All templates of the account as Meta sees them (for the status sync). */
+  listTemplates?(): Promise<MetaTemplateInfo[]>;
+}
+
+export interface MetaTemplateInfo {
+  id: string;
+  name: string;
+  language: string;
+  /** APPROVED, PENDING, REJECTED, PAUSED, DISABLED, … */
+  status: string;
+  rejectedReason?: string | null;
 }
 
 export class WhatsAppApiError extends Error {
@@ -99,7 +110,7 @@ export class CloudApiClient implements WhatsAppClient {
   private async post<T>(
     path: string,
     body: unknown,
-    method: "POST" | "DELETE" = "POST",
+    method: "POST" | "DELETE" | "GET" = "POST",
   ): Promise<T> {
     let res: Response;
     try {
@@ -199,6 +210,38 @@ export class CloudApiClient implements WhatsAppClient {
   async updateTemplate(metaId: string, t: TemplateSubmission) {
     await this.post(metaId, { category: t.category, components: this.components(t) });
     return { status: "PENDING" as const };
+  }
+
+  async listTemplates() {
+    const all: MetaTemplateInfo[] = [];
+    let path: string | null =
+      `${this.opts.businessAccountId}/message_templates?fields=id,name,language,status,rejected_reason&limit=200`;
+    for (let page = 0; path && page < 20; page++) {
+      const res: {
+        data?: Array<{
+          id: string;
+          name: string;
+          language: string;
+          status: string;
+          rejected_reason?: string;
+        }>;
+        paging?: { next?: string; cursors?: { after?: string } };
+      } = await this.post(path, null, "GET");
+      for (const t of res.data ?? [])
+        all.push({
+          id: String(t.id),
+          name: t.name,
+          language: t.language,
+          status: t.status,
+          rejectedReason:
+            t.rejected_reason && t.rejected_reason !== "NONE" ? t.rejected_reason : null,
+        });
+      const after = res.paging?.next ? res.paging.cursors?.after : undefined;
+      path = after
+        ? `${this.opts.businessAccountId}/message_templates?fields=id,name,language,status,rejected_reason&limit=200&after=${encodeURIComponent(after)}`
+        : null;
+    }
+    return all;
   }
 
   async deleteTemplate(name: string) {

@@ -717,6 +717,27 @@ export async function dispatchMessages(deps: MessagingDeps): Promise<DispatchRes
       const attempts = next.attempts + 1;
       console.error(`[whatsapp] sending ${next.id} failed (${handling}, code ${code}): ${message}`);
 
+      // Meta does not know this template name (e.g. approved only in the test mode): only this
+      // template waits (until Meta approves a version), everything else keeps being sent
+      if (code === 132001) {
+        await prisma.$transaction([
+          prisma.whatsAppTemplate.update({
+            where: { id: template.id },
+            data: {
+              approvedName: null,
+              approvedText: null,
+              approvedAt: null,
+              status: template.status === "APPROVED" ? "DRAFT" : template.status,
+              rejectedReason: "Bei Meta nicht vorhanden – bitte (neu) einreichen.",
+            },
+          }),
+          prisma.outboundMessage.update({
+            where: { id: next.id },
+            data: { attempts, lastError: message },
+          }),
+        ]);
+        continue;
+      }
       if (handling === "PAUSE") {
         await prisma.outboundMessage.update({
           where: { id: next.id },

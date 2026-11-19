@@ -13,7 +13,11 @@ import {
   compileTemplate,
   isValidTemplateName,
 } from "@/lib/whatsapp/template-text";
-import { submitTemplateForReview, TemplateError } from "@/lib/whatsapp/templates";
+import {
+  submitTemplateForReview,
+  syncTemplatesFromMeta,
+  TemplateError,
+} from "@/lib/whatsapp/templates";
 
 const PATH = "/admin/whatsapp/templates";
 
@@ -160,4 +164,31 @@ export async function deleteTemplate(id: string): Promise<ActionState> {
   await prisma.whatsAppTemplate.delete({ where: { id } });
   revalidatePath(PATH);
   return { ok: true, message: "Gelöscht." };
+}
+
+/** Reads the real review status of all templates at Meta (also done every 30 min). */
+export async function syncTemplates(): Promise<ActionState> {
+  await requireAdmin();
+  try {
+    const wa = createWhatsAppClient();
+    if (wa.mock)
+      return { ok: false, message: "Im Testmodus gibt es nichts bei Meta abzugleichen." };
+    const res = await syncTemplatesFromMeta(prisma, wa);
+    revalidatePath(PATH);
+    revalidatePath("/admin/whatsapp");
+    return {
+      ok: true,
+      message: res.changed
+        ? `Abgeglichen – ${res.changed} ${res.changed === 1 ? "Text" : "Texte"} aktualisiert.`
+        : "Abgeglichen – alles stimmt mit Meta überein.",
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      message: `Abgleich fehlgeschlagen: ${err instanceof Error ? err.message : String(err)}`.slice(
+        0,
+        300,
+      ),
+    };
+  }
 }

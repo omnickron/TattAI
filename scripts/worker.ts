@@ -11,6 +11,7 @@ import { syncPendingSessions } from "../src/lib/scheduling/session-calendar";
 import { defaultPhoneCountry } from "../src/lib/settings";
 import { createWhatsAppClient } from "../src/lib/whatsapp/client";
 import { runMessagingWorker } from "../src/lib/whatsapp/messaging";
+import { syncTemplatesFromMeta } from "../src/lib/whatsapp/templates";
 import { deliverBotEvents, deliveryConfigFromEnv } from "../src/lib/bot/deliveries";
 import { brainConfigFromEnv, createBrainClient } from "../src/lib/bot/brain";
 import { BOT_EVENT, processBotInbox } from "../src/lib/bot/inbox";
@@ -65,6 +66,7 @@ let stopping = false;
 let evalRunning = false;
 let lastLeadRetry = 0;
 let lastRetention = 0;
+let lastTemplateSync = 0;
 
 // Jobs that failed in the current run (shown to the operator)
 let failures: WorkerFailure[] = [];
@@ -166,6 +168,17 @@ async function tick() {
     if (outcomes) console.info(`[worker] missing-outcome reminders: ${outcomes}`);
   } catch (err) {
     fail("outcomes", err);
+  }
+  // Template review status from Meta (in case a status webhook got lost): every 30 minutes
+  if (whatsapp && !whatsapp.mock && Date.now() - lastTemplateSync > 30 * 60_000) {
+    lastTemplateSync = Date.now();
+    try {
+      const sync = await syncTemplatesFromMeta(prisma, whatsapp);
+      if (sync.changed)
+        console.info(`[worker] templates synced with Meta: ${sync.changed} changed`);
+    } catch (err) {
+      fail("templateSync", err);
+    }
   }
   // GDPR retention: once every 6 hours
   if (Date.now() - lastRetention > 6 * 3600_000) {
