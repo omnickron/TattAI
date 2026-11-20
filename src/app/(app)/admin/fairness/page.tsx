@@ -44,7 +44,9 @@ export default async function FairnessPage() {
             <table className="w-full min-w-[36rem] text-sm">
               <thead>
                 <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-ink-soft">
-                  <th className="px-4 py-2 font-medium sm:pl-0">Tätowierer</th>
+                  <th className="sticky left-0 z-10 bg-surface px-4 py-2 font-medium sm:pl-0">
+                    Tätowierer
+                  </th>
                   <th className="px-2 py-2 font-medium">Soll-Anteil</th>
                   <th className="px-2 py-2 text-right font-medium">Termine</th>
                   <th className="px-2 py-2 text-right font-medium">Ist-Anteil</th>
@@ -56,7 +58,7 @@ export default async function FairnessPage() {
                   const p = byId.get(s.tattooerId)!;
                   return (
                     <tr key={s.tattooerId}>
-                      <td className="px-4 py-2 sm:pl-0">
+                      <td className="sticky left-0 z-10 bg-surface px-4 py-2 sm:pl-0">
                         <span className="font-medium">{p.user.name}</span>{" "}
                         {p.user.role === "ADMIN" && <Badge>Inhaber</Badge>}{" "}
                         {!isCalendarConnected(p) && <Badge tone="amber">ohne Kalender</Badge>}
