@@ -57,11 +57,13 @@ describe("artist matching and busy times", () => {
         start: new Date("2026-11-09T09:00:00Z"),
         end: new Date("2026-11-09T11:00:00Z"),
         title: null,
+        allDay: false,
       },
       {
         start: new Date("2026-11-09T23:00:00Z"),
         end: new Date("2026-11-10T23:00:00Z"),
         title: null,
+        allDay: true,
       },
     ]);
   });
@@ -376,5 +378,53 @@ describe("own sub-calendar per tattooer", () => {
     expect(await client.ensureConsultationCalendar(conn)).toBe("teamup:100");
     const noDefault = new TeamupClient(async () => ({ ...cfg, subcalendarId: null }));
     await expect(noDefault.ensureConsultationCalendar(conn)).rejects.toThrow(/Kein Unterkalender/);
+  });
+});
+
+describe("all-day entries mean presence, not busy", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("are left out of the busy times for booking, but stay in the calendar entries", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          events: [
+            ev({
+              id: "presence",
+              title: "Luis",
+              all_day: true,
+              start_dt: "2026-11-10T00:00:00+01:00",
+              end_dt: "2026-11-10T23:59:00+01:00",
+              custom: { artist: ["luis"] },
+            }),
+            ev({
+              id: "appointment",
+              title: "Kunde",
+              start_dt: "2026-11-10T14:00:00+01:00",
+              end_dt: "2026-11-10T16:00:00+01:00",
+              custom: { artist: ["luis"] },
+            }),
+          ],
+        }),
+      ),
+    );
+    const client = new TeamupClient(
+      async () => ({ apiKey: "k", calendarKey: "c", subcalendarId: "1", artistFieldId: "artist" }),
+      TZ,
+    );
+    const conn = {
+      provider: "TEAMUP",
+      teamupArtist: "luis",
+    } as unknown as CalendarConnection;
+    const from = new Date("2026-11-10T00:00:00+01:00");
+    const to = new Date("2026-11-11T00:00:00+01:00");
+    expect(await client.getBusy(conn, from, to)).toEqual([
+      { start: new Date("2026-11-10T13:00:00Z"), end: new Date("2026-11-10T15:00:00Z") },
+    ]);
+    expect((await client.listBusyEntries(conn, from, to)).map((e) => e.title)).toEqual([
+      "Luis",
+      "Kunde",
+    ]);
   });
 });

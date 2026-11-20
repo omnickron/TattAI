@@ -119,8 +119,8 @@ export function busyOfArtist(
   artist: string,
   timeZone: string,
   ownSubcalendarId?: string | null,
-): Array<Interval & { title: string | null }> {
-  const busy: Array<Interval & { title: string | null }> = [];
+): Array<Interval & { title: string | null; allDay: boolean }> {
+  const busy: Array<Interval & { title: string | null; allDay: boolean }> = [];
   for (const ev of events) {
     if (ev.remote_id?.startsWith(REMOTE_ID_PREFIX)) continue;
     const inOwn =
@@ -137,12 +137,14 @@ export function busyOfArtist(
         start: zonedTimeToUtc(startDay, 0, timeZone),
         end: zonedTimeToUtc(addDays(endDay, 1), 0, timeZone),
         title: ev.title?.trim() || null,
+        allDay: true,
       });
     } else {
       busy.push({
         start: new Date(ev.start_dt),
         end: new Date(ev.end_dt),
         title: ev.title?.trim() || null,
+        allDay: false,
       });
     }
   }
@@ -320,7 +322,8 @@ export class TeamupClient implements CalendarClient {
     return (res.events ?? []).filter((e) => new Date(e.end_dt) > from && new Date(e.start_dt) < to);
   }
 
-  async getBusy(conn: CalendarConnection, from: Date, to: Date): Promise<Interval[]> {
+  /** All entries of the artist, all-day ones included (for the app calendar). */
+  async listBusyEntries(conn: CalendarConnection, from: Date, to: Date) {
     const cfg = await this.config();
     if (!cfg.artistFieldId || !conn.teamupArtist)
       throw new CalendarError("TeamUp: Artist ist nicht zugeordnet.");
@@ -334,8 +337,14 @@ export class TeamupClient implements CalendarClient {
     );
   }
 
-  async listBusyEntries(conn: CalendarConnection, from: Date, to: Date) {
-    return this.getBusy(conn, from, to) as Promise<Array<Interval & { title: string | null }>>;
+  /**
+   * Busy times for booking. All-day entries mean "is in the studio that day" in the
+   * studio's TeamUp, not "blocked" (decision of 20.11.2026) – absences are entered in NEEDL.
+   */
+  async getBusy(conn: CalendarConnection, from: Date, to: Date): Promise<Interval[]> {
+    return (await this.listBusyEntries(conn, from, to))
+      .filter((b) => !b.allDay)
+      .map(({ start, end }) => ({ start, end }));
   }
 
   /** The tattooer's own sub-calendar, otherwise the studio default from the settings. */
