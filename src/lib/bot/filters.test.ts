@@ -74,6 +74,23 @@ describe("system prompt", () => {
   });
 });
 
+describe("consultation pitch in the prompt", () => {
+  it("stresses a free consultation that also works by phone", () => {
+    const p = buildSystemPrompt(emptyKnowledge(), { modes: ["ON_SITE", "PHONE"], free: true });
+    expect(p).toContain(
+      "dass die Beratung kostenlos, wahlweise vor Ort im Studio oder bequem am Telefon ist",
+    );
+    expect(p).toContain("Die Beratung geht auch telefonisch – erwähne das aktiv");
+    expect(p).toContain("Sag nie „unverbindlich“");
+  });
+
+  it("says nothing about price or phone when that does not apply", () => {
+    const p = buildSystemPrompt(emptyKnowledge(), { modes: ["ON_SITE"], free: false });
+    expect(p).not.toContain("kostenlos");
+    expect(p).not.toContain("Telefon");
+  });
+});
+
 describe("slot spreading", () => {
   it("offers at most two times per day, sorted", () => {
     const starts = ["2026-11-09", "2026-11-10"].flatMap((d) =>
@@ -100,7 +117,7 @@ describe("natural replies", () => {
     const k = emptyKnowledge();
     const both = buildSystemPrompt(k, { modes: ["ON_SITE", "PHONE"], free: true });
     expect(both).toContain("vor Ort im Studio; telefonisch");
-    expect(both).toContain("Die Beratung ist kostenlos und unverbindlich");
+    expect(both).toContain("Die Beratung ist kostenlos. Betone das");
     expect(
       buildSystemPrompt(k, { modes: ["ON_SITE"], free: true, minutes: { min: 20, max: 30 } }),
     ).toContain("Eine Beratung dauert je nach Tätowierer 20–30 Minuten");
