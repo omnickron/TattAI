@@ -31,6 +31,14 @@ export interface WhatsAppClient {
   deleteTemplate?(name: string): Promise<void>;
   /** All templates of the account as Meta sees them (for the status sync). */
   listTemplates?(): Promise<MetaTemplateInfo[]>;
+  /** Uploads a media file to Meta; returns the media id (valid about 30 days). */
+  uploadMedia?(file: { data: Uint8Array; mimeType: string; fileName: string }): Promise<string>;
+  /** Sends an uploaded audio file; `voice` shows it as a voice note (ogg/opus only). */
+  sendAudio?(input: {
+    to: string;
+    mediaId: string;
+    voice: boolean;
+  }): Promise<{ messageId: string }>;
 }
 
 export interface MetaTemplateInfo {
@@ -212,6 +220,59 @@ export class CloudApiClient implements WhatsAppClient {
     return { status: "PENDING" as const };
   }
 
+  async uploadMedia(file: { data: Uint8Array; mimeType: string; fileName: string }) {
+    const form = new FormData();
+    form.set("messaging_product", "whatsapp");
+    form.set("type", file.mimeType);
+    form.set("file", new Blob([new Uint8Array(file.data)], { type: file.mimeType }), file.fileName);
+    let res: Response;
+    try {
+      res = await fetch(
+        `https://graph.facebook.com/${this.opts.apiVersion}/${this.opts.phoneNumberId}/media`,
+        {
+          method: "POST",
+          headers: { authorization: `Bearer ${this.opts.accessToken}` },
+          body: form,
+          signal: AbortSignal.timeout(60_000),
+        },
+      );
+    } catch (err) {
+      throw new WhatsAppApiError(
+        `Netzwerkfehler: ${err instanceof Error ? err.message : err}`,
+        null,
+        null,
+      );
+    }
+    const json = (await res.json().catch(() => ({}))) as {
+      id?: string;
+      error?: { message?: string; code?: number };
+    };
+    if (!res.ok || !json.id)
+      throw new WhatsAppApiError(
+        `WhatsApp API ${res.status}: ${json.error?.message ?? "Upload fehlgeschlagen"}`.slice(
+          0,
+          500,
+        ),
+        json.error?.code ?? null,
+        res.status,
+      );
+    return json.id;
+  }
+
+  async sendAudio(input: { to: string; mediaId: string; voice: boolean }) {
+    const res = await this.post<{ messages: Array<{ id: string }> }>(
+      `${this.opts.phoneNumberId}/messages`,
+      {
+        messaging_product: "whatsapp",
+        messaging_account_id: this.opts.businessAccountId,
+        to: this.to(input.to),
+        type: "audio",
+        audio: { id: input.mediaId, ...(input.voice ? { voice: true } : {}) },
+      },
+    );
+    return { messageId: res.messages[0].id };
+  }
+
   async listTemplates() {
     const all: MetaTemplateInfo[] = [];
     let path: string | null =
@@ -286,6 +347,16 @@ export class MockWhatsAppClient implements WhatsAppClient {
   }
 
   async deleteTemplate() {}
+
+  async uploadMedia() {
+    return `mock-media-${randomUUID()}`;
+  }
+
+  async sendAudio(input: { to: string; mediaId: string; voice: boolean }) {
+    this.sent.push({ to: input.to, body: `[audio ${input.mediaId}]` });
+    console.info(`[mock-whatsapp] voice memo → ${input.to}`);
+    return { messageId: `wamid.mock-${randomUUID()}` };
+  }
 }
 
 export function isWhatsAppMock(): boolean {

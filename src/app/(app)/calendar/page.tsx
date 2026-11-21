@@ -208,7 +208,8 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
 
   const consultations = await prisma.consultation.findMany({
     where: {
-      status: { not: "CANCELLED" },
+      // Cancelled ones stay visible (struck through); moved ones are shown at the new time
+      NOT: { status: "CANCELLED", rescheduled: true },
       walkIn: false,
       lead: { isTest: false },
       startsAt: {
@@ -292,8 +293,9 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
       tattooerId: c.tattooer.id,
       foreign: isForeign(c.tattooer.id),
       tattooerName: c.tattooer.user.name,
-      tone: "",
-      color: colorFor(c.tattooer.id),
+      // Cancelled: light grey and struck through, the time is free again
+      tone: c.status === "CANCELLED" ? "bg-muted text-ink-soft line-through opacity-80" : "",
+      color: c.status === "CANCELLED" ? undefined : colorFor(c.tattooer.id),
       status: c.status,
       mode: c.mode,
       detail: {
@@ -306,13 +308,15 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
         tattooerName: c.tattooer.user.name,
         mode: CONSULTATION_MODE_LABELS[c.mode],
         status:
-          c.status === "HELD"
-            ? { label: "stattgefunden", tone: "green" }
-            : c.status === "NO_SHOW"
-              ? { label: "No-Show", tone: "red" }
-              : c.endsAt <= now
-                ? { label: "Ergebnis fehlt", tone: "amber" }
-                : { label: "geplant", tone: "blue" },
+          c.status === "CANCELLED"
+            ? { label: "abgesagt", tone: "gray" }
+            : c.status === "HELD"
+              ? { label: "stattgefunden", tone: "green" }
+              : c.status === "NO_SHOW"
+                ? { label: "No-Show", tone: "red" }
+                : c.endsAt <= now
+                  ? { label: "Ergebnis fehlt", tone: "amber" }
+                  : { label: "geplant", tone: "blue" },
         motif: motifOf(c.lead.tattooSummary),
         summary: summaryLines(c.lead.tattooSummary).filter(
           (l) => !l.startsWith("Motiv:") && !l.startsWith("Referenzbilder"),

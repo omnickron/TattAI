@@ -1,0 +1,88 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { Button, Field, Input } from "@/components/ui";
+
+/** Upload of a recorded voice memo (sent as raw body, converted on the server). */
+export function VoiceMemoUploader() {
+  const router = useRouter();
+  const [file, setFile] = useState<File | null>(null);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function upload(e: React.FormEvent) {
+    e.preventDefault();
+    if (!file) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/voice-memos", {
+        method: "POST",
+        headers: {
+          "content-type": file.type || "application/octet-stream",
+          "x-file-name": encodeURIComponent(name.trim() || file.name.replace(/\.[^.]+$/, "")),
+        },
+        body: file,
+      });
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setMessage({ ok: false, text: json.error ?? "Upload fehlgeschlagen." });
+        return;
+      }
+      setMessage({ ok: true, text: "Hochgeladen und umgewandelt." });
+      setFile(null);
+      setName("");
+      (e.target as HTMLFormElement).reset();
+      router.refresh();
+    } catch {
+      setMessage({ ok: false, text: "Upload fehlgeschlagen. Bitte erneut versuchen." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={upload} className="space-y-3">
+      <Field
+        label="Aufnahme"
+        htmlFor="voice-file"
+        hint="z. B. Sprachmemo vom Handy (m4a, mp3, ogg, wav), höchstens 10 MB"
+      >
+        <input
+          id="voice-file"
+          type="file"
+          accept="audio/*,.m4a,.mp3,.ogg,.opus,.wav,.aac"
+          required
+          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          className="block w-full text-sm"
+        />
+      </Field>
+      <Field label="Name" htmlFor="voice-name" hint="Nur intern, z. B. „Begrüßung Nick“">
+        <Input
+          id="voice-name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          maxLength={100}
+          placeholder="Begrüßung"
+        />
+      </Field>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button type="submit" disabled={!file || busy}>
+          {busy ? "Wird hochgeladen …" : "Hochladen"}
+        </Button>
+        {message && (
+          <p
+            role="status"
+            className={
+              message.ok ? "text-sm text-emerald-700 dark:text-emerald-400" : "text-sm text-red-600"
+            }
+          >
+            {message.text}
+          </p>
+        )}
+      </div>
+    </form>
+  );
+}

@@ -24,6 +24,7 @@ export const JOB_LABELS: Record<string, string> = {
   leadRetry: "Meta-Leads nachladen",
   evalStart: "Bot-Test starten",
   templateSync: "Vorlagen mit Meta abgleichen",
+  voiceMemos: "Sprachnachrichten senden",
 };
 
 type Db = Pick<PrismaClient, "workerHeartbeat">;

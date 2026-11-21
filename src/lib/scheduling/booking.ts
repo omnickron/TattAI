@@ -606,8 +606,28 @@ export async function cancelConsultation(
     }
   });
   const removed = await removeEvent(deps, c.tattooerId, c.calendarId, c.calendarEventId);
+  if (c.calendarId && c.calendarEventId) {
+    await prisma.$transaction([
+      // Not removed right away (calendar unreachable): the worker retries
+      ...(removed
+        ? []
+        : [
+            prisma.calendarEventDeletion.createMany({
+              data: [
+                { tattooerId: c.tattooerId, calendarId: c.calendarId, eventId: c.calendarEventId },
+              ],
+              skipDuplicates: true,
+            }),
+          ]),
+      prisma.consultation.update({
+        where: { id: c.id },
+        data: { calendarId: null, calendarEventId: null },
+      }),
+    ]);
+  }
   await notifyAppointment(deps, "CANCELLED", c.id, { byUserId: opts.byUserId });
-  return { calendarEventRemoved: removed };
+  // The event is gone now or will be removed by the worker shortly
+  return { calendarEventRemoved: true };
 }
 
 /** Admin: moves a consultation to another tattooer (same time). */

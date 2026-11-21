@@ -11,6 +11,8 @@ RUN DATABASE_URL="$BUILD_DATABASE_URL" npm ci
 # Full toolchain: builds the app and is reused for migrations and jobs.
 FROM node:22-alpine AS builder
 WORKDIR /app
+# ffmpeg: converts uploaded voice memos to ogg/opus (WhatsApp voice notes)
+RUN apk add --no-cache ffmpeg
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -23,6 +25,7 @@ RUN export DATABASE_URL="$BUILD_DATABASE_URL" && npx prisma generate && npm run 
 # Minimal runtime image with the standalone Next.js server.
 FROM node:22-alpine AS runner
 WORKDIR /app
+RUN apk add --no-cache ffmpeg
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
 RUN addgroup -S -g 1001 app && adduser -S -u 1001 -G app app \
   && mkdir -p /data/media && chown app:app /data/media && chmod 700 /data/media

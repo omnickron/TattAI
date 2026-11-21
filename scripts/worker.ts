@@ -12,6 +12,7 @@ import { defaultPhoneCountry } from "../src/lib/settings";
 import { createWhatsAppClient } from "../src/lib/whatsapp/client";
 import { runMessagingWorker } from "../src/lib/whatsapp/messaging";
 import { syncTemplatesFromMeta } from "../src/lib/whatsapp/templates";
+import { processVoiceMemoSends } from "../src/lib/whatsapp/voice";
 import { deliverBotEvents, deliveryConfigFromEnv } from "../src/lib/bot/deliveries";
 import { brainConfigFromEnv, createBrainClient } from "../src/lib/bot/brain";
 import { BOT_EVENT, processBotInbox } from "../src/lib/bot/inbox";
@@ -114,6 +115,14 @@ async function tick() {
       fail("evalStart", err);
     }
   }
+  // Voice memos after a customer's first reply – before the bot answers
+  if (whatsapp)
+    try {
+      const voice = await processVoiceMemoSends(prisma, whatsapp);
+      if (voice.sent) console.info(`[worker] voice memos sent: ${voice.sent}`);
+    } catch (err) {
+      fail("voiceMemos", err);
+    }
   if (brain && whatsapp) {
     try {
       const inbox = await processBotInbox({

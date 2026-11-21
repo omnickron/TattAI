@@ -2,6 +2,7 @@
  * Processing of WhatsApp Cloud API webhooks: inbound messages, delivery
  * statuses, template reviews and quality/account signals. Idempotent.
  */
+import { queueFirstReplyVoiceMemo } from "./voice";
 import { statusAfterOptOut } from "../leads/opt-out";
 import { createHash } from "node:crypto";
 import { Prisma, type PrismaClient } from "@/generated/prisma/client";
@@ -130,6 +131,10 @@ async function handleInbound(prisma: PrismaClient, m: WaMessage, now: Date) {
       ? ["FIRST_CONTACT", "INTRO_MESSAGE", "FOLLOW_UP", "REMINDER", "AFTER_CONSULTATION"]
       : ["FIRST_CONTACT", "FOLLOW_UP"],
   );
+
+  // First reply of this customer: the configured voice memo follows (worker, before the bot)
+  if (!optOut && !lead.lastInboundAt && !lead.whatsappOptOut)
+    await queueFirstReplyVoiceMemo(prisma, lead.id);
 
   // Images/documents (e.g. reference pictures) are downloaded by the worker.
   const media = m.image ?? m.document;
