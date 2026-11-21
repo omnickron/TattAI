@@ -45,20 +45,48 @@ export function VoiceMemoUploader() {
 
   return (
     <form onSubmit={upload} className="space-y-3">
-      <Field
-        label="Aufnahme"
-        htmlFor="voice-file"
-        hint="z. B. Sprachmemo vom Handy (m4a, mp3, ogg, wav), höchstens 10 MB"
-      >
-        <input
-          id="voice-file"
-          type="file"
-          accept="audio/*,.m4a,.mp3,.ogg,.opus,.wav,.aac"
-          required
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          className="block w-full text-sm"
-        />
-      </Field>
+      <div>
+        <p className="mb-1.5 text-sm font-medium">Aufnahme</p>
+        <label
+          htmlFor="voice-file"
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            const dropped = e.dataTransfer.files?.[0];
+            if (dropped) setFile(dropped);
+          }}
+          className={
+            "flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed px-4 py-5 text-center transition hover:bg-muted " +
+            (file ? "border-emerald-500/60 bg-emerald-50/50 dark:bg-emerald-950/30" : "border-line")
+          }
+        >
+          <span aria-hidden className="text-2xl">
+            🎤
+          </span>
+          <span className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-paper">
+            {file ? "Andere Datei wählen" : "Aufnahme auswählen"}
+          </span>
+          <span className="text-sm text-ink-soft">
+            {file ? (
+              <>
+                <span className="font-medium text-ink">{file.name}</span> ·{" "}
+                {file.size < 1024 * 1024
+                  ? `${Math.max(1, Math.round(file.size / 1024))} KB`
+                  : `${(file.size / 1024 / 1024).toLocaleString("de-DE", { maximumFractionDigits: 1 })} MB`}
+              </>
+            ) : (
+              "oder hierher ziehen · Sprachmemo vom Handy (m4a, mp3, ogg, wav), höchstens 10 MB"
+            )}
+          </span>
+          <input
+            id="voice-file"
+            type="file"
+            accept="audio/*,.m4a,.mp3,.ogg,.opus,.wav,.aac"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            className="sr-only"
+          />
+        </label>
+      </div>
       <Field label="Name" htmlFor="voice-name" hint="Nur intern, z. B. „Begrüßung Nick“">
         <Input
           id="voice-name"
