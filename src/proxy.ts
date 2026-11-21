@@ -72,6 +72,6 @@ export const config = {
   // bodies in the proxy, max. 10 MB) – uploads, webhooks, bot API, Auth.js. On the website
   // domain Caddy answers /api/* with 404 itself (deploy/Caddyfile).
   matcher: [
-    "/((?!api/auth|api/webhooks|api/bot|api/content/upload|_next/static|_next/image|icon.png|apple-icon.png|manifest.webmanifest|sw.js|icons/).*)",
+    "/((?!api/auth|api/webhooks|api/bot|api/content/upload|api/voice-memos|_next/static|_next/image|icon.png|apple-icon.png|manifest.webmanifest|sw.js|icons/).*)",
   ],
 };

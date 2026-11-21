@@ -28,6 +28,8 @@ const APP_PUBLIC_PREFIXES = [
   "/api/webhooks",
   "/api/bot",
   "/api/content/upload",
+  // Voice memo upload/playback: large bodies, the routes check the session themselves
+  "/api/voice-memos",
 ];
 
 export type RouteDecision =
