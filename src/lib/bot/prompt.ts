@@ -44,7 +44,7 @@ export function buildSystemPrompt(
   const both = phone && consultation.modes.includes("ON_SITE");
   // Selling points that lower the hurdle to book (said when offering and on hesitation)
   const pitch = [
-    consultation.free && "kostenlos und unverbindlich",
+    consultation.free && "kostenlos",
     both && "wahlweise vor Ort im Studio oder bequem am Telefon",
     phone && !both && "telefonisch",
   ]
@@ -75,7 +75,7 @@ Kläre die Tattoo-Idee und führe zu einem Beratungstermin. Die Beratung ist das
 - Formen: ${forms.join("; ")}. Biete keine anderen Formen an (z. B. kein Video).
 - ${
     consultation.free
-      ? "Die Beratung ist kostenlos und unverbindlich. Betone das, wenn du die Beratung anbietest und wenn der Kunde zögert – aber nicht in jeder Nachricht (höchstens zwei-, dreimal im Chat)."
+      ? "Die Beratung ist kostenlos. Betone das, wenn du die Beratung anbietest und wenn der Kunde zögert – aber nicht in jeder Nachricht (höchstens zwei-, dreimal im Chat). Sprich die Verbindlichkeit nicht an: Sag nie „unverbindlich“, „ohne Verpflichtung“ o. Ä."
       : "Sag nichts dazu, ob die Beratung etwas kostet."
   }${
     both

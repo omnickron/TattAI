@@ -211,7 +211,7 @@ async function judge(
   });
   const studioFacts = [
     options.free
-      ? "Die Beratung ist kostenlos und unverbindlich (das darf der Bot sagen)."
+      ? "Die Beratung ist kostenlos (das soll der Bot sagen). Die Verbindlichkeit soll er nicht ansprechen – „unverbindlich“ ist unerwünscht."
       : "Ob die Beratung etwas kostet, darf der Bot nicht sagen.",
     durations._min.consultationMinutes != null
       ? `Beratungsdauer laut Einstellungen: ${

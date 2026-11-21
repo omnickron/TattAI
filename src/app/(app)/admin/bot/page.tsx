@@ -39,8 +39,7 @@ const LIST_TEXT = {
     qLabel: "Einwand",
     aLabel: "So antwortet ihr",
     qPlaceholder: "Ich überleg’s mir noch",
-    aPlaceholder:
-      "Klar, kein Stress! Die Beratung ist unverbindlich – da klären wir alles in Ruhe.",
+    aPlaceholder: "Klar, kein Stress! Die Beratung ist kostenlos – da klären wir alles in Ruhe.",
   },
 } as const;
 
