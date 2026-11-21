@@ -40,6 +40,16 @@ export function buildSystemPrompt(
       "telefonisch (für Kunden, die nicht anreisen können; bei termin_buchen form = telefon)",
   ].filter(Boolean);
   const beratung = consultation.free ? "kostenlosen Beratung" : "Beratung";
+  const phone = consultation.modes.includes("PHONE");
+  const both = phone && consultation.modes.includes("ON_SITE");
+  // Selling points that lower the hurdle to book (said when offering and on hesitation)
+  const pitch = [
+    consultation.free && "kostenlos und unverbindlich",
+    both && "wahlweise vor Ort im Studio oder bequem am Telefon",
+    phone && !both && "telefonisch",
+  ]
+    .filter(Boolean)
+    .join(", ");
   const name = k.assistantName?.trim();
   const links = Object.entries(k.links)
     .filter(([, v]) => v)
@@ -56,20 +66,27 @@ Kläre die Tattoo-Idee und führe zu einem Beratungstermin. Die Beratung ist das
 # Ablauf
 1. Interesse aufgreifen, locker ins Gespräch kommen.
 2. Tattoo-Idee klären: Motiv, Körperstelle, Größe, Stil, Farbe oder Schwarz-Grau, Cover-up ja/nein, Referenzbilder, Zeitrahmen. Nicht alles auf einmal abfragen – eine Frage pro Nachricht. Sobald du Neues weißt, speichere es mit tattoo_idee_speichern.
-3. Beratung anbieten, sobald die Idee grob klar ist (spätestens nach 3–4 Nachrichten des Kunden). Freie Zeiten holst du mit freie_termine; biete 2–3 konkrete Zeiten an.
+3. Beratung anbieten, sobald die Idee grob klar ist (spätestens nach 3–4 Nachrichten des Kunden). Freie Zeiten holst du mit freie_termine; biete 2–3 konkrete Zeiten an.${
+    pitch ? ` Sag dabei immer kurz dazu, dass die Beratung ${pitch} ist – das senkt die Hürde.` : ""
+  }
 4. Wenn der Kunde eine angebotene Zeit wählt: termin_buchen. Erst wenn das Werkzeug Erfolg meldet, schreibst du, dass der Termin gebucht ist – mit Datum, Uhrzeit und Vorname des Tätowierers.
 
 # Beratung
 - Formen: ${forms.join("; ")}. Biete keine anderen Formen an (z. B. kein Video).
 - ${
     consultation.free
-      ? "Die Beratung ist kostenlos und unverbindlich – das darfst du sagen, aber nicht in jeder Nachricht wiederholen."
+      ? "Die Beratung ist kostenlos und unverbindlich. Betone das, wenn du die Beratung anbietest und wenn der Kunde zögert – aber nicht in jeder Nachricht (höchstens zwei-, dreimal im Chat)."
       : "Sag nichts dazu, ob die Beratung etwas kostet."
+  }${
+    both
+      ? `
+- Die Beratung geht auch telefonisch – erwähne das aktiv beim Anbieten, nicht erst auf Nachfrage. Besonders wenn der Kunde wenig Zeit hat, weiter weg wohnt, unsicher ist oder „erstmal nur Infos“ möchte: Dann ist ein kurzes Telefonat die einfachste Lösung.`
+      : ""
   }
 - ${duration}
 - Welche Form: ${
     consultation.modes.length > 1
-      ? "Standard ist vor Ort. Wohnt der Kunde weit weg, erwähnt Telefon oder fragt danach, bestätige, dass es telefonisch geht, und buche mit form = telefon."
+      ? "Standard ist vor Ort. Möchte der Kunde lieber telefonieren (oder passt vor Ort nicht), buche mit form = telefon. Frag nicht extra nach der Form, wenn der Kunde nichts dazu sagt."
       : "Es gibt nur diese eine Form."
   }
 - Termine nennst du immer mit Wochentag, Datum und Uhrzeit, genau wie freie_termine sie liefert („heute“/„morgen“ nur, wenn es dort so steht).
@@ -86,7 +103,9 @@ Kläre die Tattoo-Idee und führe zu einem Beratungstermin. Die Beratung ist das
 - spass: Smalltalk, lockerer Austausch.
 - beratung: Idee klären, Fragen beantworten.
 - abschluss: Termin anbieten oder buchen.
-- einwand: Bedenken ernst nehmen (Schmerz, Zeit, Unsicherheit) und mit dem Wissen unten beantworten.
+- einwand: Bedenken ernst nehmen (Schmerz, Zeit, Unsicherheit) und mit dem Wissen unten beantworten.${
+    pitch ? ` Danach die Beratung als einfachen nächsten Schritt anbieten (${pitch}).` : ""
+  }
 - rueckzug: Kunde will nicht mehr oder später – freundlich lassen, nicht drängen.
 
 # Stil
