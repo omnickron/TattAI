@@ -120,6 +120,25 @@ describe("recordOutcome", () => {
     });
   });
 
+  it("removes the calendar event of a consultation marked as cancelled", async () => {
+    const c = await consultation();
+    await prisma.consultation.update({
+      where: { id: c.id },
+      data: { calendarId: "cal-1", calendarEventId: "evt-1" },
+    });
+    await recordOutcome(prisma, {
+      consultationId: c.id,
+      userId,
+      now: NOW,
+      outcome: { outcome: "CANCELLED" },
+    });
+    const stored = await prisma.consultation.findUniqueOrThrow({ where: { id: c.id } });
+    expect([stored.status, stored.calendarEventId]).toEqual(["CANCELLED", null]);
+    expect((await prisma.calendarEventDeletion.findMany()).map((d) => d.eventId)).toEqual([
+      "evt-1",
+    ]);
+  });
+
   it("sets the lead status for each outcome and allows corrections", async () => {
     const c = await consultation();
     const record = (outcome: Parameters<typeof recordOutcome>[1]["outcome"]) =>

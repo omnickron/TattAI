@@ -297,6 +297,13 @@ export async function recordOutcome(
   await prisma.$transaction(async (tx) => {
     // Existing sessions are replaced: their calendar events must go.
     await queueSessionEventDeletions(tx, { consultationId: c.id });
+    // A consultation marked as cancelled leaves Google/TeamUp (it stays in the app)
+    if (v.outcome === "CANCELLED" && c.calendarId && c.calendarEventId) {
+      await tx.calendarEventDeletion.createMany({
+        data: [{ tattooerId: c.tattooerId, calendarId: c.calendarId, eventId: c.calendarEventId }],
+        skipDuplicates: true,
+      });
+    }
     await tx.consultation.update({
       where: { id: c.id },
       data: {
@@ -310,6 +317,7 @@ export async function recordOutcome(
         outcomeRecordedById: input.userId,
         followUpAt,
         ...(followUpChanged ? { followUpDoneAt: null, followUpNotifiedAt: null } : {}),
+        ...(v.outcome === "CANCELLED" ? { calendarId: null, calendarEventId: null } : {}),
       },
     });
     await tx.tattooBooking.deleteMany({ where: { consultationId: c.id } });

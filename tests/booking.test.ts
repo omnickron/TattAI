@@ -55,7 +55,9 @@ class FakeCalendar implements CalendarClient {
     return id;
   }
   async updateEvent() {}
+  failDelete = false;
   async deleteEvent(_conn: CalendarConnection, _calendarId: string, eventId: string) {
+    if (this.failDelete) throw new Error("calendar down");
     this.deleted.push(eventId);
   }
 }
@@ -528,6 +530,25 @@ describe("cancel and reassign", () => {
     expect((await prisma.lead.findUniqueOrThrow({ where: { id: leadId } })).status).toBe(
       "CANCELLED",
     );
+    await expect(
+      bookConsultation(deps, { leadId: await lead(), startsAt: at("10:00"), tattooerId: ids.a }),
+    ).resolves.toBeTruthy();
+  });
+
+  it("keeps the cancelled consultation in the app and retries the calendar removal later", async () => {
+    const c = await bookConsultation(deps, {
+      leadId: await lead(),
+      startsAt: at("10:00"),
+      tattooerId: ids.a,
+    });
+    calendar.failDelete = true;
+    await cancelConsultation(deps, c.id);
+    const stored = await prisma.consultation.findUniqueOrThrow({ where: { id: c.id } });
+    expect([stored.status, stored.calendarEventId]).toEqual(["CANCELLED", null]);
+    expect(
+      (await prisma.calendarEventDeletion.findMany()).map((d) => [d.calendarId, d.eventId]),
+    ).toEqual([[`cal-${ids.a}`, "evt-1"]]);
+    // The time is free again
     await expect(
       bookConsultation(deps, { leadId: await lead(), startsAt: at("10:00"), tattooerId: ids.a }),
     ).resolves.toBeTruthy();
