@@ -88,7 +88,7 @@ export function ChatSection({
           {!bot.globallyEnabled
             ? "Der Bot ist für alle Chats ausgeschaltet (WhatsApp-Einstellungen)."
             : bot.enabled
-              ? "Der Bot beantwortet Nachrichten in diesem Chat."
+              ? "Der Bot beantwortet Nachrichten in diesem Chat. Einschalten, wenn du den Kunden selbst betreust."
               : `${BOT_REASON_LABELS[(bot.disabledReason ?? "MANUAL") as BotDisabledReason]}${
                   bot.disabledBy ? ` von ${bot.disabledBy}` : ""
                 }${bot.disabledAt ? ` am ${formatDateTime(bot.disabledAt)}` : ""}.`}

@@ -8,7 +8,7 @@ export type BotDisabledReason = "HUMAN_TAKEOVER" | "MANUAL" | "BOT_HANDOVER";
 
 export const BOT_REASON_LABELS: Record<BotDisabledReason, string> = {
   HUMAN_TAKEOVER: "Chat von einem Menschen übernommen",
-  MANUAL: "manuell ausgeschaltet",
+  MANUAL: "Auf „manuell betreut“ gestellt",
   BOT_HANDOVER: "Bot hat an einen Menschen übergeben",
 };
 

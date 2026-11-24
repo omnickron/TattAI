@@ -24,6 +24,8 @@ function pageHref(filters: LeadFilters, page: number) {
   if (filters.status) params.set("status", filters.status);
   if (filters.campaign) params.set("campaign", filters.campaign);
   if (filters.view === "customers") params.set("ansicht", "kunden");
+  if (filters.manual) params.set("manuell", "1");
+  if (filters.hideContacted) params.set("ohneKontaktiert", "1");
   if (page > 1) params.set("page", String(page));
   const qs = params.toString();
   return qs ? `/leads?${qs}` : "/leads";
@@ -32,9 +34,14 @@ function pageHref(filters: LeadFilters, page: number) {
 export default async function LeadsPage({ searchParams }: PageProps<"/leads">) {
   const user = await requireUser();
   const filters = parseLeadFilters(await searchParams);
-  const { leads, total, pages, statusCounts, campaigns } = await listLeads(user, filters);
+  const { leads, total, pages, statusCounts, campaigns, manualCount } = await listLeads(
+    user,
+    filters,
+  );
   const isAdmin = user.role === "ADMIN";
-  const hasFilters = Boolean(filters.q || filters.status || filters.campaign);
+  const hasFilters = Boolean(
+    filters.q || filters.status || filters.campaign || filters.manual || filters.hideContacted,
+  );
 
   return (
     <>
@@ -103,6 +110,28 @@ export default async function LeadsPage({ searchParams }: PageProps<"/leads">) {
             </option>
           ))}
         </Select>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm sm:col-span-4 sm:row-start-2">
+          <label className="inline-flex items-center gap-2">
+            <input
+              type="checkbox"
+              name="manuell"
+              value="1"
+              defaultChecked={filters.manual}
+              className="h-4 w-4 accent-violet-600"
+            />
+            Nur manuell betreut ({manualCount})
+          </label>
+          <label className="inline-flex items-center gap-2">
+            <input
+              type="checkbox"
+              name="ohneKontaktiert"
+              value="1"
+              defaultChecked={filters.hideContacted}
+              className="h-4 w-4 accent-ink"
+            />
+            „Kontaktiert“ ausblenden
+          </label>
+        </div>
         <div className="flex gap-2">
           <Button type="submit" className="flex-1">
             Filtern
@@ -153,7 +182,7 @@ export default async function LeadsPage({ searchParams }: PageProps<"/leads">) {
                   <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm tabular-nums">
                     {formatPhone(lead.phoneE164, lead.phoneRaw)}
                     {!lead.phoneValid && <Badge tone="red">ungültig</Badge>}
-                    {!lead.botEnabled && <Badge tone="violet">Bot aus</Badge>}
+                    {!lead.botEnabled && <Badge tone="violet">Manuell betreut</Badge>}
                     {!lead.whatsappConsent && lead.phoneValid && (
                       <Badge tone="amber">ohne Einwilligung</Badge>
                     )}

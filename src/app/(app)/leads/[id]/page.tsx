@@ -47,6 +47,11 @@ export default async function LeadPage({ params, searchParams }: PageProps<"/lea
       <div className="mb-5 mt-2 flex flex-wrap items-center gap-3">
         <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">{lead.name}</h1>
         <LeadStatusBadge status={lead.status} />
+        {!lead.botEnabled && (
+          <a href="#chat">
+            <Badge tone="violet">Manuell betreut</Badge>
+          </a>
+        )}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_22rem]">

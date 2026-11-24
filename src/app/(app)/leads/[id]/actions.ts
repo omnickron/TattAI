@@ -314,8 +314,8 @@ export async function setBotEnabledAction(leadId: string, enabled: boolean): Pro
   return {
     ok: true,
     message: enabled
-      ? "Bot ist in diesem Chat wieder aktiv."
-      : "Bot ist in diesem Chat ausgeschaltet.",
+      ? "Nicht mehr manuell betreut – der Bot antwortet wieder."
+      : "Manuell betreut – der Bot antwortet in diesem Chat nicht mehr.",
   };
 }
 
