@@ -61,7 +61,7 @@ export const SECTIONS: SectionDef[] = [
       {
         name: "assistantName",
         label: "Name im Chat",
-        hint: "Wie der Bot unterschreibt, z. B. „Mia vom Black Rose Team“. Leer = ohne Namen.",
+        hint: "Nennt der Bot nur, wenn der Kunde fragt, mit wem er schreibt – er stellt sich nie von selbst vor. Leer = ohne Namen.",
         placeholder: "Mia vom Black Rose Team",
         rows: 1,
         max: 80,

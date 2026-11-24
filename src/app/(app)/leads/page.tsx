@@ -183,6 +183,7 @@ export default async function LeadsPage({ searchParams }: PageProps<"/leads">) {
                     {formatPhone(lead.phoneE164, lead.phoneRaw)}
                     {!lead.phoneValid && <Badge tone="red">ungültig</Badge>}
                     {!lead.botEnabled && <Badge tone="violet">Manuell betreut</Badge>}
+                    {lead.manualUnreadAt && <Badge tone="red">Neue Nachricht</Badge>}
                     {!lead.whatsappConsent && lead.phoneValid && (
                       <Badge tone="amber">ohne Einwilligung</Badge>
                     )}

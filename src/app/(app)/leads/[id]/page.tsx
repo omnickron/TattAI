@@ -33,6 +33,9 @@ export default async function LeadPage({ params, searchParams }: PageProps<"/lea
   const query = await searchParams;
   const lead = await getLeadForUser(user, id);
   if (!lead) notFound();
+  // Opening the contact counts as read for "Neue Nachrichten" (manually handled contacts)
+  if (lead.manualUnreadAt)
+    await prisma.lead.update({ where: { id: lead.id }, data: { manualUnreadAt: null } });
   const isAdmin = user.role === "ADMIN";
   const messaging = await prisma.messagingSettings.findUnique({
     where: { id: 1 },

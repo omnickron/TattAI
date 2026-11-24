@@ -90,6 +90,7 @@ export async function listLeads(user: CurrentUser, filters: LeadFilters) {
         status: true,
         whatsappConsent: true,
         botEnabled: true,
+        manualUnreadAt: true,
         metaCampaignName: true,
         metaPlatform: true,
         source: true,
