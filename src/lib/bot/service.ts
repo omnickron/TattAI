@@ -3,6 +3,7 @@
  * is refused while the bot is switched off for the chat (human takeover,
  * manual switch, master switch or opt-out).
  */
+import { voiceMemoText } from "./voice-text";
 import type { PushSender } from "../push";
 import { z } from "zod";
 import type { ConsultationMode, Prisma, PrismaClient } from "@/generated/prisma/client";
@@ -152,7 +153,11 @@ export async function botLead(deps: BotDeps, leadId: string) {
         take: 1,
         include: { tattooer: { include: { user: { select: { name: true } } } } },
       },
-      messages: { orderBy: { sentAt: "desc" }, take: 30 },
+      messages: {
+        orderBy: { sentAt: "desc" },
+        take: 30,
+        include: { voiceMemo: { select: { name: true, transcript: true } } },
+      },
       attachments: {
         where: { status: "STORED" },
         select: { id: true, mimeType: true, caption: true, createdAt: true },
@@ -192,7 +197,8 @@ export async function botLead(deps: BotDeps, leadId: string) {
     recentMessages: lead.messages.reverse().map((m) => ({
       id: m.id,
       from: author(m),
-      text: m.body,
+      // Voice memos: what was said in them
+      text: m.voiceMemo ? voiceMemoText(m.voiceMemo) : m.body,
       sentAt: m.sentAt,
     })),
   };

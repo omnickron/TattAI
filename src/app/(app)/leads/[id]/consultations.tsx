@@ -298,6 +298,7 @@ async function BookingForm({
   const slots = await getAvailableSlots(schedulingDeps(), {
     from: startOfLocalDay(day, APP_TIMEZONE),
     to: startOfLocalDay(addDays(day, 1), APP_TIMEZONE),
+    includeZeroShare: true,
   });
   const names = new Map(tattooers.map((t) => [t.id, t.user.name]));
   // Nothing free that day: offer the next days that have free times
@@ -309,6 +310,7 @@ async function BookingForm({
               await getAvailableSlots(schedulingDeps(), {
                 from: startOfLocalDay(addDays(day, 1), APP_TIMEZONE),
                 to: startOfLocalDay(addDays(day, 22), APP_TIMEZONE),
+                includeZeroShare: true,
               })
             ).map((s) => [localDateOf(s.start, APP_TIMEZONE), s.start]),
           ).keys(),
@@ -322,6 +324,7 @@ async function BookingForm({
       <p className="mb-3 text-xs text-ink-soft">
         Normalerweise bucht der Bot im WhatsApp-Chat. Bei „Automatisch“ bekommt den Termin, wer zu
         der Zeit frei ist und gemessen an seinem Anteil bisher am wenigsten Beratungen hatte.
+        Tätowierer mit 0 % bekommen nur Termine, wenn du sie unten ausdrücklich auswählst.
       </p>
       <form className="mb-3 flex items-end gap-2">
         <Input

@@ -30,7 +30,6 @@ import { createWhatsAppClient } from "@/lib/whatsapp/client";
 import { cancelQueued, retryFailedOutbound } from "@/lib/whatsapp/messaging";
 import { deleteLeadFiles } from "@/lib/whatsapp/media";
 import { ReplyError, sendManualReply } from "@/lib/whatsapp/replies";
-import { sendVoiceMemo, VoiceError } from "@/lib/whatsapp/voice";
 
 const leadSchema = z.object({
   name: z.string().trim().min(1, "Name fehlt.").max(200),
@@ -315,8 +314,8 @@ export async function setBotEnabledAction(leadId: string, enabled: boolean): Pro
   return {
     ok: true,
     message: enabled
-      ? "Bot ist in diesem Chat wieder aktiv."
-      : "Bot ist in diesem Chat ausgeschaltet.",
+      ? "Nicht mehr manuell betreut – der Bot antwortet wieder."
+      : "Manuell betreut – der Bot antwortet in diesem Chat nicht mehr.",
   };
 }
 
@@ -345,38 +344,4 @@ export async function moveConsultationAction(
   revalidatePath(`/leads/${access.consultation.leadId}`);
   revalidatePath("/calendar");
   return { ok: true, message: "Beratung verschoben. Kalender und Erinnerungen wurden angepasst." };
-}
-
-/** Sends a recorded voice memo (24-hour window open, admin or the lead's tattooer). */
-export async function sendVoiceMemoAction(
-  leadId: string,
-  _prev: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  const user = await requireUser();
-  const lead = await prisma.lead.findFirst({
-    where: { AND: [leadScope(user), { id: leadId }] },
-    select: { id: true },
-  });
-  if (!lead) return { ok: false, message: "Kontakt nicht gefunden." };
-  const voiceMemoId = String(formData.get("voiceMemoId") ?? "");
-  try {
-    await sendVoiceMemo(prisma, createWhatsAppClient(), {
-      leadId,
-      voiceMemoId,
-      byUserId: user.id,
-    });
-  } catch (err) {
-    if (err instanceof VoiceError) return { ok: false, message: err.message };
-    console.error("[voice] sending failed:", err);
-    return {
-      ok: false,
-      message: `Senden fehlgeschlagen: ${err instanceof Error ? err.message : String(err)}`.slice(
-        0,
-        300,
-      ),
-    };
-  }
-  revalidatePath(`/leads/${leadId}`);
-  return { ok: true, message: "Sprachnachricht gesendet." };
 }

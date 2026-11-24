@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import { ActionForm } from "@/components/action-form";
-import { Badge, Button, Card, CardTitle, PageHeader, Select } from "@/components/ui";
+import { Badge, Button, Card, CardTitle, PageHeader, Select, Textarea } from "@/components/ui";
 import { requireAdmin } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { formatDateTime } from "@/lib/format";
 import { loadMessagingSettings } from "@/lib/whatsapp/messaging";
 import { ActionButton } from "../../billing/buttons";
 import { WhatsAppTabs } from "../tabs";
-import { deleteVoiceMemo, setFirstReplyVoiceMemo } from "./actions";
+import { deleteVoiceMemo, setFirstReplyVoiceMemo, updateVoiceMemoTranscript } from "./actions";
 import { VoiceMemoUploader } from "./uploader";
 
 export const metadata: Metadata = { title: "Sprachnachrichten" };
@@ -100,6 +100,33 @@ export default async function VoiceMemosPage() {
                     src={`/api/voice-memos/${m.id}`}
                     className="h-9 max-w-full"
                   />
+                  <ActionForm
+                    action={updateVoiceMemoTranscript.bind(null, m.id)}
+                    className="w-full space-y-2"
+                  >
+                    <label
+                      className="block text-xs font-medium text-ink-soft"
+                      htmlFor={`t-${m.id}`}
+                    >
+                      Inhalt für den Bot
+                      {!m.transcript && (
+                        <span className="ml-2 text-amber-700 dark:text-amber-400">
+                          fehlt – der Bot weiß nicht, was gesagt wurde
+                        </span>
+                      )}
+                    </label>
+                    <Textarea
+                      id={`t-${m.id}`}
+                      name="transcript"
+                      defaultValue={m.transcript ?? ""}
+                      rows={2}
+                      maxLength={2000}
+                      placeholder="Was wird in der Aufnahme gesagt?"
+                    />
+                    <Button type="submit" variant="secondary">
+                      Speichern
+                    </Button>
+                  </ActionForm>
                   <ActionButton
                     action={deleteVoiceMemo.bind(null, m.id)}
                     variant="danger"
@@ -111,10 +138,6 @@ export default async function VoiceMemosPage() {
               ))}
             </ul>
           )}
-          <p className="mt-3 text-xs text-ink-soft">
-            Von Hand verschicken: im Chat eines Kontakts unter „Sprachnachricht senden“, solange das
-            24-Stunden-Fenster offen ist.
-          </p>
         </Card>
       </div>
     </>

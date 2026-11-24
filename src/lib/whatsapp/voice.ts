@@ -55,7 +55,7 @@ export function parseDuration(text: string): number | null {
 /** Converts an uploaded recording and stores it as a voice memo. */
 export async function createVoiceMemo(
   prisma: Pick<PrismaClient, "voiceMemo">,
-  input: { name: string; data: Uint8Array; dir?: string; ffmpeg?: string },
+  input: { name: string; data: Uint8Array; transcript?: string; dir?: string; ffmpeg?: string },
 ) {
   if (!input.data.byteLength) throw new VoiceError("Die Datei ist leer.");
   if (input.data.byteLength > MAX_VOICE_UPLOAD_BYTES)
@@ -95,6 +95,7 @@ export async function createVoiceMemo(
       storagePath: path.relative(dir, target),
       sizeBytes: size,
       durationSeconds,
+      transcript: input.transcript?.trim().slice(0, 2000) || null,
     },
   });
 }

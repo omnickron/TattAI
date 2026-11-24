@@ -12,6 +12,10 @@ export interface LeadFilters {
   campaign?: string;
   /** "customers": only people with a booked tattoo (for tattooers: with them) */
   view?: "customers";
+  /** Only contacts handled by hand (bot off for this chat, e.g. after a handover) */
+  manual?: boolean;
+  /** Leave out contacts that were only contacted (no reply yet) */
+  hideContacted?: boolean;
   page: number;
 }
 
@@ -27,6 +31,8 @@ export function parseLeadFilters(
     status: LEAD_STATUS_ORDER.includes(status) ? status : undefined,
     campaign: str("campaign") || undefined,
     view: str("ansicht") === "kunden" ? "customers" : undefined,
+    manual: str("manuell") === "1" || undefined,
+    hideContacted: str("ohneKontaktiert") === "1" || undefined,
     page: Number.isFinite(page) && page > 0 ? page : 1,
   };
 }
@@ -63,10 +69,12 @@ export async function listLeads(user: CurrentUser, filters: LeadFilters) {
       filters.campaign ? { metaCampaignId: filters.campaign } : {},
       filters.q ? searchWhere(filters.q) : {},
       filters.view === "customers" ? customersWhere(user) : {},
+      filters.manual ? { botEnabled: false } : {},
+      filters.hideContacted ? { status: { not: "CONTACTED" as const } } : {},
     ],
   };
 
-  const [leads, total, statusCounts, campaigns] = await Promise.all([
+  const [leads, total, statusCounts, campaigns, manualCount] = await Promise.all([
     prisma.lead.findMany({
       where,
       orderBy: { createdAt: "desc" },
@@ -96,11 +104,13 @@ export async function listLeads(user: CurrentUser, filters: LeadFilters) {
       _count: { _all: true },
       orderBy: { metaCampaignName: "asc" },
     }),
+    prisma.lead.count({ where: { AND: [scope, { botEnabled: false }] } }),
   ]);
 
   return {
     leads,
     total,
+    manualCount,
     pages: Math.max(1, Math.ceil(total / LEADS_PAGE_SIZE)),
     statusCounts: Object.fromEntries(statusCounts.map((s) => [s.status, s._count._all])) as Partial<
       Record<LeadStatus, number>
@@ -135,7 +145,10 @@ export async function getLeadForUser(user: CurrentUser, id: string) {
       messages: {
         orderBy: { sentAt: "desc" },
         take: 200,
-        include: { sentBy: { select: { name: true } } },
+        include: {
+          sentBy: { select: { name: true } },
+          voiceMemo: { select: { transcript: true } },
+        },
       },
       botDisabledBy: { select: { name: true } },
       attachments: {

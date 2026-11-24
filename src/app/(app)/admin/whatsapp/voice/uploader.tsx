@@ -2,13 +2,14 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Button, Field, Input } from "@/components/ui";
+import { Button, Field, Input, Textarea } from "@/components/ui";
 
 /** Upload of a recorded voice memo (sent as raw body, converted on the server). */
 export function VoiceMemoUploader() {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState("");
+  const [transcript, setTranscript] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -23,6 +24,7 @@ export function VoiceMemoUploader() {
         headers: {
           "content-type": file.type || "application/octet-stream",
           "x-file-name": encodeURIComponent(name.trim() || file.name.replace(/\.[^.]+$/, "")),
+          "x-transcript": encodeURIComponent(transcript.trim()),
         },
         body: file,
       });
@@ -34,6 +36,7 @@ export function VoiceMemoUploader() {
       setMessage({ ok: true, text: "Hochgeladen und umgewandelt." });
       setFile(null);
       setName("");
+      setTranscript("");
       (e.target as HTMLFormElement).reset();
       router.refresh();
     } catch {
@@ -94,6 +97,20 @@ export function VoiceMemoUploader() {
           onChange={(e) => setName(e.target.value)}
           maxLength={100}
           placeholder="Begrüßung"
+        />
+      </Field>
+      <Field
+        label="Inhalt für den Bot"
+        htmlFor="voice-transcript"
+        hint="Kurz, was in der Aufnahme gesagt wird – der Bot liest es im Chat mit, damit er weiß, worauf sich der Kunde bezieht."
+      >
+        <Textarea
+          id="voice-transcript"
+          value={transcript}
+          onChange={(e) => setTranscript(e.target.value)}
+          rows={3}
+          maxLength={2000}
+          placeholder="z. B. Du hast beim Giveaway den 2. Platz gemacht und bekommst 15 % Rabatt auf dein nächstes Tattoo."
         />
       </Field>
       <div className="flex flex-wrap items-center gap-3">

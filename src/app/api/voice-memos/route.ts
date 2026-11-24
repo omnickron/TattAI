@@ -14,9 +14,11 @@ export async function POST(request: Request) {
   if (length > MAX_VOICE_UPLOAD_BYTES)
     return Response.json({ error: "Die Aufnahme ist zu groß (höchstens 10 MB)." }, { status: 413 });
   const name = decodeURIComponent(request.headers.get("x-file-name") ?? "").slice(0, 100);
+  // What is said in the recording, for the bot (URL-encoded header)
+  const transcript = decodeURIComponent(request.headers.get("x-transcript") ?? "").slice(0, 2000);
   try {
     const data = new Uint8Array(await request.arrayBuffer());
-    const memo = await createVoiceMemo(prisma, { name, data });
+    const memo = await createVoiceMemo(prisma, { name, data, transcript });
     return Response.json({ id: memo.id });
   } catch (err) {
     if (err instanceof VoiceError) return Response.json({ error: err.message }, { status: 400 });

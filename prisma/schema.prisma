@@ -1013,6 +1013,8 @@ model VoiceMemo {
   storagePath       String
   sizeBytes         Int
   durationSeconds   Int?
+  // What is said in the recording – the bot reads it in the chat history
+  transcript        String?
   // Media id at Meta (valid ~30 days, uploaded again when older)
   waMediaId         String?
   waMediaUploadedAt DateTime?

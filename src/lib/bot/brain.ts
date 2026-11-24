@@ -3,6 +3,7 @@
  * using the studio knowledge, NEEDL's own booking functions as tools and hard
  * filters on every reply. One run = one answer to all new messages of a chat.
  */
+import { voiceMemoText } from "./voice-text";
 import Anthropic from "@anthropic-ai/sdk";
 import type {
   BetaContentBlock,
@@ -252,7 +253,11 @@ async function loadChat(deps: BrainDeps, leadId: string, now: Date) {
         take: 1,
         include: { tattooer: { include: { user: { select: { name: true } } } } },
       },
-      messages: { orderBy: { sentAt: "desc" }, take: HISTORY_MESSAGES },
+      messages: {
+        orderBy: { sentAt: "desc" },
+        take: HISTORY_MESSAGES,
+        include: { voiceMemo: { select: { name: true, transcript: true } } },
+      },
       attachments: { where: { status: "STORED" }, select: { id: true } },
     },
   });
@@ -276,8 +281,9 @@ function buildContext(chat: Chat, now: Date, tz: string): string {
       hour: "2-digit",
       minute: "2-digit",
     });
-    const body =
-      m.body?.trim() || (m.templateName ? `[Vorlage ${m.templateName}]` : "[Bild/Datei]");
+    const body = m.voiceMemo
+      ? voiceMemoText(m.voiceMemo)
+      : m.body?.trim() || (m.templateName ? `[Vorlage ${m.templateName}]` : "[Bild/Datei]");
     return who === "customer"
       ? `[${when}] kunde: <nachricht>${asData(body)}</nachricht>`
       : `[${when}] ${SPEAKER[who]}: ${body}`;
