@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { verifyMetaSignature } from "@/lib/meta/signature";
 import { processWhatsAppWebhook, type WaWebhookPayload } from "@/lib/whatsapp/webhook";
+import { createPushSender } from "@/lib/push";
 import { ensureIntegrationSettings, setting } from "@/lib/integrations/store";
 
 /** Subscription verification handshake from Meta. */
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest) {
     return new Response("Invalid JSON", { status: 400 });
   }
   try {
-    await processWhatsAppWebhook(prisma, payload);
+    await processWhatsAppWebhook(prisma, payload, new Date(), { push: createPushSender() });
   } catch (err) {
     console.error(
       "[whatsapp-webhook] processing failed:",

@@ -178,3 +178,24 @@ export async function updatePushScope(
         : "Du bekommst ab jetzt nur Push-Nachrichten zu deinen eigenen Beratungen.",
   };
 }
+
+/** Studio-wide: push when a contact handled by hand writes a new message. */
+export async function updateManualMessagePush(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireAdmin();
+  const on = formData.get("pushManualMessages") === "on";
+  await prisma.appSettings.upsert({
+    where: { id: 1 },
+    update: { pushManualMessages: on },
+    create: { id: 1, pushManualMessages: on },
+  });
+  revalidatePath("/admin/settings");
+  return {
+    ok: true,
+    message: on
+      ? "Push bei neuen Nachrichten manuell betreuter Kontakte ist an."
+      : "Push bei neuen Nachrichten manuell betreuter Kontakte ist aus. Die Anzeige in der App bleibt.",
+  };
+}

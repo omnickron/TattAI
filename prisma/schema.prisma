@@ -204,6 +204,9 @@ model Lead {
   // Someone confirmed with the button that the handover was dealt with (list entry gone)
   botHandoverResolvedAt   DateTime?
   botHandoverResolvedById String?
+  // New customer message while the contact is handled by hand (bot off); cleared when
+  // someone opens the contact
+  manualUnreadAt          DateTime?
 
   // Created by the bot test (AI test customers); hidden everywhere, deleted after the run
   isTest Boolean @default(false)
@@ -434,6 +437,8 @@ model AppSettings {
   consultationOnSite    Boolean  @default(true)
   consultationPhone     Boolean  @default(true)
   consultationFree      Boolean  @default(true)
+  // Push when a contact handled by hand writes a new message
+  pushManualMessages    Boolean  @default(true)
   updatedAt             DateTime @updatedAt
 }
 

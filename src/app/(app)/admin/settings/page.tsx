@@ -6,7 +6,12 @@ import { prisma } from "@/lib/db";
 import { formatDateTime } from "@/lib/format";
 import { loadConsultationOptions } from "@/lib/consultation-options";
 import { LEAD_RETENTION_MONTHS } from "@/lib/leads/retention";
-import { updateConsultationSettings, updatePushScope, updateStudioSettings } from "./actions";
+import {
+  updateConsultationSettings,
+  updateManualMessagePush,
+  updatePushScope,
+  updateStudioSettings,
+} from "./actions";
 import { TeamupCard } from "./teamup-card";
 import { setting } from "@/lib/integrations/store";
 
@@ -65,6 +70,27 @@ export default async function SettingsPage() {
               Push-Nachrichten kommen nur auf Geräten an, auf denen du sie über die Glocke im Menü
               erlaubt hast (iPhone: NEEDL über „Zum Home-Bildschirm“ installieren).
             </p>
+            <Button type="submit">Speichern</Button>
+          </ActionForm>
+        </Card>
+
+        <Card>
+          <CardTitle>Push: neue Nachrichten (manuell betreut)</CardTitle>
+          <p className="mb-3 text-sm text-ink-soft">
+            Schreibt ein Kunde, der manuell betreut wird, kommt eine Push-Nachricht an alle Admins
+            und – falls der Kunde schon einem Tätowierer zugewiesen ist – auch an diesen. In der
+            Übersicht erscheint die Nachricht zusätzlich, bis jemand den Kontakt öffnet.
+          </p>
+          <ActionForm action={updateManualMessagePush}>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                name="pushManualMessages"
+                defaultChecked={settings?.pushManualMessages ?? true}
+                className="h-4 w-4 accent-violet-600"
+              />
+              Push-Nachrichten dafür senden (für das ganze Studio)
+            </label>
             <Button type="submit">Speichern</Button>
           </ActionForm>
         </Card>

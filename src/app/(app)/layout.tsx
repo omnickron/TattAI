@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { Logo } from "@/components/logo";
 import { dueFollowUpWhere } from "@/lib/outcomes/follow-up";
 import { openHandoverWhere } from "@/lib/bot/handover";
+import { manualUnreadWhere } from "@/lib/leads/manual-messages";
 import { APP_TIMEZONE } from "@/lib/format";
 import { ViewSwitch } from "@/components/view-switch";
 import { PushToggle } from "@/components/push-toggle";
@@ -38,6 +39,10 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const handovers = await prisma.lead.count({
     where: openHandoverWhere({ isAdmin, tattooerId: user.tattooerProfile?.id ?? null }),
   });
+  // New messages from contacts handled by hand, not opened yet
+  const manualUnread = await prisma.lead.count({
+    where: manualUnreadWhere({ isAdmin, tattooerId: user.tattooerProfile?.id ?? null }),
+  });
   const followUps = await prisma.consultation.count({
     where: dueFollowUpWhere(
       new Date(),
@@ -53,7 +58,12 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const groups: NavGroup[] = [
     {
       items: [
-        { href: "/", label: "Übersicht", icon: "home", badge: handovers + followUps },
+        {
+          href: "/",
+          label: "Übersicht",
+          icon: "home",
+          badge: handovers + manualUnread + followUps,
+        },
         { href: "/leads", label: "Kontakte", icon: "leads" },
         { href: "/calendar", label: "Kalender", icon: "calendar" },
         {

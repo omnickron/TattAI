@@ -1,4 +1,5 @@
 import { loadHandovers } from "./bot/handover";
+import { loadManualUnread } from "./leads/manual-messages";
 import { loadDueFollowUps } from "./outcomes/follow-up";
 import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
@@ -192,6 +193,10 @@ export async function loadDashboard(user: CurrentUser, now = new Date()) {
     isAdmin,
     tattooerId: user.tattooerProfile?.id ?? null,
   });
+  const manualUnread = await loadManualUnread(prisma, {
+    isAdmin,
+    tattooerId: user.tattooerProfile?.id ?? null,
+  });
   // Admin: automatic WhatsApp messages are switched off or paused while some are waiting
   const sending = isAdmin
     ? await Promise.all([
@@ -210,6 +215,7 @@ export async function loadDashboard(user: CurrentUser, now = new Date()) {
     isAdmin,
     sending,
     handovers,
+    manualUnread,
     followUps,
     openOutcomes,
     openCount,

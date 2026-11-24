@@ -3,6 +3,8 @@
  * statuses, template reviews and quality/account signals. Idempotent.
  */
 import { queueFirstReplyVoiceMemo } from "./voice";
+import { notifyManualMessage } from "../leads/manual-messages";
+import type { PushSender } from "../push";
 import { statusAfterOptOut } from "../leads/opt-out";
 import { createHash } from "node:crypto";
 import { Prisma, type PrismaClient } from "@/generated/prisma/client";
@@ -67,7 +69,7 @@ function messageText(m: WaMessage): string {
   return `[${m.type ?? "Nachricht"}]`;
 }
 
-async function handleInbound(prisma: PrismaClient, m: WaMessage, now: Date) {
+async function handleInbound(prisma: PrismaClient, m: WaMessage, now: Date, push?: PushSender) {
   const e164 = `+${m.from.replace(/^\+/, "")}`;
   const lead = await prisma.lead.findFirst({
     where: { phoneE164: e164 },
@@ -131,6 +133,9 @@ async function handleInbound(prisma: PrismaClient, m: WaMessage, now: Date) {
       ? ["FIRST_CONTACT", "INTRO_MESSAGE", "FOLLOW_UP", "REMINDER", "AFTER_CONSULTATION"]
       : ["FIRST_CONTACT", "FOLLOW_UP"],
   );
+
+  // Handled by hand: show the message once in the app and push it to the team
+  await notifyManualMessage(prisma, lead, body, now, push);
 
   // First reply of this customer: the configured voice memo follows (worker, before the bot)
   if (!optOut && !lead.lastInboundAt && !lead.whatsappOptOut)
@@ -271,6 +276,7 @@ export async function processWhatsAppWebhook(
   prisma: PrismaClient,
   payload: WaWebhookPayload,
   now = new Date(),
+  opts: { push?: PushSender } = {},
 ) {
   const results: string[] = [];
   if (payload?.object !== "whatsapp_business_account") return results;
@@ -279,7 +285,8 @@ export async function processWhatsAppWebhook(
       const v = change.value;
       if (!v) continue;
       if (change.field === "messages") {
-        for (const m of v.messages ?? []) results.push(await handleInbound(prisma, m, now));
+        for (const m of v.messages ?? [])
+          results.push(await handleInbound(prisma, m, now, opts.push));
         for (const s of v.statuses ?? []) {
           await handleStatus(prisma, s, now);
           results.push(`status:${s.status}`);

@@ -180,6 +180,40 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
         </Link>
       )}
 
+      {/* New messages from contacts handled by hand – until someone opens the contact */}
+      {data.manualUnread.length > 0 && (
+        <Card className="border-violet-300 bg-violet-50/60 dark:border-violet-900 dark:bg-violet-950/30">
+          <SectionTitle count={data.manualUnread.length}>Neue Nachrichten</SectionTitle>
+          <p className="-mt-1 mb-3 text-sm text-ink-soft">
+            Diese Kunden werden manuell betreut und haben geschrieben – der Bot antwortet hier
+            nicht. Die Meldung verschwindet, sobald jemand den Kontakt öffnet.
+          </p>
+          <ul className="space-y-2">
+            {data.manualUnread.map((l) => (
+              <li key={l.id}>
+                <Link
+                  href={`/leads/${l.id}#chat`}
+                  className="flex min-w-0 items-center gap-3 rounded-lg bg-surface p-3 hover:bg-muted"
+                >
+                  <Initials name={l.name} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{l.name}</span>
+                    <span className="block truncate text-xs text-ink-soft">
+                      {l.messages[0]?.body ?? "Neue Nachricht"}
+                    </span>
+                  </span>
+                  {l.manualUnreadAt && (
+                    <span className="shrink-0 text-xs text-ink-soft">
+                      {formatRelative(l.manualUnreadAt, now)}
+                    </span>
+                  )}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
       {/* 0. Chats the bot handed over – only when needed */}
       {data.handovers.length > 0 && (
         <Card className="border-red-300 bg-red-50/60 dark:border-red-900 dark:bg-red-950/30">
