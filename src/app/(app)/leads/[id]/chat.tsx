@@ -1,9 +1,8 @@
-import { Badge, Button, Card, CardTitle, cn, Select } from "@/components/ui";
+import { Badge, Card, CardTitle, cn } from "@/components/ui";
 import { formatDateTime } from "@/lib/format";
 import { MESSAGE_STATUS_LABELS, OUTBOUND_KIND_LABELS } from "@/lib/whatsapp/labels";
 import { replyWindow } from "@/lib/whatsapp/replies";
-import { retryOutboundAction, sendReplyAction, sendVoiceMemoAction } from "./actions";
-import { ActionForm } from "@/components/action-form";
+import { retryOutboundAction, sendReplyAction } from "./actions";
 import { ActionButton } from "../../admin/billing/buttons";
 import { ReplyForm } from "./reply-form";
 import { BotToggle } from "./bot-toggle";
@@ -21,6 +20,7 @@ type ChatMessage = {
   sentBy: { name: string } | null;
   sentByBot: boolean;
   voiceMemoId?: string | null;
+  voiceMemo?: { transcript: string | null } | null;
 };
 
 type Planned = {
@@ -43,10 +43,7 @@ export function ChatSection({
   hasPhone,
   sendingPaused,
   bot,
-  voiceMemos = [],
 }: {
-  /** Recorded voice memos that can be sent while the 24-hour window is open */
-  voiceMemos?: Array<{ id: string; name: string }>;
   bot: {
     enabled: boolean;
     globallyEnabled: boolean;
@@ -121,6 +118,11 @@ export function ChatSection({
                   className="mt-1 h-8 w-full max-w-64"
                 />
               )}
+              {m.voiceMemo?.transcript && (
+                <span className="mt-1 block text-xs italic opacity-80">
+                  „{m.voiceMemo.transcript}“
+                </span>
+              )}
               <span className="mt-1 block text-[11px] opacity-70">
                 {formatDateTime(m.sentAt)}
                 {m.direction === "OUTBOUND" &&
@@ -157,23 +159,6 @@ export function ChatSection({
               </p>
             )}
             <ReplyForm action={sendReplyAction.bind(null, leadId)} />
-            {voiceMemos.length > 0 && (
-              <ActionForm
-                action={sendVoiceMemoAction.bind(null, leadId)}
-                className="mt-3 flex flex-wrap items-center gap-2 space-y-0"
-              >
-                <Select name="voiceMemoId" aria-label="Sprachnachricht" className="w-56">
-                  {voiceMemos.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      🎤 {v.name}
-                    </option>
-                  ))}
-                </Select>
-                <Button type="submit" variant="secondary">
-                  Sprachnachricht senden
-                </Button>
-              </ActionForm>
-            )}
           </>
         ) : (
           <p className="text-sm text-ink-soft">

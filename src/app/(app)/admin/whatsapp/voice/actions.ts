@@ -41,3 +41,18 @@ export async function setFirstReplyVoiceMemo(
       : "Gespeichert: Nach der ersten Antwort wird keine Sprachnachricht mehr verschickt.",
   };
 }
+
+/** What is said in the recording (read by the bot), also for memos already sent. */
+export async function updateVoiceMemoTranscript(
+  id: string,
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireAdmin();
+  const transcript = String(formData.get("transcript") ?? "")
+    .trim()
+    .slice(0, 2000);
+  await prisma.voiceMemo.update({ where: { id }, data: { transcript: transcript || null } });
+  revalidatePath(PATH);
+  return { ok: true, message: "Gespeichert – der Bot kennt jetzt den Inhalt." };
+}

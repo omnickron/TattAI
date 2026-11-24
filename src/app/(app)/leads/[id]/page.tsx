@@ -134,10 +134,6 @@ export default async function LeadPage({ params, searchParams }: PageProps<"/lea
             optOut={lead.whatsappOptOut}
             consent={lead.whatsappConsent}
             lastInboundAt={lead.lastInboundAt}
-            voiceMemos={await prisma.voiceMemo.findMany({
-              orderBy: { createdAt: "desc" },
-              select: { id: true, name: true },
-            })}
           />
 
           <Card>

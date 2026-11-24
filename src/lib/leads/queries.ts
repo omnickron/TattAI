@@ -135,7 +135,10 @@ export async function getLeadForUser(user: CurrentUser, id: string) {
       messages: {
         orderBy: { sentAt: "desc" },
         take: 200,
-        include: { sentBy: { select: { name: true } } },
+        include: {
+          sentBy: { select: { name: true } },
+          voiceMemo: { select: { transcript: true } },
+        },
       },
       botDisabledBy: { select: { name: true } },
       attachments: {

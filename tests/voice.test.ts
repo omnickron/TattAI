@@ -13,6 +13,9 @@ import {
   voiceFilePath,
 } from "@/lib/whatsapp/voice";
 import { processWhatsAppWebhook } from "@/lib/whatsapp/webhook";
+import { botLead } from "@/lib/bot/service";
+import { voiceMemoText } from "@/lib/bot/voice-text";
+import type { CalendarClient } from "@/lib/google/calendar";
 import { createTestPrisma, resetDatabase } from "./db";
 
 const prisma = createTestPrisma();
@@ -191,6 +194,32 @@ describe("voice memos", () => {
     expect(wa.audio).toHaveLength(1);
     const chat = await prisma.message.findMany({ where: { leadId: l.id, direction: "OUTBOUND" } });
     expect(chat.map((c) => c.voiceMemoId)).toEqual([m.id]);
+  });
+
+  it("shows the bot what was said in a sent voice memo", async () => {
+    expect(voiceMemoText({ name: "Giveaway", transcript: " 2. Platz, 15 % Rabatt " })).toBe(
+      "[Sprachnachricht] 2. Platz, 15 % Rabatt",
+    );
+    expect(voiceMemoText({ name: "Giveaway", transcript: null })).toBe(
+      "[Sprachnachricht „Giveaway“ – Inhalt unbekannt]",
+    );
+    const m = await prisma.voiceMemo.create({
+      data: {
+        name: "Giveaway",
+        storagePath: "voice/test.ogg",
+        sizeBytes: 3,
+        transcript: "Du hast den 2. Platz gemacht und bekommst 15 % Rabatt.",
+      },
+    });
+    const l = await lead({ lastInboundAt: new Date(NOW.getTime() - 60_000) });
+    await sendVoiceMemo(prisma, wa, { leadId: l.id, voiceMemoId: m.id, now: NOW, dir });
+    const view = await botLead(
+      { prisma, calendar: {} as CalendarClient, whatsapp: wa, now: () => NOW },
+      l.id,
+    );
+    expect(view.recentMessages.map((x) => x.text)).toEqual([
+      "[Sprachnachricht] Du hast den 2. Platz gemacht und bekommst 15 % Rabatt.",
+    ]);
   });
 
   it("does not send after an opt-out or when switched off", async () => {

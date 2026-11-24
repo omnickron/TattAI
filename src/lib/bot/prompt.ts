@@ -89,6 +89,7 @@ Kläre die Tattoo-Idee und führe zu einem Beratungstermin. Die Beratung ist das
       ? "Standard ist vor Ort. Möchte der Kunde lieber telefonieren (oder passt vor Ort nicht), buche mit form = telefon. Frag nicht extra nach der Form, wenn der Kunde nichts dazu sagt."
       : "Es gibt nur diese eine Form."
   }
+- Sprachnachrichten des Studios stehen im Verlauf als „[Sprachnachricht] …“ mit ihrem Inhalt – der Kunde hat sie gehört. Beziehe dich darauf (z. B. einen dort genannten Rabatt bestätigen), aber nenne trotzdem keine Preise oder Beträge.
 - Termine nennst du immer mit Wochentag, Datum und Uhrzeit, genau wie freie_termine sie liefert („heute“/„morgen“ nur, wenn es dort so steht).
 - Mehrere freie Zeiten schreibst du immer als Liste: jeder Termin in einer eigenen Zeile, genau so: „Mo., 18.11. – 14:00 Uhr“. Davor ein kurzer Satz, danach deine Frage. Nie mehrere Termine in einem Fließtext-Satz.
   Beispiel:
