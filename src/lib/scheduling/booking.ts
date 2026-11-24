@@ -73,12 +73,30 @@ const tattooerInclude = {
   user: { select: { name: true, active: true } },
   availabilityRules: true,
   availabilityExceptions: true,
+  fairnessShare: { select: { weight: true } },
 } as const;
 
-type BookableTattooer = Awaited<ReturnType<typeof loadBookableTattooers>>[number];
+type BookableTattooer = Awaited<ReturnType<typeof loadAllBookableTattooers>>[number];
+
+/**
+ * Automatic distribution (bot, "Automatisch (fair)"): tattooers with a 0 % share get
+ * nothing. If every share is 0, nobody is configured and everyone stays in.
+ */
+export function withoutZeroShare<T extends { fairnessShare: { weight: number } | null }>(
+  tattooers: T[],
+): T[] {
+  const weight = (t: T) => t.fairnessShare?.weight ?? 1;
+  return tattooers.some((t) => weight(t) > 0) ? tattooers.filter((t) => weight(t) > 0) : tattooers;
+}
 
 /** Active tattooers with a connected calendar (required to know their busy times). */
 async function loadBookableTattooers(prisma: PrismaClient, ids?: string[]) {
+  const all = await loadAllBookableTattooers(prisma, ids);
+  // A tattooer chosen by name is always bookable; the automatic choice skips 0 % shares
+  return ids ? all : withoutZeroShare(all);
+}
+
+async function loadAllBookableTattooers(prisma: PrismaClient, ids?: string[]) {
   return prisma.tattooerProfile.findMany({
     where: {
       user: { active: true },
@@ -231,9 +249,17 @@ async function buildSlotInputs(
 /** Free start times across all bookable tattooers (or a subset). */
 export async function getAvailableSlots(
   deps: SchedulingDeps,
-  range: { from: Date; to: Date; tattooerIds?: string[] },
+  range: {
+    from: Date;
+    to: Date;
+    tattooerIds?: string[];
+    /** Also tattooers with a 0 % share (for booking a person by hand) */
+    includeZeroShare?: boolean;
+  },
 ): Promise<PooledSlot[]> {
-  const tattooers = await loadBookableTattooers(deps.prisma, range.tattooerIds);
+  const tattooers = range.includeZeroShare
+    ? await loadAllBookableTattooers(deps.prisma, range.tattooerIds)
+    : await loadBookableTattooers(deps.prisma, range.tattooerIds);
   const inputs = await buildSlotInputs(deps, tattooers, range.from, range.to);
   const now = nowOf(deps);
   const perTattooer = new Map<string, Interval[]>();
@@ -474,7 +500,12 @@ export async function bookConsultation(deps: SchedulingDeps, input: BookInput) {
     )
     .map(([id]) => id);
   if (!free.length) {
-    throw new BookingError("NO_TATTOOER_FREE", "Zu diesem Zeitpunkt ist niemand verfügbar.");
+    throw new BookingError(
+      "NO_TATTOOER_FREE",
+      input.tattooerId
+        ? "Zu diesem Zeitpunkt ist die Person nicht verfügbar."
+        : "Zu diesem Zeitpunkt ist niemand für die automatische Verteilung frei (Tätowierer mit 0 % bekommen nur Termine, wenn man sie ausdrücklich auswählt).",
+    );
   }
 
   const durations = new Map(tattooers.map((t) => [t.id, t]));

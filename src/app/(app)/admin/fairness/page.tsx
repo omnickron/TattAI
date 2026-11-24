@@ -93,8 +93,9 @@ export default async function FairnessPage() {
           </div>
           <p className="text-xs text-ink-soft">
             Werte werden beim Speichern automatisch auf 100 % normiert. Wer seltener da ist, bekommt
-            einen kleineren Anteil. Rückstand = Soll-Anteil × (Termine im Zeitraum + 1) − eigene
-            Termine.
+            einen kleineren Anteil. Bei 0 % bekommt die Person keine Beratungen vom Bot oder aus der
+            automatischen Verteilung – nur, wenn man sie beim Buchen ausdrücklich auswählt.
+            Rückstand = Soll-Anteil × (Termine im Zeitraum + 1) − eigene Termine.
           </p>
           <div className="flex flex-wrap items-end gap-3">
             <Field

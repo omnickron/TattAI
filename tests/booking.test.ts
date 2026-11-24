@@ -233,6 +233,35 @@ describe("bookConsultation", () => {
     expect(c.tattooerId).toBe(ids.b);
   });
 
+  it("gives a 0 % tattooer nothing automatically, only when chosen by name", async () => {
+    // Kim at 0 %, and Alex busy at 10:00: only Kim would be free
+    await prisma.fairnessShare.update({ where: { tattooerId: ids.b }, data: { weight: 0 } });
+    calendar.busy.set(ids.a, [{ start: at("10:00"), end: at("10:30") }]);
+    const range = { from: at("00:00"), to: at("23:59") };
+    const auto = await getAvailableSlots(deps, range);
+    expect(auto.some((s) => s.tattooers.some((t) => t.tattooerId === ids.b))).toBe(false);
+    expect(auto.some((s) => s.start.getTime() === at("10:00").getTime())).toBe(false);
+    const all = await getAvailableSlots(deps, { ...range, includeZeroShare: true });
+    expect(all.find((s) => s.start.getTime() === at("10:00").getTime())?.tattooers).toHaveLength(1);
+
+    await expect(
+      bookConsultation(deps, { leadId: await lead(), startsAt: at("10:00") }),
+    ).rejects.toMatchObject({ code: "NO_TATTOOER_FREE" });
+    const manual = await bookConsultation(deps, {
+      leadId: await lead(),
+      startsAt: at("10:00"),
+      tattooerId: ids.b,
+    });
+    expect(manual.tattooerId).toBe(ids.b);
+
+    // Everyone at 0 % = nothing configured: everyone stays in
+    await prisma.fairnessShare.update({ where: { tattooerId: ids.a }, data: { weight: 0 } });
+    calendar.busy.clear();
+    expect(
+      (await bookConsultation(deps, { leadId: await lead(), startsAt: at("11:00") })).tattooerId,
+    ).toBeTruthy();
+  });
+
   it("is protected by the database exclusion constraint", async () => {
     const leadId = await lead();
     await prisma.consultation.create({
